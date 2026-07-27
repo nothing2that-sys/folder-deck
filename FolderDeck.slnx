@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FolderDeck.App/FolderDeck.App.csproj" />
+    <Project Path="src/FolderDeck.Core/FolderDeck.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FolderDeck.App.Tests/FolderDeck.App.Tests.csproj" />
+    <Project Path="tests/FolderDeck.Core.Tests/FolderDeck.Core.Tests.csproj" />
+  </Folder>
+</Solution>

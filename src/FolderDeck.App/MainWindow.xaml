@@ -1,0 +1,281 @@
+<Window x:Class="FolderDeck.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:FolderDeck.App.Views"
+        xmlns:vm="clr-namespace:FolderDeck.App.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
+        Title="{Binding Title, StringFormat=FolderDeck — {0}}"
+        Height="900" Width="1400"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource Brush.Chrome}"
+        FontFamily="Segoe UI" FontSize="12"
+        Foreground="{StaticResource Brush.TextPrimary}">
+
+    <!-- 갱신은 수동(F5) + 창 활성화. FileSystemWatcher 는 뒤 Phase (§8). -->
+    <Window.InputBindings>
+        <KeyBinding Key="F5" Command="{Binding RefreshAllCommand}" />
+    </Window.InputBindings>
+
+    <DockPanel>
+
+        <!-- ── 상단 툴바: 배치 편집 토글 (Phase 2) ──
+                 평소(뷰 모드)엔 타일이 잠겨 파일 작업 중에 배치가 흔들리지 않는다. -->
+        <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{StaticResource Brush.Border}"
+                Background="{StaticResource Brush.Chrome}" Padding="8,5">
+            <DockPanel>
+                <Button DockPanel.Dock="Left" Style="{StaticResource EditModeButton}"
+                        Command="{Binding ToggleLayoutEditCommand}"
+                        Content="{Binding EditToggleText}"
+                        AutomationProperties.Name="배치 편집"
+                        ToolTip="켜면 타일을 옮기고 크기를 바꿀 수 있다. 그동안 파일 목록은 잠긴다." />
+
+                <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="11"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{StaticResource Brush.EditChromeText}"
+                           Visibility="{Binding IsEditingLayout, Converter={StaticResource BoolToVisibility}}"
+                           Text="배치 편집 중 — 타일 끌어 이동 · 오른쪽 아래 ◢ 로 크기 · 우클릭으로 상시↔순환/제거 · 빈 칸 클릭이나 폴더 끌어놓기로 추가" />
+            </DockPanel>
+        </Border>
+
+        <!-- ── 하단 상태 바: 순환 칸의 전체 경로 (§3.2) ── -->
+        <Border DockPanel.Dock="Bottom" BorderThickness="0,1,0,0" BorderBrush="{StaticResource Brush.Border}"
+                Background="{StaticResource Brush.Chrome}" Padding="10,4">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left" Text="{Binding StatusLabel}"
+                           Foreground="{StaticResource Brush.TextSecondary}"
+                           Margin="0,0,6,0" />
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Message}"
+                           Foreground="{StaticResource Brush.Danger}" Margin="10,0,0,0"
+                           Visibility="{Binding HasMessage, Converter={StaticResource BoolToVisibility}}" />
+                <TextBlock Text="{Binding StatusPath}" TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding StatusPath}" />
+            </DockPanel>
+        </Border>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320" MinWidth="220" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="*" MinWidth="400" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ══ 왼쪽 컬럼 — 상하 2분할 ══ -->
+            <Grid Grid.Column="0">
+                <!-- 접으면 본문만 숨기는 게 아니라 행 높이도 Auto 로 줄인다 — 안 그러면
+                     접힌 영역이 빈 공간을 계속 차지한다. 접힘은 워크스페이스에 저장된다. -->
+                <Grid.RowDefinitions>
+                    <RowDefinition MinHeight="0"
+                                   Height="{Binding FoldersCollapsed,
+                                            Converter={StaticResource RowHeight}, ConverterParameter=2*}" />
+                    <RowDefinition Height="4" />
+                    <RowDefinition MinHeight="0"
+                                   Height="{Binding LowerCollapsed,
+                                            Converter={StaticResource RowHeight}, ConverterParameter=1*}" />
+                </Grid.RowDefinitions>
+
+                <!-- 위: 폴더 리스트 = 유일한 컨트롤러 (§3.2) -->
+                <DockPanel Grid.Row="0">
+                    <!-- 헤더 클릭 = 접기/펴기. 자동으로 접히지 않는다. -->
+                    <Button DockPanel.Dock="Top" Style="{StaticResource FolderRowButton}"
+                            Command="{Binding ToggleFoldersCommand}"
+                            ToolTip="폴더 리스트 접기/펴기"
+                            AutomationProperties.Name="폴더 리스트 접기/펴기"
+                            Margin="6,6,6,2">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontSize="10" VerticalAlignment="Center" Margin="0,0,5,0"
+                                       Foreground="{StaticResource Brush.TextSecondary}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="▾" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding FoldersCollapsed}" Value="True">
+                                                <Setter Property="Text" Value="▸" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="폴더" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Button>
+
+                    <TextBlock DockPanel.Dock="Bottom" Margin="10,4,10,6" FontSize="11"
+                               Foreground="{StaticResource Brush.TextSecondary}" TextWrapping="Wrap"
+                               Text="클릭 = 순환 칸에 표시 · 재클릭 = 앵커로 복귀 · 우클릭 = 순환 번호 지정&#x0a;배치 편집 중에는 빈 칸으로 끌어다 놓을 수 있다"
+                               Visibility="{Binding FoldersCollapsed,
+                                            Converter={StaticResource InverseBoolToVisibility}}" />
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,0"
+                                  Visibility="{Binding FoldersCollapsed,
+                                               Converter={StaticResource InverseBoolToVisibility}}">
+                        <ItemsControl ItemsSource="{Binding Rows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:FolderRowViewModel}">
+                                    <!-- 우클릭 = 순환 번호 지정. 배치 편집 중에는 빈 칸으로 끌어다 놓을 수 있다. -->
+                                    <Button Style="{StaticResource FolderRowButton}"
+                                            Command="{Binding DataContext.ShowFolderCommand,
+                                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
+                                            PreviewMouseLeftButtonDown="OnFolderRowMouseDown"
+                                            PreviewMouseMove="OnFolderRowMouseMove"
+                                            ToolTip="{Binding PathText}">
+                                        <Button.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="순환 칸 지정"
+                                                          ItemsSource="{Binding RotationChoices}">
+                                                    <MenuItem.ItemContainerStyle>
+                                                        <Style TargetType="MenuItem">
+                                                            <Setter Property="Header" Value="{Binding Label}" />
+                                                            <Setter Property="InputGestureText"
+                                                                    Value="{Binding Note}" />
+                                                            <Setter Property="IsCheckable" Value="True" />
+                                                            <Setter Property="IsChecked"
+                                                                    Value="{Binding IsSelected, Mode=OneWay}" />
+                                                            <Setter Property="Command"
+                                                                    Value="{Binding SelectCommand}" />
+                                                        </Style>
+                                                    </MenuItem.ItemContainerStyle>
+                                                </MenuItem>
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- pin 글리프: 상시 = 채운 실선, 순환 전용 = 점선 (§3.2) -->
+                                            <Ellipse Grid.Column="0" Width="10" Height="10"
+                                                     StrokeThickness="2" VerticalAlignment="Top"
+                                                     Margin="0,4,8,0">
+                                                <Ellipse.Style>
+                                                    <Style TargetType="Ellipse">
+                                                        <Setter Property="Stroke"
+                                                                Value="{StaticResource Brush.Rotating}" />
+                                                        <Setter Property="StrokeDashArray" Value="1.6 1.4" />
+                                                        <Setter Property="Fill" Value="Transparent" />
+                                                        <Setter Property="ToolTip" Value="순환 전용" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Pinned}" Value="True">
+                                                                <Setter Property="Stroke"
+                                                                        Value="{StaticResource Brush.Pinned}" />
+                                                                <Setter Property="StrokeDashArray"
+                                                                        Value="{x:Null}" />
+                                                                <Setter Property="Fill"
+                                                                        Value="{StaticResource Brush.Pinned}" />
+                                                                <Setter Property="ToolTip" Value="상시 표시" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Ellipse.Style>
+                                            </Ellipse>
+
+                                            <StackPanel Grid.Column="1">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding DisplayName}"
+                                                               FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <!-- 접근 불가 — 목록에서 지우지 않는다 (§5) -->
+                                                    <Border Background="{StaticResource Brush.DangerSurface}" CornerRadius="2"
+                                                            Padding="4,0" Margin="6,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Visibility="{Binding IsInaccessible,
+                                                                Converter={StaticResource BoolToVisibility}}">
+                                                        <TextBlock Text="접근 불가" FontSize="10"
+                                                                   Foreground="{StaticResource Brush.Danger}" />
+                                                    </Border>
+
+                                                    <!-- 순환 번호 태그. 순환 칸이 하나뿐이면 소음이라 숨긴다. -->
+                                                    <Border Background="{StaticResource Brush.RotatingSurface}"
+                                                            CornerRadius="2" Padding="4,0" Margin="6,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            ToolTip="이 폴더를 클릭하면 뜨는 순환 칸 (우클릭으로 바꾼다)"
+                                                            Visibility="{Binding ShowRotationTag,
+                                                                Converter={StaticResource BoolToVisibility}}">
+                                                        <TextBlock Text="{Binding RotationSlotText}" FontSize="10"
+                                                                   Foreground="{StaticResource Brush.Rotating}" />
+                                                    </Border>
+                                                </StackPanel>
+
+                                                <TextBlock Text="{Binding PathText}" FontSize="10"
+                                                           Foreground="{StaticResource Brush.TextSecondary}"
+                                                           TextTrimming="CharacterEllipsis" />
+
+                                                <TextBlock Text="{Binding Description}" FontSize="11"
+                                                           Foreground="{StaticResource Brush.TextSecondary}"
+                                                           TextWrapping="Wrap" Margin="0,2,0,0"
+                                                           Visibility="{Binding HasDescription,
+                                                               Converter={StaticResource BoolToVisibility}}" />
+
+                                                <!-- 앵커를 벗어난 상태: "지금 src › Recipe 안" (§3.2) -->
+                                                <TextBlock Text="{Binding LocationHint}" FontSize="11"
+                                                           Foreground="{StaticResource Brush.Rotating}"
+                                                           TextWrapping="Wrap" Margin="0,2,0,0"
+                                                           Visibility="{Binding HasLocationHint,
+                                                               Converter={StaticResource BoolToVisibility}}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+
+                <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch"
+                              Background="Transparent"
+                              Visibility="{Binding ShowLeftSplitter,
+                                           Converter={StaticResource BoolToVisibility}}" />
+
+                <!-- 아래: 대상함 / 매크로 탭 — Phase 1 은 자리만, 동작 없음 (§10.3).
+                     접기 대상이 될 뿐 동작은 뒤 Phase 다. -->
+                <DockPanel Grid.Row="2">
+                    <Button DockPanel.Dock="Top" Style="{StaticResource FolderRowButton}"
+                            Command="{Binding ToggleLowerCommand}"
+                            ToolTip="대상함/매크로 영역 접기/펴기"
+                            AutomationProperties.Name="대상함 매크로 접기/펴기"
+                            Margin="6,2,6,2">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontSize="10" VerticalAlignment="Center" Margin="0,0,5,0"
+                                       Foreground="{StaticResource Brush.TextSecondary}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="▾" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding LowerCollapsed}" Value="True">
+                                                <Setter Property="Text" Value="▸" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="대상함 · 매크로" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Button>
+
+                    <TabControl Margin="6,0,6,6" BorderThickness="1" BorderBrush="{StaticResource Brush.Border}"
+                                Visibility="{Binding LowerCollapsed,
+                                             Converter={StaticResource InverseBoolToVisibility}}">
+                        <TabItem Header="복사 대상함">
+                            <TextBlock Text="Phase 3 에서 채운다.&#x0a;복사·이동 목적지를 여기에 상주시킨다."
+                                       Foreground="{StaticResource Brush.TextSecondary}" Margin="10" TextWrapping="Wrap" />
+                        </TabItem>
+                        <TabItem Header="매크로">
+                            <TextBlock Text="Phase 3 에서 채운다.&#x0a;저장된 규칙 카드가 여기 뜬다."
+                                       Foreground="{StaticResource Brush.TextSecondary}" Margin="10" TextWrapping="Wrap" />
+                        </TabItem>
+                    </TabControl>
+                </DockPanel>
+            </Grid>
+
+            <GridSplitter Grid.Column="1" Width="4" VerticalAlignment="Stretch"
+                          Background="Transparent" />
+
+            <!-- ══ 오른쪽 컬럼 — 4x4 그리드 + 배치 편집 (§3.2 · Phase 2) ══ -->
+            <views:TileGridView Grid.Column="2" Margin="2,4,6,4" />
+        </Grid>
+    </DockPanel>
+</Window>

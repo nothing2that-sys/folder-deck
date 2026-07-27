@@ -1,0 +1,174 @@
+<Application x:Class="FolderDeck.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:FolderDeck.App.Converters">
+    <!-- StartupUri 를 쓰지 않는다. 설정을 먼저 읽어 런처/메인 중 무엇을 띄울지 정한다(App.xaml.cs). -->
+    <Application.Resources>
+        <ResourceDictionary>
+
+            <!-- 색은 전부 여기서 온다. 나중에 이 딕셔너리 하나만 갈아끼우면 앱 전체가 다크가 된다. -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/LightTheme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <conv:CollapsibleRowHeightConverter x:Key="RowHeight" />
+            <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+
+            <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+        <!-- 왼쪽 폴더 리스트의 행. 클릭이 순환 칸을 바꾸므로 버튼으로 만든다. -->
+        <Style x:Key="FolderRowButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Back"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Stretch" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background"
+                                        Value="{StaticResource Brush.RowHover}" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsShowingInRotating}" Value="True">
+                                <Setter TargetName="Back" Property="Background"
+                                        Value="{StaticResource Brush.RowActive}" />
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
+            헤더 내비 클러스터의 아이콘 버튼 — ← → ↑ ⌂ ⟳ 🔍 가 같은 크기·모양으로 보여야
+            "눌러진다"가 자명해진다.
+        -->
+        <Style x:Key="NavButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Back" Background="{TemplateBinding Background}" CornerRadius="2">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background"
+                                        Value="{StaticResource Brush.RowHover}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.35" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
+            🔍 — 열려 있는 동안 눌린 표시. ToggleButton 을 쓰지 않는 이유:
+            클릭하면 WPF 가 IsChecked 에 "로컬 값"을 심는데, 그 로컬 값이 OneWay 바인딩을
+            영구히 이겨버린다. 그러면 포커스가 빠져 검색줄이 접힌 뒤에도 버튼만 눌린 채로 남는다
+            (실제로 그렇게 어긋나는 것을 확인했다). 상태는 뷰모델만 갖고, 여기서는 그리기만 한다.
+        -->
+        <Style x:Key="NavToggleButton" TargetType="Button" BasedOn="{StaticResource NavButton}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSearchExpanded}" Value="True">
+                    <Setter Property="Background" Value="{StaticResource Brush.RowActive}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--
+            툴바의 "배치 편집" 토글 (Phase 2). NavToggleButton 과 같은 이유로 ToggleButton 을
+            쓰지 않는다: 클릭하면 WPF 가 IsChecked 에 로컬 값을 심고, 그 값이 OneWay 바인딩을
+            영구히 이겨 버려 뷰모델 상태와 버튼 모양이 어긋난다. 상태는 뷰모델만 갖는다.
+        -->
+        <Style x:Key="EditModeButton" TargetType="Button">
+            <Setter Property="Padding" Value="12,4" />
+            <Setter Property="MinWidth" Value="130" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Back" CornerRadius="3" BorderThickness="1"
+                                Background="{StaticResource Brush.Surface}"
+                                BorderBrush="{StaticResource Brush.Border}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background"
+                                        Value="{StaticResource Brush.RowHover}" />
+                            </Trigger>
+                            <!-- 편집 중임이 버튼에서도 바로 보이게 — 눌린 모양으로 남는다. -->
+                            <DataTrigger Binding="{Binding IsEditingLayout}" Value="True">
+                                <Setter TargetName="Back" Property="Background"
+                                        Value="{StaticResource Brush.EditChrome}" />
+                                <Setter TargetName="Back" Property="BorderBrush"
+                                        Value="{StaticResource Brush.DropValid}" />
+                                <Setter Property="Foreground"
+                                        Value="{StaticResource Brush.EditChromeText}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 런처 카드의 폴더 구성 칩 -->
+        <Style x:Key="ChipBorder" TargetType="Border">
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Padding" Value="7,1" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <!-- breadcrumb 조각 / 헤더 버튼 -->
+        <Style x:Key="LinkButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="3,1" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Back" Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}" CornerRadius="2">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background"
+                                        Value="{StaticResource Brush.RowHover}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.35" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

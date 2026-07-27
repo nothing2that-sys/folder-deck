@@ -1,0 +1,189 @@
+using FolderDeck.App.Services;
+using FolderDeck.App.ViewModels;
+using FolderDeck.Core.Enumeration;
+using FolderDeck.Core.Models;
+using FolderDeck.Core.Storage;
+
+namespace FolderDeck.App.Tests;
+
+/// <summary>파일을 열지 않고 무엇을 열려고 했는지만 기록한다.</summary>
+internal sealed class FakeShellLauncher : IShellLauncher
+{
+    public List<string> Opened { get; } = [];
+
+    /// <summary>탐색기에 넘긴 (경로, 폴더여부).</summary>
+    public List<(string Path, bool IsDirectory)> Revealed { get; } = [];
+
+    public string? Error { get; set; }
+
+    public string? Open(string path)
+    {
+        Opened.Add(path);
+        return Error;
+    }
+
+    public string? RevealInExplorer(string path, bool isDirectory)
+    {
+        Revealed.Add((path, isDirectory));
+        return Error;
+    }
+}
+
+/// <summary>테스트는 STA 스레드가 없으므로 실제 클립보드를 건드리지 않는다.</summary>
+internal sealed class FakeClipboardService : IClipboardService
+{
+    public List<string> Texts { get; } = [];
+
+    public string? Error { get; set; }
+
+    public string? Text => Texts.Count > 0 ? Texts[^1] : null;
+
+    public string? SetText(string text)
+    {
+        Texts.Add(text);
+        return Error;
+    }
+}
+
+/// <summary>
+/// 임시 폴더 트리 + 워크스페이스 + 메인 뷰모델. 실제 파일 시스템을 쓰되
+/// <c>%APPDATA%</c> 나 사용자 폴더는 건드리지 않는다.
+/// </summary>
+internal sealed class MainWindowFixture : IDisposable
+{
+    public const string UnreachablePath = @"\\folderdeck-no-such-host\logs";
+
+    private readonly string _root;
+
+    public MainWindowFixture()
+    {
+        _root = Path.Combine(Path.GetTempPath(), "FolderDeck.AppTests", Guid.NewGuid().ToString("N"));
+
+        // 상시 폴더 2개(코드·출력) + 순환 전용 3개(작업·문서·임시) + 접근 불가 1개.
+        CodePath = MakeDir("code");
+        Directory.CreateDirectory(Path.Combine(CodePath, "Recipe"));
+        Directory.CreateDirectory(Path.Combine(CodePath, "Views"));
+        File.WriteAllText(Path.Combine(CodePath, "Main.cs"), new string('x', 300));
+        File.WriteAllText(Path.Combine(CodePath, "Recipe", "Recipe.cs"), "recipe");
+
+        // 순환 칸으로 가는 탐색용 폴더. code 와 같은 구조지만 상시가 아니다 —
+        // 상시 폴더를 클릭하면 순환 칸이 아니라 자기 상시 칸이 반응하기 때문이다(§4.1).
+        WorkPath = MakeDir("work");
+        Directory.CreateDirectory(Path.Combine(WorkPath, "Recipe"));
+        Directory.CreateDirectory(Path.Combine(WorkPath, "Views"));
+        File.WriteAllText(Path.Combine(WorkPath, "Main.cs"), new string('x', 300));
+        File.WriteAllText(Path.Combine(WorkPath, "Recipe", "Recipe.cs"), "recipe");
+
+        OutputPath = MakeDir("output");
+        File.WriteAllText(Path.Combine(OutputPath, "a.dll"), "a");
+        File.WriteAllText(Path.Combine(OutputPath, "b.dll"), "bb");
+
+        DocsPath = MakeDir("docs");
+        File.WriteAllText(Path.Combine(DocsPath, "spec.md"), "spec");
+
+        Workspace = new Workspace
+        {
+            Title = "테스트 작업",
+            Folders =
+            [
+                new FolderEntry
+                {
+                    Path = CodePath, DisplayName = "code", Description = "구현 코드",
+                    Pinned = true, ViewMode = FolderViewMode.Details, SortBy = SortBy.Name,
+                },
+                new FolderEntry
+                {
+                    Path = OutputPath, DisplayName = "산출물", Description = "빌드 결과",
+                    Pinned = true, ViewMode = FolderViewMode.Details, SortBy = SortBy.Size, SortDesc = true,
+                },
+                new FolderEntry
+                {
+                    Path = WorkPath, DisplayName = "작업", Description = "탐색용",
+                    Pinned = false, ViewMode = FolderViewMode.Details, SortBy = SortBy.Name,
+                },
+                new FolderEntry
+                {
+                    Path = DocsPath, DisplayName = "문서", Description = "사양",
+                    Pinned = false, ViewMode = FolderViewMode.List, SortBy = SortBy.Name,
+                },
+                new FolderEntry
+                {
+                    Path = UnreachablePath, DisplayName = "설비 로그", Description = "네트워크",
+                    Pinned = false,
+                },
+            ],
+        };
+
+        Paths = new FolderDeckPaths(Path.Combine(_root, "appdata"));
+        Paths.EnsureCreated();
+        Store = new WorkspaceStore(Paths, new DebouncedSaveScheduler(TimeSpan.FromMilliseconds(20)));
+        Shell = new FakeShellLauncher();
+        Clipboard = new FakeClipboardService();
+        ViewModel = new MainViewModel(Workspace, Store, new FolderEnumerator(), Shell, Clipboard);
+    }
+
+    public string CodePath { get; }
+
+    /// <summary>순환 칸으로 보낼 수 있는 탐색용 폴더 (상시가 아니다).</summary>
+    public string WorkPath { get; }
+
+    public string OutputPath { get; }
+
+    public string DocsPath { get; }
+
+    public Workspace Workspace { get; }
+
+    public FolderDeckPaths Paths { get; }
+
+    public WorkspaceStore Store { get; }
+
+    public FakeShellLauncher Shell { get; }
+
+    public FakeClipboardService Clipboard { get; }
+
+    public MainViewModel ViewModel { get; }
+
+    /// <summary>
+    /// 순환1 칸의 패널. 마이그레이션이 순환 타일을 항상 하나 만들므로 이 픽스처에서는 언제나 있다
+    /// (뷰모델 쪽은 "순환 칸을 전부 지운" 상태를 허용해 nullable 이다).
+    /// </summary>
+    public FolderPanelViewModel Rotating => ViewModel.RotatingPanel!;
+
+    /// <summary>재귀 검색용으로 깊은 트리를 심는다 (code · work 양쪽에 같은 모양으로).</summary>
+    public void MakeDeepTree()
+    {
+        foreach (var root in new[] { CodePath, WorkPath })
+        {
+            // work/Recipe/Controls/NumberBox.xaml, work/Views/NumberBox.cs 처럼
+            // 같은 이름 조각이 여러 깊이에 흩어지게.
+            var controls = Directory.CreateDirectory(Path.Combine(root, "Recipe", "Controls")).FullName;
+            File.WriteAllText(Path.Combine(controls, "NumberBox.xaml"), "x");
+            File.WriteAllText(Path.Combine(root, "Views", "NumberBoxHost.cs"), "x");
+            File.WriteAllText(Path.Combine(root, "Recipe", "NumberFormat.cs"), "x");
+            File.WriteAllText(Path.Combine(root, "Untouched.txt"), "x");
+        }
+    }
+
+    public FolderRowViewModel Row(string displayName) =>
+        ViewModel.Rows.Single(r => r.DisplayName == displayName);
+
+    private string MakeDir(string name)
+    {
+        var path = Path.Combine(_root, name);
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    public void Dispose()
+    {
+        Store.Dispose();
+        try
+        {
+            Directory.Delete(_root, recursive: true);
+        }
+        catch (IOException)
+        {
+            // 정리 실패는 무시.
+        }
+    }
+}

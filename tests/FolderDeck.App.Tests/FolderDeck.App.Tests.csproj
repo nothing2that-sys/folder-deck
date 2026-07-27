@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- 뷰모델이 WPF 어셈블리를 참조하므로 테스트도 같은 TFM 이어야 한다.
+         뷰모델 자체는 Dispatcher 를 쓰지 않으므로 UI 스레드 없이 돌아간다. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <!-- UseWPF 를 켜면 암시적 using 에서 System.IO 가 빠진다. 테스트가 실제 파일 트리를 쓰므로 되살린다. -->
+    <Using Include="System.IO" />
+    <Using Include="FolderDeck.App.ViewModels" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FolderDeck.App\FolderDeck.App.csproj" />
+  </ItemGroup>
+
+</Project>

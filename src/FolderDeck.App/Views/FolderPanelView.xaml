@@ -1,0 +1,355 @@
+<UserControl x:Class="FolderDeck.App.Views.FolderPanelView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:FolderDeck.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:FolderPanelViewModel}"
+             Focusable="True"
+             PreviewMouseDown="OnPreviewMouseDown"
+             Margin="4">
+
+    <!-- 앵커 복귀 Alt+Home, 상위 Alt+↑, 뒤로/앞으로 Alt+←/→.
+         마우스 XButton1/2 는 코드 비하인드에서 받는다. -->
+    <UserControl.InputBindings>
+        <KeyBinding Modifiers="Alt" Key="Home" Command="{Binding GoToAnchorCommand}" />
+        <KeyBinding Modifiers="Alt" Key="Up" Command="{Binding GoUpCommand}" />
+        <KeyBinding Modifiers="Alt" Key="Left" Command="{Binding GoBackCommand}" />
+        <KeyBinding Modifiers="Alt" Key="Right" Command="{Binding GoForwardCommand}" />
+        <!-- Ctrl+F 는 펴는 것으로 끝이 아니라 포커스까지 줘야 하고, 갓 보이게 된 TextBox 는
+             레이아웃 뒤에야 포커스를 받는다. 그래서 MainWindow 코드 비하인드가 처리한다. -->
+    </UserControl.InputBindings>
+
+    <UserControl.Resources>
+        <!-- 항목 우클릭 메뉴 — 이번엔 두 항목만. 나머지(이름 바꾸기·삭제·복사 등)는 뒤 Phase.
+             ContextMenu 의 DataContext 는 항목이고, 커맨드는 컨테이너의 Tag(=패널 VM)로 잡는다. -->
+        <!-- x:Shared="False" — 조회마다 새 인스턴스를 준다. 하나를 여러 컨테이너가 나눠 쓰면
+             메뉴의 DataContext 가 마지막으로 가져간 항목을 가리킨다. 대상은 PlacementTarget
+             에서 직접 읽어 그 위험을 아예 없앤다. -->
+        <ContextMenu x:Key="ItemMenu" x:Shared="False">
+            <MenuItem Header="경로 복사"
+                      Command="{Binding PlacementTarget.Tag.CopyItemPathCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Header="탐색기에서 열기"
+                      Command="{Binding PlacementTarget.Tag.RevealItemCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+
+        <Style x:Key="FileItemContainer" TargetType="ListViewItem">
+            <EventSetter Event="MouseDoubleClick" Handler="OnItemDoubleClick" />
+            <Setter Property="ContextMenu" Value="{StaticResource ItemMenu}" />
+            <!-- 우클릭 메뉴가 패널 커맨드에 닿게 하는 통로. -->
+            <Setter Property="Tag"
+                    Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+        </Style>
+
+        <!-- 평소 details 뷰. GridView 는 여러 ListView 가 나눠 쓸 수 없어(런타임 InvalidOperationException)
+             x:Shared="False" 로 조회마다 새 인스턴스를 받는다 — 패널이 3개고 검색 시 뷰를 갈아타므로. -->
+        <GridView x:Key="NormalGridView" x:Shared="False">
+            <GridViewColumn Header="이름" Width="260">
+                <GridViewColumn.CellTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Glyph}" Margin="0,0,5,0" />
+                            <TextBlock Text="{Binding Name}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </GridViewColumn.CellTemplate>
+            </GridViewColumn>
+            <GridViewColumn Header="크기" Width="90">
+                <GridViewColumn.CellTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding SizeText}" TextAlignment="Right"
+                                   HorizontalAlignment="Right" />
+                    </DataTemplate>
+                </GridViewColumn.CellTemplate>
+            </GridViewColumn>
+            <GridViewColumn Header="수정" Width="130" DisplayMemberBinding="{Binding ModifiedText}" />
+        </GridView>
+
+        <!-- 재귀 검색 중 details 뷰 — "위치" 열이 붙는다(탐색기 방식) -->
+        <GridView x:Key="SearchGridView" x:Shared="False">
+            <GridViewColumn Header="이름" Width="220">
+                <GridViewColumn.CellTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Glyph}" Margin="0,0,5,0" />
+                            <TextBlock Text="{Binding Name}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </GridViewColumn.CellTemplate>
+            </GridViewColumn>
+            <GridViewColumn Header="위치" Width="180">
+                <GridViewColumn.CellTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding RelativeFolder}" TextTrimming="CharacterEllipsis"
+                                   Foreground="{StaticResource Brush.TextSecondary}"
+                                   ToolTip="{Binding FullPath}" />
+                    </DataTemplate>
+                </GridViewColumn.CellTemplate>
+            </GridViewColumn>
+            <GridViewColumn Header="크기" Width="80">
+                <GridViewColumn.CellTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding SizeText}" TextAlignment="Right"
+                                   HorizontalAlignment="Right" />
+                    </DataTemplate>
+                </GridViewColumn.CellTemplate>
+            </GridViewColumn>
+            <GridViewColumn Header="수정" Width="120" DisplayMemberBinding="{Binding ModifiedText}" />
+        </GridView>
+    </UserControl.Resources>
+
+    <Grid>
+        <!-- 상시 = 실선(호박), 순환 = 점선(보라). Border 는 점선을 못 그리므로 Rectangle 로 그린다. -->
+        <Rectangle RadiusX="4" RadiusY="4" StrokeThickness="2"
+                   Fill="{StaticResource Brush.Surface}">
+            <Rectangle.Style>
+                <Style TargetType="Rectangle">
+                    <Setter Property="Stroke" Value="{StaticResource Brush.Pinned}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsRotating}" Value="True">
+                            <Setter Property="Stroke" Value="{StaticResource Brush.Rotating}" />
+                            <Setter Property="StrokeDashArray" Value="4 2.5" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Rectangle.Style>
+        </Rectangle>
+
+        <!-- 아직 아무 폴더도 안 띄운 순환 칸. 순환 칸이 여럿이면 제목이 번호를 밝힌다
+             (예: "순환2 — 폴더를 지정하세요"). -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="{Binding EmptyTitle}" TextAlignment="Center"
+                       Foreground="{StaticResource Brush.TextSecondary}" />
+            <TextBlock Text="왼쪽 목록에서 폴더를 클릭" FontSize="11" TextAlignment="Center"
+                       Margin="0,3,0,0" Foreground="{StaticResource Brush.TextSecondary}" />
+        </StackPanel>
+
+        <!-- IsEmpty 의 반대로 보여야 하므로 로컬 Visibility 대신 Style 트리거를 쓴다
+             (로컬 값이 있으면 트리거가 이기지 못한다). -->
+        <DockPanel Margin="10,8">
+            <DockPanel.Style>
+                <Style TargetType="DockPanel">
+                    <Setter Property="Visibility" Value="Visible" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsEmpty}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DockPanel.Style>
+
+            <!-- ── 헤더: breadcrumb + 뒤로/앞으로/상위/앵커 + 메타 + 검색 ── -->
+            <StackPanel DockPanel.Dock="Top">
+                <DockPanel>
+                    <!-- 내비 클러스터 — 🔍 를 같은 크기로 여기 붙여서 "눌러진다"가 자명하게. -->
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button Style="{StaticResource NavButton}"
+                                Command="{Binding GoBackCommand}"
+                                AutomationProperties.Name="뒤로"
+                                ToolTip="뒤로 (마우스 뒤로 버튼 · Alt+←)" Content="←" />
+                        <Button Style="{StaticResource NavButton}"
+                                Command="{Binding GoForwardCommand}"
+                                AutomationProperties.Name="앞으로"
+                                ToolTip="앞으로 (마우스 앞으로 버튼 · Alt+→)" Content="→" />
+                        <Button Style="{StaticResource NavButton}"
+                                Command="{Binding GoUpCommand}"
+                                IsEnabled="{Binding CanGoUp}"
+                                AutomationProperties.Name="상위 폴더"
+                                ToolTip="상위 폴더 (Alt+↑)" Content="↑" />
+                        <Button Style="{StaticResource NavButton}"
+                                Command="{Binding GoToAnchorCommand}"
+                                AutomationProperties.Name="앵커로 복귀"
+                                ToolTip="앵커로 복귀 (Alt+Home)" Content="⌂" />
+                        <Button Style="{StaticResource NavButton}"
+                                Command="{Binding RefreshCommand}"
+                                AutomationProperties.Name="다시 읽기"
+                                ToolTip="다시 읽기 (F5)" Content="⟳" />
+                        <Button Style="{StaticResource NavToggleButton}"
+                                Click="OnSearchToggleClick"
+                                AutomationProperties.Name="검색"
+                                ToolTip="검색 (Ctrl+F)" Content="🔍" />
+                    </StackPanel>
+
+                    <!-- breadcrumb: 첫 조각(앵커) 클릭 = 앵커 복귀. 우클릭 = 현재 경로 복사. -->
+                    <ItemsControl ItemsSource="{Binding Breadcrumbs}" VerticalAlignment="Center"
+                                  ToolTip="우클릭: 지금 보고 있는 폴더의 경로 복사">
+                        <ItemsControl.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="경로 복사" Command="{Binding CopyCurrentPathCommand}" />
+                            </ContextMenu>
+                        </ItemsControl.ContextMenu>
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="›" Foreground="{StaticResource Brush.TextSecondary}"
+                                               Margin="1,0" VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsAnchor}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <Button Style="{StaticResource LinkButton}"
+                                            Content="{Binding Name}"
+                                            ToolTip="{Binding Path}"
+                                            Command="{Binding DataContext.NavigateToCommand,
+                                                              RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding Path}">
+                                        <Button.Resources>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsAnchor}" Value="True">
+                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Resources>
+                                    </Button>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+
+                <!-- 메타 + 앵커를 벗어난 상태 -->
+                <StackPanel Orientation="Horizontal" Margin="3,2,0,4">
+                    <TextBlock Text="{Binding MetaText}" Foreground="{StaticResource Brush.TextSecondary}"
+                               FontSize="11" VerticalAlignment="Center" />
+                    <TextBlock Text="· 앵커 밖" Foreground="{StaticResource Brush.Rotating}"
+                               FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
+                               Visibility="{Binding IsAwayFromAnchor,
+                                                    Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock Text="읽는 중…" Foreground="{StaticResource Brush.TextSecondary}"
+                               FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
+                               Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+
+                <!-- 검색 줄 — 헤더 안이 아니라 헤더 "아래"에 한 줄로 펴진다.
+                     헤더 안에서 좌우로 펴면 breadcrumb 길이에 따라 폭이 널뛴다.
+                     기준점은 지금 보고 있는 폴더(currentPath). 이름 부분일치만.
+                     되접힘은 컨테이너의 IsKeyboardFocusWithin 으로 본다 —
+                     "하위 포함"이나 ✕ 로 포커스가 옮겨가도 접히지 않게. -->
+                <DockPanel x:Name="SearchArea" Margin="0,2,0,6"
+                           IsKeyboardFocusWithinChanged="OnSearchFocusWithinChanged"
+                           Visibility="{Binding IsSearchExpanded,
+                                        Converter={StaticResource BoolToVisibility}}">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource NavButton}"
+                            Command="{Binding CloseSearchCommand}"
+                            AutomationProperties.Name="검색 닫기"
+                            ToolTip="검색 닫기" Content="✕" />
+                    <CheckBox DockPanel.Dock="Right" Content="하위 포함" VerticalAlignment="Center"
+                              Margin="8,0,4,0" FontSize="11"
+                              IsChecked="{Binding IncludeSubfolders}"
+                              ToolTip="켜면 이 폴더 아래 트리를 재귀로 검색한다" />
+                    <TextBox x:Name="SearchBox"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             Padding="4,3" FontSize="12" MinHeight="24"
+                             VerticalContentAlignment="Center"
+                             ToolTip="이름으로 검색 (대소문자 무시 · 부분일치)" />
+                </DockPanel>
+            </StackPanel>
+
+            <!-- ── 접근 불가: 폴더를 목록에서 지우지 않고 상태 + 다시 시도 (§5) ── -->
+            <Border DockPanel.Dock="Top" Padding="10" Margin="0,0,0,6" CornerRadius="3"
+                    Background="{StaticResource Brush.DangerSurface}"
+                    Visibility="{Binding HasFailure, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="{Binding FailureText}" Foreground="{StaticResource Brush.Danger}"
+                               FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding CurrentPath}" Foreground="{StaticResource Brush.TextSecondary}"
+                               FontSize="11" Margin="0,3" TextWrapping="Wrap" />
+                    <Button Content="다시 시도" Command="{Binding RefreshCommand}"
+                            HorizontalAlignment="Left" Padding="10,3" Margin="0,4,0,0" />
+                </StackPanel>
+            </Border>
+
+            <!-- 검색 진행 / 건너뜀 / 결과 없음 -->
+            <StackPanel DockPanel.Dock="Bottom">
+                <TextBlock Text="{Binding SearchStatusText}" FontSize="11" Margin="3,4,0,0"
+                           Foreground="{StaticResource Brush.TextSecondary}"
+                           Visibility="{Binding IsSearching, Converter={StaticResource BoolToVisibility}}" />
+                <!-- 권한 없음·끊긴 네트워크로 못 본 하위가 있으면 한 줄로 알린다 (§5). -->
+                <TextBlock Text="{Binding SkippedFoldersText}" FontSize="11" Margin="3,4,0,0"
+                           Foreground="{StaticResource Brush.Danger}"
+                           Visibility="{Binding HasSkippedFolders,
+                                                Converter={StaticResource BoolToVisibility}}" />
+            </StackPanel>
+
+            <Grid>
+                <!-- "검색 안 함"(평소 빈 폴더)과 구분되는 "결과 없음" -->
+                <TextBlock Text="결과 없음" Foreground="{StaticResource Brush.TextSecondary}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Visibility="{Binding ShowNoResults, Converter={StaticResource BoolToVisibility}}" />
+
+                <!-- ── 파일 목록 · 가상화 켬 (§8 — 로그 수천 개 폴더에서 UI 멈춤 방지) ──
+                     View 는 Style 로만 정한다(로컬 값을 주면 검색 시 열 교체 트리거가 이기지 못한다). -->
+                <ListView ItemsSource="{Binding DisplayItems}"
+                          ItemContainerStyle="{StaticResource FileItemContainer}"
+                          BorderThickness="0" Background="Transparent"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.CanContentScroll="True">
+                    <ListView.Style>
+                        <Style TargetType="ListView">
+                            <Setter Property="View" Value="{StaticResource NormalGridView}" />
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsDetailsView}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                                <!-- 재귀 검색 중에는 "위치" 열이 붙은 뷰로 갈아탄다. -->
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsDetailsView}" Value="True" />
+                                        <Condition Binding="{Binding IsRecursiveSearch}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="View" Value="{StaticResource SearchGridView}" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListView.Style>
+                </ListView>
+
+                <ListView ItemsSource="{Binding DisplayItems}"
+                          ItemContainerStyle="{StaticResource FileItemContainer}"
+                          BorderThickness="0" Background="Transparent"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.CanContentScroll="True"
+                          Visibility="{Binding IsListView, Converter={StaticResource BoolToVisibility}}">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Glyph}" Margin="0,0,5,0" />
+                                <!-- list 뷰의 검색 결과는 이름 앞에 상대 폴더를 흐리게 붙인다. -->
+                                <TextBlock Text="{Binding RelativeFolderPrefix}"
+                                           Foreground="{StaticResource Brush.TextSecondary}"
+                                           Visibility="{Binding HasRelativeFolder,
+                                                                Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Text="{Binding Name}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+        </DockPanel>
+    </Grid>
+</UserControl>
