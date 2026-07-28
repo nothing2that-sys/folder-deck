@@ -47,9 +47,22 @@
                 <TextBlock DockPanel.Dock="Left" Text="{Binding StatusLabel}"
                            Foreground="{StaticResource Brush.TextSecondary}"
                            Margin="0,0,6,0" />
-                <TextBlock DockPanel.Dock="Right" Text="{Binding Message}"
-                           Foreground="{StaticResource Brush.Danger}" Margin="10,0,0,0"
-                           Visibility="{Binding HasMessage, Converter={StaticResource BoolToVisibility}}" />
+                <!-- 실패·거절은 빨강, 정보성 안내는 보조색. 안내는 잠깐 뒤 스스로 사라진다
+                     (타이머는 코드 비하인드) — 실패 요약은 남는다. -->
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Message}" Margin="10,0,0,0"
+                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Message}"
+                           Visibility="{Binding HasMessage, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{StaticResource Brush.TextSecondary}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding MessageIsWarning}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
                 <TextBlock Text="{Binding StatusPath}" TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding StatusPath}" />
             </DockPanel>

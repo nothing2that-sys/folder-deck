@@ -50,10 +50,22 @@ public sealed partial class FolderRowViewModel(FolderEntry entry) : ObservableOb
     public string RotationSlotText => $"순환{RotationSlot}";
 
     /// <summary>
-    /// 태그를 행에 붙일지. 순환 칸이 하나뿐이면 모든 행에 "순환1"이 붙어 봐야 소음이라 숨긴다.
+    /// 태그를 행에 붙일지. 순환 칸이 하나뿐이면 모든 행에 "순환1"이 붙어 봐야 소음이고,
+    /// 상시 칸에 못박힌 폴더는 애초에 순환 칸으로 가지 않는다.
     /// </summary>
     [ObservableProperty]
     private bool showRotationTag;
+
+    /// <summary>
+    /// 이 폴더가 이미 상시 칸에 못박혀 있는가. 그러면 빈 칸에 또 넣을 수 없고(같은 폴더를
+    /// 두 상시 칸에 두는 건 칸 낭비), 클릭해도 순환 칸이 아니라 자기 상시 칸이 반응한다.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanPlaceInGrid))]
+    private bool hasPinnedTile;
+
+    /// <summary>배치 편집에서 빈 칸에 넣을 수 있는 폴더인가.</summary>
+    public bool CanPlaceInGrid => !HasPinnedTile;
 
     /// <summary>우클릭 메뉴 "순환 칸 지정 ▸ …" 항목들. 배치가 바뀌면 다시 만들어진다.</summary>
     [ObservableProperty]

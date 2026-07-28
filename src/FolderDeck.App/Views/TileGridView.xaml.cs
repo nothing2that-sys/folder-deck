@@ -125,7 +125,7 @@ public partial class TileGridView : UserControl
         if (!drag.IsValid)
         {
             // 겹치면 거부한다 — 밀어내지 않는다. 왜 안 됐는지는 말해 준다.
-            vm.Message = "그 자리에는 다른 타일이 있다. 배치는 그대로 뒀다.";
+            vm.ReportTileOverlap();
             return;
         }
 
@@ -288,7 +288,7 @@ public partial class TileGridView : UserControl
             || sender is not FrameworkElement { DataContext: GridCellViewModel cell }
             || !cell.IsFree
             || !e.Data.GetDataPresent(FolderRowFormat)
-            || e.Data.GetData(FolderRowFormat) is not FolderRowViewModel row)
+            || e.Data.GetData(FolderRowFormat) is not FolderRowViewModel { CanPlaceInGrid: true } row)
         {
             return null;
         }

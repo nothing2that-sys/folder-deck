@@ -63,7 +63,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (dropped > 0)
         {
             // 조용히 삼키지 않는다 (§5).
-            Message = $"배치에서 놓을 수 없는 타일 {dropped}개를 뺐다 (폴더가 없거나 격자를 벗어났다).";
+            Warn($"배치에서 놓을 수 없는 타일 {dropped}개를 뺐다 (폴더가 없거나 격자를 벗어났다).");
         }
 
         _store.SaveFailed += OnSaveFailed;
@@ -112,12 +112,75 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>저장 실패 등 사용자에게 알릴 것 (§5 — 조용히 삼키지 않는다).</summary>
+    // ── 상태 바 알림 ─────────────────────────────────────────────────────────
+    //
+    // 두 축으로 나눈다.
+    //   경고(빨강) 대 정보(보조색) — 무슨 색으로 보일지.
+    //   사라짐 대 남음            — 스스로 지워질지.
+    // "순환2 칸 없음 → 순환1" 같은 안내가 실패와 같은 빨강으로 계속 붙어 있으면
+    // 정작 저장 실패·부분 실패를 놓친다. 반대로 실패 요약은 절대 사라지면 안 된다.
+    // 사라지는 타이밍은 뷰(MainWindow)의 타이머가 잡는다 — 뷰모델은 상태만 갖는다.
+
+    /// <summary>사용자에게 알릴 것 (§5 — 조용히 삼키지 않는다).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasMessage))]
     private string? message;
 
+    /// <summary>빨강으로 띄울 것인가(실패·거절). 정보성 안내는 false.</summary>
+    [ObservableProperty]
+    private bool messageIsWarning;
+
+    /// <summary>잠깐 떴다 스스로 사라지는가. 실패·부분 실패 요약은 false.</summary>
+    [ObservableProperty]
+    private bool messageIsTransient;
+
     public bool HasMessage => !string.IsNullOrEmpty(Message);
+
+    /// <summary>정보성 안내 — 보조색, 잠깐 떴다 사라진다.</summary>
+    private void Inform(string text)
+    {
+        Message = text;
+        MessageIsWarning = false;
+        MessageIsTransient = true;
+    }
+
+    /// <summary>
+    /// 경고 — 빨강. 기본은 남는다(실패·부분 실패). 화면이 이미 답을 보여주는 거절
+    /// (겹쳐서 못 놓음 등)은 <paramref name="transient"/> 로 스스로 지우게 한다.
+    /// </summary>
+    private void Warn(string text, bool transient = false)
+    {
+        Message = text;
+        MessageIsWarning = true;
+        MessageIsTransient = transient;
+    }
+
+    private void ClearMessage()
+    {
+        Message = null;
+        MessageIsWarning = false;
+        MessageIsTransient = false;
+    }
+
+    /// <summary>타이머가 부른다. 남아야 할 메시지는 건드리지 않는다.</summary>
+    public void ExpireTransientMessage()
+    {
+        if (MessageIsTransient)
+        {
+            ClearMessage();
+        }
+    }
+
+    /// <summary>겹쳐서 못 놓았다 — 드래그를 처리하는 뷰가 알린다.</summary>
+    public void ReportTileOverlap() => Warn("그 자리에는 다른 타일이 있다.", transient: true);
+
+    /// <summary>이미 상시 칸에 있는 폴더를 또 넣으려 했다 — 드래그를 막은 뷰도 부른다.</summary>
+    public void RejectDuplicatePlacement(FolderRowViewModel row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        Warn($"이미 상시 칸에 있다: {row.DisplayName}", transient: true);
+    }
 
     private TileViewModel? PrimaryRotatingTile => Tiles
         .Where(t => t.IsRotating)
@@ -148,9 +211,8 @@ public sealed partial class MainViewModel : ObservableObject
         IsEditingLayout = !IsEditingLayout;
         CancelPlace();
 
-        Message = IsEditingLayout
-            ? "배치 편집 — 타일을 끌어 옮기고 오른쪽 아래 모서리로 크기를 바꾼다. 빈 칸은 클릭하거나 왼쪽 폴더를 끌어다 놓는다."
-            : null;
+        // 조작 안내는 툴바가 편집 중 내내 띄우고 있다. 상태 바에 또 쓰면 두 번 읽힌다.
+        ClearMessage();
 
         if (!IsEditingLayout)
         {
@@ -238,11 +300,11 @@ public sealed partial class MainViewModel : ObservableObject
         RefreshDerivedLayout();
         Save();
 
-        Message = removedIndex is null
+        Inform(removedIndex is null
             ? "타일을 뺐다. 폴더는 왼쪽 리스트에 남아 있다."
             : orphans > 0
-                ? $"순환{removedIndex} 칸을 뺐다. 그 번호를 쓰던 폴더 {orphans}개는 순환1로 내렸다."
-                : $"순환{removedIndex} 칸을 뺐다.";
+                ? $"순환{removedIndex} 칸을 뺐다 — 그 번호를 쓰던 폴더 {orphans}개는 순환1로."
+                : $"순환{removedIndex} 칸을 뺐다.");
     }
 
     /// <summary>
@@ -261,7 +323,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             if (tile.Panel.Entry is not { } entry)
             {
-                Message = $"{tile.KindTag} 칸이 비어 있어 못박을 폴더가 없다. 왼쪽에서 폴더를 먼저 띄워라.";
+                Warn($"{tile.KindTag} 칸이 비어 있어 못박을 폴더가 없다.", transient: true);
                 return;
             }
 
@@ -271,9 +333,9 @@ public sealed partial class MainViewModel : ObservableObject
             tile.Spec.RotationIndex = null;
 
             var orphans = DemoteFoldersTo(freed, 1);
-            Message = orphans > 0
-                ? $"순환{freed} 칸을 상시로 바꿨다. 그 번호를 쓰던 폴더 {orphans}개는 순환1로 내렸다."
-                : "이 칸을 상시로 바꿨다.";
+            Inform(orphans > 0
+                ? $"순환{freed} → 상시. 그 번호를 쓰던 폴더 {orphans}개는 순환1로."
+                : "이 칸을 상시로 바꿨다.");
         }
         else
         {
@@ -281,7 +343,7 @@ public sealed partial class MainViewModel : ObservableObject
             tile.Spec.FolderId = null;
             tile.Spec.RotationIndex = GridLayout.NextRotationIndex(Specs.Where(s => s != tile.Spec));
             tile.Panel.Clear();
-            Message = $"이 칸을 순환{tile.Spec.RotationIndex} 으로 바꿨다.";
+            Inform($"이 칸을 순환{tile.Spec.RotationIndex} 으로 바꿨다.");
         }
 
         tile.NotifyKind();
@@ -361,6 +423,14 @@ public sealed partial class MainViewModel : ObservableObject
             return false;
         }
 
+        // 같은 폴더를 상시 칸 둘에 두는 것은 16칸을 낭비할 뿐이다 — "겹침=거부"와 같은 결로 막는다.
+        // (순환 칸은 폴더를 못박지 않으므로 이 규칙과 무관하다.)
+        if (PinnedTileFor(row) is not null)
+        {
+            RejectDuplicatePlacement(row);
+            return false;
+        }
+
         var spec = new TileSpec
         {
             Kind = TileKind.Pinned,
@@ -372,7 +442,7 @@ public sealed partial class MainViewModel : ObservableObject
         };
 
         var tile = AddTile(spec);
-        Message = $"상시 칸에 넣었다: {row.DisplayName}. 크기는 모서리로 늘린다.";
+        Inform($"상시 칸에 넣었다: {row.DisplayName}");
 
         // 창을 열 때는 InitializeAsync 가 상시 패널을 채우지만, 편집 중에 새로 넣은 타일은
         // 아무도 읽어 주지 않는다. 넣자마자 내용이 보여야 한다(넣고 나서 빈 칸으로 남으면
@@ -402,7 +472,7 @@ public sealed partial class MainViewModel : ObservableObject
         };
 
         AddTile(spec);
-        Message = $"순환{spec.RotationIndex} 칸을 만들었다. 왼쪽 폴더의 우클릭 메뉴에서 이 번호를 지정하면 여기에 뜬다.";
+        Inform($"순환{spec.RotationIndex} 칸을 만들었다 — 폴더 행 우클릭으로 이 번호를 지정한다.");
         return true;
     }
 
@@ -417,7 +487,7 @@ public sealed partial class MainViewModel : ObservableObject
         RefreshRotationChoices();
         Save();
 
-        Message = $"{choice.Row.DisplayName} → {choice.Label} 칸";
+        Inform($"{choice.Row.DisplayName} → {choice.Label} 칸");
     }
 
     // ── 초기화 · 갱신 ────────────────────────────────────────────────────────
@@ -469,7 +539,14 @@ public sealed partial class MainViewModel : ObservableObject
             var wasAway = pinned.Panel.IsAwayFromAnchor;
             await pinned.Panel.GoToAnchorAsync().ConfigureAwait(true);
 
-            Message = wasAway ? null : $"상시 칸에 이미 떠 있다: {row.DisplayName}";
+            if (wasAway)
+            {
+                ClearMessage();
+            }
+            else
+            {
+                Inform($"상시 칸에 이미 떠 있다: {row.DisplayName}");
+            }
             UpdateRowStates();
             return;
         }
@@ -479,15 +556,20 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (tile is null)
         {
-            Message = "순환 칸이 없다. 배치 편집에서 빈 칸을 순환 칸으로 만들어라.";
+            Warn("순환 칸이 없다. 배치 편집에서 빈 칸을 순환 칸으로 만들어라.");
             return;
         }
 
         // 지정한 번호의 칸이 없으면 폴백한다 — 클릭이 아무 일도 안 하는 것보다 낫고,
         // 어디로 갔는지 한 줄로 말해 준다.
-        Message = tile.RotationIndex == wanted
-            ? null
-            : $"순환{wanted} 칸이 없어 {tile.KindTag} 칸에 띄웠다.";
+        if (tile.RotationIndex == wanted)
+        {
+            ClearMessage();
+        }
+        else
+        {
+            Inform($"순환{wanted} 칸 없음 → {tile.KindTag}");
+        }
 
         ActiveRotatingTile = tile;
 
@@ -529,7 +611,7 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand(AllowConcurrentExecutions = true)]
     public async Task RefreshAllAsync()
     {
-        Message = null;
+        ClearMessage();
 
         await Task.WhenAll(Panels.Where(p => p.Entry is not null).Select(p => p.RefreshAsync()))
             .ConfigureAwait(true);
@@ -716,7 +798,8 @@ public sealed partial class MainViewModel : ObservableObject
                 }),
             ];
 
-            row.ShowRotationTag = showTag && !pinnedFolders.Contains(row.Entry.Id);
+            row.HasPinnedTile = pinnedFolders.Contains(row.Entry.Id);
+            row.ShowRotationTag = showTag && !row.HasPinnedTile;
         }
     }
 
@@ -774,5 +857,5 @@ public sealed partial class MainViewModel : ObservableObject
         _uiContext.Post(_ => ReportError(text), null);
     }
 
-    private void ReportError(string message) => Message = message;
+    private void ReportError(string text) => Warn(text);
 }

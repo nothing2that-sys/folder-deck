@@ -314,7 +314,7 @@ public sealed class LayoutEditTests
         await f.ViewModel.ShowFolderAsync(f.Row("문서"));
 
         Assert.Equal(f.DocsPath, f.Rotating.CurrentPath);
-        Assert.Contains("순환2 칸이 없어", f.ViewModel.Message);
+        Assert.Contains("순환2 칸 없음", f.ViewModel.Message);
     }
 
     [Fact]
@@ -334,7 +334,7 @@ public sealed class LayoutEditTests
         Assert.Equal(1, f.Row("문서").RotationSlot);
         Assert.Null(f.Row("문서").Entry.RotationSlot);
         Assert.Equal(1, f.Row("설비 로그").RotationSlot);
-        Assert.Contains("순환1로 내렸다", f.ViewModel.Message);
+        Assert.Contains("순환1로", f.ViewModel.Message);
     }
 
     [Fact]
@@ -500,5 +500,92 @@ public sealed class LayoutEditTests
 
         Assert.Single(vm.Tiles);
         Assert.Contains("놓을 수 없는 타일 1개", vm.Message);
+    }
+
+    // ── 상태 바 알림의 결 (Stage 0) ──────────────────────────────────────────
+
+    /// <summary>정보성 안내는 스스로 사라진다 — 경고는 남는다.</summary>
+    [Fact]
+    public async Task InfoMessagesExpireButWarningsStay()
+    {
+        using var f = Editing();
+
+        f.ViewModel.PlaceRotatingInCell(FreeCell(f));
+        Assert.True(f.ViewModel.MessageIsTransient);
+        Assert.False(f.ViewModel.MessageIsWarning);
+
+        f.ViewModel.ExpireTransientMessage();
+        Assert.False(f.ViewModel.HasMessage);
+
+        // 클릭이 아무 데도 못 가는 상태 = 경고. 타이머가 지나가도 남는다.
+        foreach (var rotating in f.ViewModel.Tiles.Where(t => t.IsRotating).ToList())
+        {
+            f.ViewModel.RemoveTile(rotating);
+        }
+
+        f.ViewModel.ToggleLayoutEdit();
+        await f.ViewModel.ShowFolderAsync(f.Row("문서"));
+
+        Assert.True(f.ViewModel.MessageIsWarning);
+        Assert.False(f.ViewModel.MessageIsTransient);
+
+        f.ViewModel.ExpireTransientMessage();
+        Assert.Contains("순환 칸이 없다", f.ViewModel.Message);
+    }
+
+    /// <summary>거절은 빨강이되 스스로 지워진다 — 화면이 이미 "안 움직였다"고 답하고 있다.</summary>
+    [Fact]
+    public void ARefusalIsRedButDoesNotLinger()
+    {
+        using var f = Editing();
+
+        f.ViewModel.ReportTileOverlap();
+
+        Assert.True(f.ViewModel.MessageIsWarning);
+        Assert.True(f.ViewModel.MessageIsTransient);
+    }
+
+    // ── 같은 폴더를 상시 칸 둘에 두지 않는다 (Stage 0) ───────────────────────
+
+    [Fact]
+    public async Task AFolderThatAlreadyHasAPinnedTileCannotBePlacedAgain()
+    {
+        using var f = Editing();
+        var row = f.Row("code");
+
+        Assert.False(row.CanPlaceInGrid);
+        Assert.True(row.HasPinnedTile);
+
+        Assert.False(await f.ViewModel.PlaceFolderInCellAsync(row, FreeCell(f)));
+
+        Assert.Equal(3, f.ViewModel.Tiles.Count);
+        Assert.Contains("이미 상시 칸에 있다", f.ViewModel.Message);
+        Assert.True(f.ViewModel.MessageIsWarning);
+    }
+
+    /// <summary>타일을 빼면 다시 넣을 수 있다 — 규칙은 "두 번"을 막는 것이지 폴더를 막는 게 아니다.</summary>
+    [Fact]
+    public async Task RemovingThePinnedTileMakesTheFolderPlaceableAgain()
+    {
+        using var f = Editing();
+        var row = f.Row("code");
+
+        f.ViewModel.RemoveTile(f.ViewModel.Tiles.Single(t => t.Spec.FolderId == row.Entry.Id));
+        Assert.True(row.CanPlaceInGrid);
+
+        Assert.True(await f.ViewModel.PlaceFolderInCellAsync(row, FreeCell(f)));
+        Assert.False(row.CanPlaceInGrid);
+    }
+
+    /// <summary>순환 칸은 폴더를 못박지 않으므로 이 규칙과 무관하다.</summary>
+    [Fact]
+    public void RotatingCellsAreUnaffectedByTheDuplicateRule()
+    {
+        using var f = Editing();
+
+        Assert.True(f.ViewModel.PlaceRotatingInCell(FreeCell(f)));
+        Assert.True(f.ViewModel.PlaceRotatingInCell(FreeCell(f)));
+
+        Assert.Equal(3, f.ViewModel.Tiles.Count(t => t.IsRotating));
     }
 }

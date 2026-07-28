@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using FolderDeck.App.ViewModels;
 using FolderDeck.App.Views;
 
@@ -12,16 +14,30 @@ namespace FolderDeck.App;
 /// <summary>메인 창 (§3.2).</summary>
 public partial class MainWindow : Window
 {
+    /// <summary>정보성 안내가 남아 있는 시간. 읽을 만큼은 되고 시야에 눌러앉지는 않는 길이.</summary>
+    private static readonly TimeSpan TransientMessageLife = TimeSpan.FromSeconds(4);
+
     private bool _firstActivationSeen;
 
     /// <summary>폴더 행에서 마우스를 누른 자리 — 드래그로 볼지 클릭으로 볼지 여기서 갈린다.</summary>
     private Point? _rowDragOrigin;
+
+    /// <summary>
+    /// 정보성 안내를 지우는 타이머. 시간 감각은 뷰의 몫이라 여기 둔다 —
+    /// 뷰모델은 "사라져도 되는 메시지인가"만 안다(테스트에서 타이머를 기다리지 않아도 된다).
+    /// </summary>
+    private readonly DispatcherTimer _messageTimer;
 
     public MainWindow(MainViewModel viewModel)
     {
         InitializeComponent();
         DataContext = viewModel;
         ViewModel = viewModel;
+
+        _messageTimer = new DispatcherTimer { Interval = TransientMessageLife };
+        _messageTimer.Tick += OnMessageExpired;
+        ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
 
@@ -66,6 +82,27 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>새 메시지가 뜰 때마다 수명을 다시 잰다. 남아야 할 메시지면 타이머를 세운다.</summary>
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MainViewModel.Message))
+        {
+            return;
+        }
+
+        _messageTimer.Stop();
+        if (ViewModel.HasMessage && ViewModel.MessageIsTransient)
+        {
+            _messageTimer.Start();
+        }
+    }
+
+    private void OnMessageExpired(object? sender, EventArgs e)
+    {
+        _messageTimer.Stop();
+        ViewModel.ExpireTransientMessage();
+    }
+
     // ── 왼쪽 폴더 리스트 → 빈 칸 드래그 (배치 편집 모드, Phase 2) ────────────
 
     private void OnFolderRowMouseDown(object sender, MouseButtonEventArgs e) =>
@@ -93,6 +130,14 @@ public partial class MainWindow : Window
 
         _rowDragOrigin = null;
 
+        // 이미 상시 칸에 있는 폴더는 끌어봐야 놓을 데가 없다. 드래그를 시작하지 않고
+        // 그 자리에서 이유를 말한다 — 끌고 다니다 거절당하는 것보다 낫다.
+        if (!row.CanPlaceInGrid)
+        {
+            ViewModel.RejectDuplicatePlacement(row);
+            return;
+        }
+
         var data = new DataObject();
         data.SetData(TileGridView.FolderRowFormat, row);
         DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Copy);
@@ -118,6 +163,10 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _messageTimer.Stop();
+        _messageTimer.Tick -= OnMessageExpired;
+        ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+
         // 밀린 디바운스 저장을 마무리한다 (§5).
         ViewModel.Shutdown();
         base.OnClosed(e);

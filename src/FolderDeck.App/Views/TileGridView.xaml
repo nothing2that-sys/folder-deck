@@ -175,16 +175,24 @@
                                            Foreground="{StaticResource Brush.TextSecondary}"
                                            Text="끌어서 이동 · 모서리로 크기 · 우클릭으로 성격/제거" />
 
-                                <!-- 리사이즈 그립 — 오른쪽 아래 모서리 -->
-                                <Border Width="18" Height="18"
+                                <!-- 리사이즈 그립 — 오른쪽 아래 모서리.
+                                     보이는 크기(18)는 그대로 두고 <b>잡히는 영역만</b> 키운다:
+                                     투명한 36x36 이 모서리를 덮고 마우스를 받는다. 작은 그립을
+                                     정확히 겨냥해야 하는 답답함이 없어진다. 음수 여백으로
+                                     타일 안쪽 여백까지 먹어 모서리 끝까지 잡힌다. -->
+                                <Border Width="36" Height="36" Margin="0,0,-6,-6"
                                         HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                        Background="{StaticResource Brush.EditChrome}"
-                                        CornerRadius="3" Cursor="SizeNWSE"
+                                        Background="Transparent" Cursor="SizeNWSE"
                                         ToolTip="끌어서 크기 조절"
                                         MouseLeftButtonDown="OnGripMouseDown">
-                                    <TextBlock Text="◢" FontSize="10"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                                               Foreground="{StaticResource Brush.EditChromeText}" />
+                                    <Border Width="18" Height="18" Margin="0,0,6,6"
+                                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                            Background="{StaticResource Brush.EditChrome}"
+                                            CornerRadius="3" IsHitTestVisible="False">
+                                        <TextBlock Text="◢" FontSize="10"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource Brush.EditChromeText}" />
+                                    </Border>
                                 </Border>
                             </Grid>
                         </Border>
@@ -227,14 +235,25 @@
                         <ItemsControl ItemsSource="{Binding Rows}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:FolderRowViewModel}">
+                                    <!-- 이미 상시 칸에 있는 폴더는 고를 수 없다 —
+                                         목록에서 지우지 않고 왜 못 고르는지 옆에 적는다. -->
                                     <Button Style="{StaticResource FolderRowButton}"
                                             Padding="6,4"
+                                            IsEnabled="{Binding CanPlaceInGrid}"
                                             ToolTip="{Binding PathText}"
                                             Command="{Binding DataContext.PlaceFolderCommand,
                                                               ElementName=Root}"
                                             CommandParameter="{Binding}">
-                                        <TextBlock Text="{Binding DisplayName}"
-                                                   TextTrimming="CharacterEllipsis" />
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Right" Text="이미 상시 칸"
+                                                       FontSize="10" Margin="8,0,0,0"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{StaticResource Brush.TextSecondary}"
+                                                       Visibility="{Binding HasPinnedTile,
+                                                            Converter={StaticResource BoolToVisibility}}" />
+                                            <TextBlock Text="{Binding DisplayName}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
                                     </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
