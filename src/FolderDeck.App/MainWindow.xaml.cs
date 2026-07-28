@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -28,6 +29,10 @@ public partial class MainWindow : Window
     /// </summary>
     private readonly DispatcherTimer _messageTimer;
 
+    /// <summary>펴져 있을 때의 행 높이. 스플리터로 조정한 비율을 접었다 펴도 지키려고 기억한다.</summary>
+    private GridLength _foldersHeight = new(2, GridUnitType.Star);
+    private GridLength _lowerHeight = new(1, GridUnitType.Star);
+
     public MainWindow(MainViewModel viewModel)
     {
         InitializeComponent();
@@ -37,6 +42,9 @@ public partial class MainWindow : Window
         _messageTimer = new DispatcherTimer { Interval = TransientMessageLife };
         _messageTimer.Tick += OnMessageExpired;
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+
+        // 저장된 접힘 상태를 처음부터 반영한다.
+        ApplyLeftRowHeights();
 
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
@@ -82,18 +90,59 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>새 메시지가 뜰 때마다 수명을 다시 잰다. 남아야 할 메시지면 타이머를 세운다.</summary>
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(MainViewModel.Message))
+        switch (e.PropertyName)
         {
-            return;
-        }
+            // 새 메시지가 뜰 때마다 수명을 다시 잰다. 남아야 할 메시지면 타이머를 세운다.
+            case nameof(MainViewModel.Message):
+                _messageTimer.Stop();
+                if (ViewModel.HasMessage && ViewModel.MessageIsTransient)
+                {
+                    _messageTimer.Start();
+                }
 
-        _messageTimer.Stop();
-        if (ViewModel.HasMessage && ViewModel.MessageIsTransient)
+                break;
+
+            case nameof(MainViewModel.FoldersCollapsed):
+            case nameof(MainViewModel.LowerCollapsed):
+                ApplyLeftRowHeights();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// 왼쪽 컬럼 두 영역의 행 높이. 접히면 <c>Auto</c>(헤더만), 펴지면 별(star) 높이.
+    /// </summary>
+    /// <remarks>
+    /// XAML 바인딩으로 두지 않는 이유: <see cref="GridSplitter"/> 는 끌 때
+    /// <c>RowDefinition.Height</c> 에 <b>로컬 값</b>을 쓴다. 로컬 값은 바인딩을 지워 버리므로,
+    /// 한 번이라도 스플리터를 끌면 그 뒤로는 접어도 행이 안 줄고 빈 자리가 남는다
+    /// (실제로 그랬다). 그래서 높이는 여기서만 정하고, 스플리터가 잡아 둔 별 높이는
+    /// 기억했다가 다시 펼 때 되돌려 준다 — 사용자가 맞춰 둔 비율을 접기 한 번으로 잃지 않게.
+    /// </remarks>
+    private void ApplyLeftRowHeights()
+    {
+        Apply(FoldersRow, ViewModel.FoldersCollapsed, ref _foldersHeight);
+        Apply(LowerRow, ViewModel.LowerCollapsed, ref _lowerHeight);
+
+        static void Apply(RowDefinition row, bool collapsed, ref GridLength remembered)
         {
-            _messageTimer.Start();
+            if (collapsed)
+            {
+                if (row.Height.IsStar)
+                {
+                    remembered = row.Height;
+                }
+
+                row.Height = GridLength.Auto;
+            }
+            else if (row.Height.IsAuto)
+            {
+                // 접혀 있던 행만 되돌린다. 이미 펴져 있는 행에 손대면 스플리터로 맞춰 둔
+                // 높이를 다른 쪽을 접을 때마다 초기값으로 되돌려 버린다.
+                row.Height = remembered;
+            }
         }
     }
 

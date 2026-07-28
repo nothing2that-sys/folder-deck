@@ -50,10 +50,18 @@ public sealed record FileOperationReport(
     bool Canceled);
 
 /// <summary>진행 표시용 (§1.1 — 폴더 재귀·볼륨 간 이동은 오래 걸린다).</summary>
+/// <param name="CompletedItems">끝난 <b>단위</b> 수. 단위 = 대상 하나 × 목적지 하나.</param>
+/// <param name="TotalItems">전체 단위 수. 시작할 때 정해진다.</param>
+/// <param name="CurrentPath">지금 손대고 있는 실제 경로(폴더 안이면 그 안의 파일).</param>
+/// <param name="CompletedEntries">
+/// 폴더 재귀까지 세어 실제로 처리한 파일 수. 큰 폴더 하나가 단위 하나일 때
+/// (<c>0/1</c> 에서 멈춰 보이는 것) 진행이 살아 있음을 보이려고 Phase 3 에서 추가했다.
+/// </param>
 public sealed record FileOperationProgress(
     int CompletedItems,
     int TotalItems,
-    string? CurrentPath);
+    string? CurrentPath,
+    int CompletedEntries = 0);
 
 /// <summary>단일 실행 엔진 (§4.7). 구현은 Phase 3.</summary>
 public interface IFileOperationEngine

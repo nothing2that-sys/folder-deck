@@ -785,6 +785,17 @@ public sealed partial class MainViewModel : ObservableObject
 
         foreach (var row in Rows)
         {
+            row.HasPinnedTile = pinnedFolders.Contains(row.Entry.Id);
+            row.ShowRotationTag = showTag && !row.HasPinnedTile;
+
+            // 상시 칸에 못박힌 폴더는 클릭해도 순환 칸으로 가지 않는다 — 번호를 고르게 두면
+            // 아무 일도 일으키지 않는 설정을 만지게 된다. 선택지를 아예 주지 않는다.
+            if (row.HasPinnedTile)
+            {
+                row.RotationChoices = [];
+                continue;
+            }
+
             List<int> slots = existing.Contains(row.RotationSlot)
                 ? existing
                 : [.. existing, row.RotationSlot];
@@ -797,9 +808,6 @@ public sealed partial class MainViewModel : ObservableObject
                     Exists = existing.Contains(slot),
                 }),
             ];
-
-            row.HasPinnedTile = pinnedFolders.Contains(row.Entry.Id);
-            row.ShowRotationTag = showTag && !row.HasPinnedTile;
         }
     }
 

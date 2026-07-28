@@ -588,4 +588,24 @@ public sealed class LayoutEditTests
 
         Assert.Equal(3, f.ViewModel.Tiles.Count(t => t.IsRotating));
     }
+
+    /// <summary>상시 칸에 못박힌 폴더는 순환 번호를 고를 수 없다 — 아무 일도 안 하는 설정이다.</summary>
+    [Fact]
+    public async Task APinnedFolderIsOfferedNoRotationChoices()
+    {
+        using var f = Editing();
+        f.ViewModel.PlaceRotatingInCell(FreeCell(f));
+
+        Assert.Empty(f.Row("code").RotationChoices);
+        Assert.Empty(f.Row("산출물").RotationChoices);
+        Assert.NotEmpty(f.Row("문서").RotationChoices);
+
+        // 타일을 빼면 다시 고를 수 있다.
+        f.ViewModel.RemoveTile(f.ViewModel.Tiles.Single(t => t.Spec.FolderId == f.Row("code").Entry.Id));
+        Assert.NotEmpty(f.Row("code").RotationChoices);
+
+        // 다시 넣으면 또 사라진다.
+        Assert.True(await f.ViewModel.PlaceFolderInCellAsync(f.Row("code"), FreeCell(f)));
+        Assert.Empty(f.Row("code").RotationChoices);
+    }
 }

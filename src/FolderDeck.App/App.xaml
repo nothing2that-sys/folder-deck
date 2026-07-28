@@ -13,10 +13,16 @@
 
             <conv:CollapsibleRowHeightConverter x:Key="RowHeight" />
             <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+            <conv:WiderThanConverter x:Key="WiderThan" />
 
             <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 
-        <!-- 왼쪽 폴더 리스트의 행. 클릭이 순환 칸을 바꾸므로 버튼으로 만든다. -->
+        <!--
+            리스트 행처럼 보이는 넓적한 버튼. 폴더 행 말고 접기 헤더·팝업 항목도 이 모양을 쓴다.
+            그래서 여기에는 <b>폴더 행에만 있는 속성에 대한 바인딩을 두지 않는다</b> —
+            DataContext 가 행이 아닌 곳에서 매번 바인딩 오류가 난다(실제로 그랬다).
+            행 전용 강조는 아래 FolderListRowButton 에 있다.
+        -->
         <Style x:Key="FolderRowButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -37,14 +43,23 @@
                                 <Setter TargetName="Back" Property="Background"
                                         Value="{StaticResource Brush.RowHover}" />
                             </Trigger>
-                            <DataTrigger Binding="{Binding IsShowingInRotating}" Value="True">
-                                <Setter TargetName="Back" Property="Background"
-                                        Value="{StaticResource Brush.RowActive}" />
-                            </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!--
+            왼쪽 폴더 리스트의 행 — 지금 순환 칸에 떠 있는 폴더를 강조한다.
+            템플릿의 Back 은 TemplateBinding Background 를 쓰므로 여기서 Background 만 바꾸면 되고,
+            마우스 오버는 템플릿 트리거라 그 위를 덮는다(손이 올라간 쪽이 이겨야 맞다).
+        -->
+        <Style x:Key="FolderListRowButton" TargetType="Button" BasedOn="{StaticResource FolderRowButton}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsShowingInRotating}" Value="True">
+                    <Setter Property="Background" Value="{StaticResource Brush.RowActive}" />
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
 
         <!--
@@ -80,6 +95,46 @@
         </Style>
 
         <!--
+            좁은 타일에서 아이콘을 접는 두 단계.
+
+            1x1 타일은 작은 창에서 100px 도 안 되는데 내비 아이콘 6개만 144px 다. 그대로 두면
+            잘리고, 잘리지 않게 breadcrumb 을 밀어내면 이번엔 <b>폴더 이름</b>이 사라진다 —
+            이름이 아이콘보다 중요하다. 그래서 대체 조작이 있는 것부터 순서대로 접는다.
+
+            240px 아래: 뒤로 · 앞으로(마우스 XButton, Alt+←/→) · 다시 읽기(F5)
+            170px 아래: 상위(Alt+↑) · 검색(Ctrl+F)
+            끝까지 남는 것: 앵커 복귀(⌂) — breadcrumb 이 잘리면 첫 조각 클릭도 못 하므로
+            집으로 돌아갈 길이 아예 없어진다.
+        -->
+        <Style x:Key="SecondaryNavButton" TargetType="Button" BasedOn="{StaticResource NavButton}">
+            <Style.Triggers>
+                <DataTrigger Value="False">
+                    <DataTrigger.Binding>
+                        <Binding RelativeSource="{RelativeSource AncestorType=UserControl}"
+                                 Path="ActualWidth"
+                                 Converter="{StaticResource WiderThan}"
+                                 ConverterParameter="240" />
+                    </DataTrigger.Binding>
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="TertiaryNavButton" TargetType="Button" BasedOn="{StaticResource NavButton}">
+            <Style.Triggers>
+                <DataTrigger Value="False">
+                    <DataTrigger.Binding>
+                        <Binding RelativeSource="{RelativeSource AncestorType=UserControl}"
+                                 Path="ActualWidth"
+                                 Converter="{StaticResource WiderThan}"
+                                 ConverterParameter="170" />
+                    </DataTrigger.Binding>
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--
             🔍 — 열려 있는 동안 눌린 표시. ToggleButton 을 쓰지 않는 이유:
             클릭하면 WPF 가 IsChecked 에 "로컬 값"을 심는데, 그 로컬 값이 OneWay 바인딩을
             영구히 이겨버린다. 그러면 포커스가 빠져 검색줄이 접힌 뒤에도 버튼만 눌린 채로 남는다
@@ -89,6 +144,22 @@
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSearchExpanded}" Value="True">
                     <Setter Property="Background" Value="{StaticResource Brush.RowActive}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 검색 토글도 같은 단계에서 접힌다(모양만 NavToggleButton 을 따른다). -->
+        <Style x:Key="TertiaryNavToggleButton" TargetType="Button"
+               BasedOn="{StaticResource NavToggleButton}">
+            <Style.Triggers>
+                <DataTrigger Value="False">
+                    <DataTrigger.Binding>
+                        <Binding RelativeSource="{RelativeSource AncestorType=UserControl}"
+                                 Path="ActualWidth"
+                                 Converter="{StaticResource WiderThan}"
+                                 ConverterParameter="170" />
+                    </DataTrigger.Binding>
+                    <Setter Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -127,6 +198,73 @@
                                         Value="{StaticResource Brush.EditChromeText}" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
+            스플리터 — 잡을 수 있는 자리임이 보여야 한다. 선은 1px 만 긋고 잡히는 띠는 6px 다
+            (보이는 것보다 잡기 쉽게). 손을 올리면 선이 굵고 파래져 "여기서 끌린다"가 드러나고,
+            끄는 동안에도 그 상태를 유지한다. GridSplitter 는 Thumb 이라 IsDragging 을 쓴다.
+        -->
+        <Style x:Key="ColumnSplitter" TargetType="GridSplitter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="SizeWE" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridSplitter">
+                        <Border x:Name="Strip" Background="{TemplateBinding Background}">
+                            <Rectangle x:Name="Line" Width="1" HorizontalAlignment="Center"
+                                       Fill="{StaticResource Brush.Border}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Strip" Property="Background"
+                                        Value="{StaticResource Brush.RowHover}" />
+                                <Setter TargetName="Line" Property="Width" Value="2" />
+                                <Setter TargetName="Line" Property="Fill"
+                                        Value="{StaticResource Brush.DropValid}" />
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="Strip" Property="Background"
+                                        Value="{StaticResource Brush.RowHover}" />
+                                <Setter TargetName="Line" Property="Width" Value="2" />
+                                <Setter TargetName="Line" Property="Fill"
+                                        Value="{StaticResource Brush.DropValid}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="RowSplitter" TargetType="GridSplitter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="SizeNS" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridSplitter">
+                        <Border x:Name="Strip" Background="{TemplateBinding Background}">
+                            <Rectangle x:Name="Line" Height="1" VerticalAlignment="Center"
+                                       Margin="6,0" Fill="{StaticResource Brush.Border}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Strip" Property="Background"
+                                        Value="{StaticResource Brush.RowHover}" />
+                                <Setter TargetName="Line" Property="Height" Value="2" />
+                                <Setter TargetName="Line" Property="Fill"
+                                        Value="{StaticResource Brush.DropValid}" />
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="Strip" Property="Background"
+                                        Value="{StaticResource Brush.RowHover}" />
+                                <Setter TargetName="Line" Property="Height" Value="2" />
+                                <Setter TargetName="Line" Property="Fill"
+                                        Value="{StaticResource Brush.DropValid}" />
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>

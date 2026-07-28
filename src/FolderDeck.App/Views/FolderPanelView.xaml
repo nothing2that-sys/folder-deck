@@ -148,18 +148,28 @@
 
             <!-- ── 헤더: breadcrumb + 뒤로/앞으로/상위/앵커 + 메타 + 검색 ── -->
             <StackPanel DockPanel.Dock="Top">
-                <DockPanel>
+                <!-- DockPanel 이 아니라 Grid 다. DockPanel 은 남는 자리를 breadcrumb 에 주는데,
+                     breadcrumb 은 줄어들 줄 모르고 그 위로 넘쳐 그려서 내비 아이콘을 덮었다.
+                     Auto 열은 제 폭을 먼저 가져가므로 아이콘이 잘리지 않고, 대신 breadcrumb
+                     쪽(* 열)이 잘린다 — 잘려도 되는 것은 그쪽이다. -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <!-- 이름 자리는 최소한 남긴다 — 아이콘을 다 보여주려다 이름을 지우면 안 된다. -->
+                        <ColumnDefinition Width="*" MinWidth="64" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
                     <!-- 내비 클러스터 — 🔍 를 같은 크기로 여기 붙여서 "눌러진다"가 자명하게. -->
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                        <Button Style="{StaticResource NavButton}"
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Style="{StaticResource SecondaryNavButton}"
                                 Command="{Binding GoBackCommand}"
                                 AutomationProperties.Name="뒤로"
                                 ToolTip="뒤로 (마우스 뒤로 버튼 · Alt+←)" Content="←" />
-                        <Button Style="{StaticResource NavButton}"
+                        <Button Style="{StaticResource SecondaryNavButton}"
                                 Command="{Binding GoForwardCommand}"
                                 AutomationProperties.Name="앞으로"
                                 ToolTip="앞으로 (마우스 앞으로 버튼 · Alt+→)" Content="→" />
-                        <Button Style="{StaticResource NavButton}"
+                        <Button Style="{StaticResource TertiaryNavButton}"
                                 Command="{Binding GoUpCommand}"
                                 IsEnabled="{Binding CanGoUp}"
                                 AutomationProperties.Name="상위 폴더"
@@ -168,18 +178,19 @@
                                 Command="{Binding GoToAnchorCommand}"
                                 AutomationProperties.Name="앵커로 복귀"
                                 ToolTip="앵커로 복귀 (Alt+Home)" Content="⌂" />
-                        <Button Style="{StaticResource NavButton}"
+                        <Button Style="{StaticResource SecondaryNavButton}"
                                 Command="{Binding RefreshCommand}"
                                 AutomationProperties.Name="다시 읽기"
                                 ToolTip="다시 읽기 (F5)" Content="⟳" />
-                        <Button Style="{StaticResource NavToggleButton}"
+                        <Button Style="{StaticResource TertiaryNavToggleButton}"
                                 Click="OnSearchToggleClick"
                                 AutomationProperties.Name="검색"
                                 ToolTip="검색 (Ctrl+F)" Content="🔍" />
                     </StackPanel>
 
                     <!-- breadcrumb: 첫 조각(앵커) 클릭 = 앵커 복귀. 우클릭 = 현재 경로 복사. -->
-                    <ItemsControl ItemsSource="{Binding Breadcrumbs}" VerticalAlignment="Center"
+                    <ItemsControl Grid.Column="0" ItemsSource="{Binding Breadcrumbs}"
+                                  VerticalAlignment="Center" ClipToBounds="True"
                                   ToolTip="우클릭: 지금 보고 있는 폴더의 경로 복사">
                         <ItemsControl.ContextMenu>
                             <ContextMenu>
@@ -227,10 +238,10 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                </DockPanel>
+                </Grid>
 
-                <!-- 메타 + 앵커를 벗어난 상태 -->
-                <StackPanel Orientation="Horizontal" Margin="3,2,0,4">
+                <!-- 메타 + 앵커를 벗어난 상태. 좁은 타일에서 넘치지 않게 잘라 낸다. -->
+                <StackPanel Orientation="Horizontal" Margin="3,2,0,4" ClipToBounds="True">
                     <TextBlock Text="{Binding MetaText}" Foreground="{StaticResource Brush.TextSecondary}"
                                FontSize="11" VerticalAlignment="Center" />
                     <TextBlock Text="· 앵커 밖" Foreground="{StaticResource Brush.Rotating}"
