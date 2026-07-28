@@ -39,10 +39,22 @@
                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <!-- 고른 것 전부를 휴지통으로 (§4.4). 우클릭은 그 자리에서 선택을 잡아 주므로
+                 (OnItemPreviewRightButtonDown) 무엇이 지워질지가 목록에 그대로 보인다. -->
+            <MenuItem Header="휴지통으로 삭제"
+                      InputGestureText="Del"
+                      Command="{Binding PlacementTarget.Tag.TrashSelectionCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
         </ContextMenu>
 
         <Style x:Key="FileItemContainer" TargetType="ListViewItem">
             <EventSetter Event="MouseDoubleClick" Handler="OnItemDoubleClick" />
+            <!-- 끌어내기 (§4.2-2): 누른 자리를 기억했다가 임계값을 넘으면 드래그로 본다. -->
+            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="OnItemPreviewMouseDown" />
+            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="OnItemPreviewMouseUp" />
+            <EventSetter Event="PreviewMouseMove" Handler="OnItemPreviewMouseMove" />
+            <EventSetter Event="PreviewMouseRightButtonDown" Handler="OnItemPreviewRightButtonDown" />
             <Setter Property="ContextMenu" Value="{StaticResource ItemMenu}" />
             <!-- 우클릭 메뉴가 패널 커맨드에 닿게 하는 통로. -->
             <Setter Property="Tag"

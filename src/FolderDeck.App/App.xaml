@@ -34,6 +34,8 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Back"
                                 Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
                                 Padding="{TemplateBinding Padding}"
                                 CornerRadius="3">
                             <ContentPresenter HorizontalAlignment="Stretch" />
@@ -58,6 +60,14 @@
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsShowingInRotating}" Value="True">
                     <Setter Property="Background" Value="{StaticResource Brush.RowActive}" />
+                </DataTrigger>
+                <!-- 끌어온 파일이 이 행 위에 있다 (§4.2-2). Phase 2 의 빈 칸 과녁과 같은 파랑이라
+                     "여기에 놓인다"가 같은 색으로 읽힌다. 순환 칸 강조보다 뒤에 둬서 이긴다 —
+                     드래그 중에는 이쪽이 답이다. -->
+                <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                    <Setter Property="Background" Value="{StaticResource Brush.DropValidSurface}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource Brush.DropValid}" />
+                    <Setter Property="BorderThickness" Value="1.5" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>

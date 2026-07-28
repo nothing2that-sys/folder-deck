@@ -189,6 +189,26 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// <summary>다른 타일이 선택을 가져가서 여기 선택을 풀어야 한다.</summary>
     public event EventHandler? SelectionCleared;
 
+    /// <summary>
+    /// 지금 선택을 드래그 뭉치로 만든다 (§4.2-2). 선택이 없으면 null — 끌 것이 없다.
+    /// </summary>
+    public FileDropPayload? BuildDragPayload() =>
+        CurrentPath is { } path && SelectedItems.Count > 0
+            ? new FileDropPayload(
+                path,
+                [.. SelectedItems.Select(i => new Core.Operations.OperationItem(i.FullPath, i.IsDirectory))])
+            : null;
+
+    /// <summary>
+    /// 우클릭 메뉴 "휴지통으로 삭제"가 닿을 통로 (§4.4). 실제 명령은 엔진을 아는
+    /// <see cref="MainViewModel"/> 것이고, 패널은 실행 방법을 모른다 — 타일을 만들 때 걸어 준다.
+    /// </summary>
+    /// <remarks>
+    /// 키보드 <c>Del</c> 은 창(<c>MainWindow</c>)의 InputBinding 이 직접 받으므로 이 통로가
+    /// 필요 없다. 우클릭 메뉴만 패널의 <c>DataContext</c> 안에 갇혀 있어 이 한 칸이 필요하다.
+    /// </remarks>
+    public System.Windows.Input.ICommand? TrashSelectionCommand { get; set; }
+
         /// <summary>아직 아무 폴더도 안 띄운 순환 칸.</summary>
     public bool IsEmpty => Entry is null;
 

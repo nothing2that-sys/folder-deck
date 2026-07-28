@@ -552,7 +552,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    public bool CanRunOperation => HasSelection && CheckedDestinations.Count > 0;
+    public bool CanRunOperation => HasSelection && CheckedDestinations.Count > 0 && !IsOperationRunning;
 
     /// <summary>왼쪽 리스트 폴더를 대상함에 넣는다 (§11 — 임의 경로 추가는 후순위).</summary>
     [RelayCommand]
@@ -598,8 +598,10 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(OperationSummary));
         OnPropertyChanged(nameof(CanRunOperation));
+        OnPropertyChanged(nameof(CanTrashSelection));
         CopySelectionCommand.NotifyCanExecuteChanged();
         MoveSelectionCommand.NotifyCanExecuteChanged();
+        TrashSelectionCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>패널이 선택을 얻거나 잃었다. 선택은 한 타일에만 남긴다 (§4.8).</summary>
@@ -634,8 +636,21 @@ public sealed partial class MainViewModel : ObservableObject
     /// 파일 조작이 도는 중인가. 확인·결과 대화상자가 창을 껐다 켜면서 "창 활성화 시 재조회"
     /// (§8)를 불러 실행 중의 새로고침과 겹친다 — 같은 폴더를 두 번 읽을 뿐 아니라
     /// 열거가 서로를 취소하며 엉킨다. 조작이 끝나고 한 번만 읽는다.
+    /// <para>도는 동안에는 다음 조작(버튼·드롭·휴지통)을 받지 않는다.</para>
     /// </summary>
-    public bool IsOperationRunning { get; private set; }
+    public bool IsOperationRunning
+    {
+        get => _isOperationRunning;
+        private set
+        {
+            if (SetProperty(ref _isOperationRunning, value))
+            {
+                NotifyOperationState();
+            }
+        }
+    }
+
+    private bool _isOperationRunning;
 
     private async Task RunOperationAsync(FileOperationKind op)
     {
@@ -684,16 +699,288 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
+        await RunGuardedAsync(request, verb).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 세 진입점(버튼 · 드래그드롭 · 휴지통)이 공유하는 실행 껍데기 — 잠금, 진행·취소,
+    /// 결과 보고, 끝난 뒤 목록 갱신.
+    /// </summary>
+    private async Task RunGuardedAsync(
+        FileOperationRequest request, string verb, string? successMessage = null)
+    {
+        IsOperationRunning = true;
+
         try
         {
-            var report = await _engine.ExecuteAsync(request).ConfigureAwait(true);
-            ReportOperation(verb, report);
+            await ExecuteRequestAsync(request, verb, successMessage).ConfigureAwait(true);
         }
         finally
         {
             // 옮긴 뒤의 실제 상태를 보여준다 — 목록이 옛것이면 방금 한 일을 못 믿는다.
             await RefreshAllPanelsAsync().ConfigureAwait(true);
             IsOperationRunning = false;
+        }
+    }
+
+    private async Task ExecuteRequestAsync(
+        FileOperationRequest request, string verb, string? successMessage)
+    {
+        using var cts = new CancellationTokenSource();
+        _operationCts = cts;
+
+        ProgressValue = 0;
+        ProgressText = $"{verb} 준비 중…";
+        _ = RevealProgressSoonAsync();
+
+        FileOperationReport report;
+
+        try
+        {
+            var progress = new ThrottledProgress(_uiContext, p => ApplyProgress(verb, p));
+            report = await _engine.ExecuteAsync(request, progress, cts.Token).ConfigureAwait(true);
+        }
+        finally
+        {
+            // 진행 줄은 결과를 알리기 <b>전에</b> 접는다 — 부분 실패 대화상자 뒤에 다 끝난
+            // 진행 막대가 남아 있으면 아직 도는 중인지 끝난 건지 알 수 없다.
+            _operationCts = null;
+            IsProgressVisible = false;
+        }
+
+        ReportOperation(verb, report, successMessage);
+    }
+
+    // ── 진행 · 취소 (§1.1 — 폴더 재귀·볼륨 간 이동은 오래 걸린다) ────────────
+
+    /// <summary>
+    /// 진행 줄을 띄우기까지 기다리는 시간. 낱개 파일 몇 개는 눈 깜짝할 사이에 끝나는데
+    /// 그때마다 막대가 번쩍이면 소음이다 — 오래 걸리는 것만 드러낸다.
+    /// </summary>
+    private const int ProgressRevealDelayMs = 400;
+
+    /// <summary>지금 도는 조작의 취소 손잡이. 도는 것이 없으면 null.</summary>
+    private CancellationTokenSource? _operationCts;
+
+    /// <summary>진행 줄이 보이는가. <see cref="IsOperationRunning"/> 보다 늦게 켜진다.</summary>
+    [ObservableProperty]
+    private bool isProgressVisible;
+
+    [ObservableProperty]
+    private string? progressText;
+
+    /// <summary>0~100. 단위(대상 하나 × 목적지 하나) 기준이다.</summary>
+    [ObservableProperty]
+    private double progressValue;
+
+    /// <summary>
+    /// 취소. <b>손댄 것은 남고 시작 안 한 것은 안 한 채로</b> 결과에 실린다 — 엔진이
+    /// 취소를 예외가 아니라 결과로 돌려준다. 이동은 복사가 전부 끝난 뒤에만 원본을 지우므로
+    /// 중간 취소로 원본이 반쯤 사라지는 일은 없다.
+    /// </summary>
+    [RelayCommand]
+    public void CancelOperation()
+    {
+        if (_operationCts is not { IsCancellationRequested: false } cts)
+        {
+            return;
+        }
+
+        cts.Cancel();
+        ProgressText = "취소하는 중… (지금 처리 중인 파일까지만)";
+    }
+
+    private async Task RevealProgressSoonAsync()
+    {
+        await Task.Delay(ProgressRevealDelayMs).ConfigureAwait(true);
+
+        // 그새 끝났으면 띄우지 않는다.
+        if (IsOperationRunning)
+        {
+            IsProgressVisible = true;
+        }
+    }
+
+    private void ApplyProgress(string verb, FileOperationProgress progress)
+    {
+        ProgressValue = progress.TotalItems > 0
+            ? 100.0 * progress.CompletedItems / progress.TotalItems
+            : 0;
+
+        var text = $"{verb} {progress.CompletedItems}/{progress.TotalItems}건";
+
+        // 큰 폴더 하나는 단위로 세면 0/1 에 멈춰 보인다 — 실제로 만진 파일 수를 같이 보인다.
+        if (progress.CompletedEntries > 0)
+        {
+            text += $" · 파일 {progress.CompletedEntries}개";
+        }
+
+        if (progress.CurrentPath is { Length: > 0 } path)
+        {
+            text += $" · {System.IO.Path.GetFileName(path.TrimEnd(
+                System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar))}";
+        }
+
+        ProgressText = text;
+    }
+
+    /// <summary>
+    /// 진행 보고를 솎아 UI 스레드로 넘긴다.
+    /// </summary>
+    /// <remarks>
+    /// 엔진은 파일 하나마다 보고한다 — 파일 만 개짜리 폴더면 만 번이고, 그대로 디스패처에
+    /// 던지면 진행 표시가 조작 자체보다 느려진다. 단위가 바뀌었을 때와 100ms 마다만 넘긴다.
+    /// </remarks>
+    private sealed class ThrottledProgress(
+        SynchronizationContext? context, Action<FileOperationProgress> onReport)
+        : IProgress<FileOperationProgress>
+    {
+        private const int MinIntervalMs = 100;
+
+        private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+        private long _lastMs = -MinIntervalMs;
+        private int _lastUnit = -1;
+
+        public void Report(FileOperationProgress value)
+        {
+            // 엔진은 한 조작을 한 스레드로 돈다 — 여기 상태에 경합이 없다.
+            var now = _clock.ElapsedMilliseconds;
+            if (value.CompletedItems == _lastUnit && now - _lastMs < MinIntervalMs)
+            {
+                return;
+            }
+
+            _lastUnit = value.CompletedItems;
+            _lastMs = now;
+
+            if (context is null)
+            {
+                onReport(value);
+                return;
+            }
+
+            context.Post(_ => onReport(value), null);
+        }
+    }
+
+    // ── 드래그앤드롭 (§4.2-2 · Phase 3 Stage 3) ──────────────────────────────
+
+    /// <summary>
+    /// 이 자리에 놓을 수 있는가. 놓을 수 없으면 과녁을 켜지 않는다 — 끌고 가서 거절당하는
+    /// 것보다 처음부터 받지 않는 편이 낫다(Phase 2 의 "겹침=거부"와 같은 결).
+    /// </summary>
+    public bool CanDropOnto(FolderEntry? destination, FileDropPayload? payload)
+    {
+        if (destination is null || payload is null || payload.Items.Count == 0 || IsOperationRunning)
+        {
+            return false;
+        }
+
+        // 같은 폴더 안으로 놓기 = 무동작. 원본을 건드리지 않는다.
+        if (SamePath(destination.Path, payload.SourceFolder))
+        {
+            return false;
+        }
+
+        // 폴더를 자기 자신이나 자기 하위로 넣으면 무한히 자란다.
+        return !payload.Items.Any(
+            i => i.IsDirectory && (SamePath(destination.Path, i.Path) || IsUnder(destination.Path, i.Path)));
+    }
+
+    /// <summary>
+    /// 끌어다 놓기 (§4.2-2). <b>기본은 이동, <c>Ctrl</c> 을 누르면 복사</b> — 탐색기 관용이다.
+    /// 판정은 <b>놓는 순간</b>의 수정키로 한다(끌기 시작할 때가 아니라).
+    /// </summary>
+    /// <remarks>
+    /// 대상함 버튼의 이동과 달리 <b>확인창을 띄우지 않는다</b>. 드래그는 손으로 과녁을 겨눈
+    /// 한 번의 동작이라 "무엇을 어디로"가 이미 눈앞에 있고, 매번 대화상자가 뜨면 즉흥적인
+    /// 단건 이동이라는 이 경로의 존재 이유가 없어진다. 대신 결과를 상태 바에 반드시 적는다.
+    /// </remarks>
+    public async Task DropOntoFolderAsync(FolderEntry destination, FileDropPayload payload, bool copy)
+    {
+        if (!CanDropOnto(destination, payload))
+        {
+            return;
+        }
+
+        var request = new FileOperationRequest(
+            copy ? FileOperationKind.Copy : FileOperationKind.Move,
+            payload.Items,
+            [destination.Path],
+            ConflictPolicy.Overwrite);
+
+        await RunGuardedAsync(request, copy ? "복사" : "이동").ConfigureAwait(true);
+    }
+
+    // ── 휴지통 정리 (§4.4 · Phase 3 Stage 3) ─────────────────────────────────
+
+    public bool CanTrashSelection => HasSelection && !IsOperationRunning;
+
+    /// <summary>
+    /// 고른 것을 휴지통으로 (§4.4). <b>영구 삭제가 아니다</b> — 폴더면 통째로 들어간다.
+    /// </summary>
+    /// <remarks>
+    /// <b>확인창을 두지 않는다.</b> §4.4 가 휴지통을 고른 이유가 "실수 방지"이고, 되돌릴 수
+    /// 있는 동작 앞에 확인을 세우면 임시 파일을 훑어 지우는 이 경로가 매번 막힌다. 대신
+    /// 몇 개를 보냈는지 반드시 알리고(요구사항), 하나라도 실패하면 요약이 상태 바에 남는다.
+    /// 되돌릴 수 없는 영구 삭제는 <see cref="RejectPermanentDelete"/> 로 아예 막는다.
+    /// </remarks>
+    [RelayCommand(CanExecute = nameof(CanTrashSelection))]
+    public async Task TrashSelectionAsync()
+    {
+        var sources = Selection;
+
+        if (sources.Count == 0 || IsOperationRunning)
+        {
+            return;
+        }
+
+        var request = new FileOperationRequest(
+            FileOperationKind.Trash,
+            [.. sources.Select(i => new OperationItem(i.FullPath, i.IsDirectory))],
+            [],
+            ConflictPolicy.Overwrite);
+
+        await RunGuardedAsync(
+            request,
+            "휴지통",
+            successMessage: $"{sources.Count}개를 휴지통으로 보냈다 — 되돌릴 수 있다.")
+            .ConfigureAwait(true);
+    }
+
+    /// <summary><c>Shift+Del</c> — 탐색기와 달리 막는다 (§4.4).</summary>
+    [RelayCommand]
+    public void RejectPermanentDelete() =>
+        Warn("영구 삭제는 하지 않는다. Del 로 휴지통에 보내면 되돌릴 수 있다.", transient: true);
+
+    // ── 경로 비교 (드롭 과녁 판정) ───────────────────────────────────────────
+
+    private static bool SamePath(string a, string b) =>
+        string.Equals(FullPath(a), FullPath(b), StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsUnder(string path, string parent)
+    {
+        var full = FullPath(path);
+        var root = FullPath(parent);
+
+        return full.Length > root.Length
+               && full.StartsWith(root, StringComparison.OrdinalIgnoreCase)
+               && (full[root.Length] == System.IO.Path.DirectorySeparatorChar
+                   || full[root.Length] == System.IO.Path.AltDirectorySeparatorChar);
+    }
+
+    /// <summary>닿을 수 없는 경로여도 던지지 않는다 — 과녁 판정은 I/O 없이 문자열로 끝낸다.</summary>
+    private static string FullPath(string path)
+    {
+        try
+        {
+            return System.IO.Path.GetFullPath(path).TrimEnd(
+                System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+        }
+        catch (Exception ex) when (ex is ArgumentException or System.IO.PathTooLongException
+                                       or NotSupportedException)
+        {
+            return path;
         }
     }
 
@@ -717,7 +1004,12 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>결과 보고 = 성공 / 건너뜀 / 실패 + 이유 (§5).</summary>
-    private void ReportOperation(string verb, FileOperationReport report)
+    /// <param name="successMessage">
+    /// 전부 성공했을 때 요약 대신 쓸 문구. 휴지통처럼 "성공 3 · 건너뜀 0 · 실패 0"보다
+    /// "3개를 휴지통으로 보냈다"가 답인 경우에 쓴다. 실패가 하나라도 있으면 무시된다 —
+    /// 그때는 무엇이 안 됐는지가 요약이어야 하기 때문이다.
+    /// </param>
+    private void ReportOperation(string verb, FileOperationReport report, string? successMessage = null)
     {
         var ok = report.Results.Count(r => r.Status == OperationItemStatus.Succeeded);
         var skipped = report.Results.Count(r => r.Status == OperationItemStatus.Skipped);
@@ -738,7 +1030,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (failed == 0 && skipped == 0)
         {
-            Inform(summary);
+            Inform(report.Canceled || successMessage is null ? summary : successMessage);
             return;
         }
 
@@ -955,7 +1247,11 @@ public sealed partial class MainViewModel : ObservableObject
     private TileViewModel CreateTile(TileSpec spec)
     {
         var panel = new FolderPanelViewModel(
-            _enumerator, _shell, _clipboard, spec.Kind == TileKind.Rotating, ReportError);
+            _enumerator, _shell, _clipboard, spec.Kind == TileKind.Rotating, ReportError)
+        {
+            // 우클릭 "휴지통으로 삭제"가 닿을 통로. 패널은 엔진을 모른다 (§4.4).
+            TrashSelectionCommand = TrashSelectionCommand,
+        };
 
         if (spec.Kind == TileKind.Pinned && spec.FolderId is { } id)
         {

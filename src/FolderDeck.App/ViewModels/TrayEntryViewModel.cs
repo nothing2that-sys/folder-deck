@@ -14,7 +14,7 @@ namespace FolderDeck.App.ViewModels;
 /// 이유가 목적지로 쓰려는 것이므로 매번 다시 켜게 만들 이유가 없다. 특정 실행에서 일부만
 /// 보내고 싶으면 그때 끈다.
 /// </remarks>
-public sealed partial class TrayEntryViewModel : ObservableObject
+public sealed partial class TrayEntryViewModel : ObservableObject, IFileDropTarget
 {
     private readonly Action<TrayEntryViewModel> _remove;
 
@@ -35,6 +35,14 @@ public sealed partial class TrayEntryViewModel : ObservableObject
     /// <summary>체크된 폴더가 목적지다 (§4.2-1). 다중 체크 = 동시 복사.</summary>
     [ObservableProperty]
     private bool isChecked = true;
+
+    /// <summary>
+    /// 그리드에서 끌어온 파일이 이 항목 위에 있는가 (§4.2-2 드롭 과녁).
+    /// <b>체크와 무관하다</b> — 끌어다 놓는 것은 이 항목 하나를 겨냥한 동작이라
+    /// 체크된 목적지 집합(버튼 실행)과 섞이지 않는다.
+    /// </summary>
+    [ObservableProperty]
+    private bool isDropTarget;
 
     [RelayCommand]
     private void Remove() => _remove(this);

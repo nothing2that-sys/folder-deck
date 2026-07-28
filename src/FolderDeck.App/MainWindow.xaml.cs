@@ -206,6 +206,74 @@ public partial class MainWindow : Window
         DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Copy);
     }
 
+    // ── 그리드 파일 → 폴더 행 / 대상함 드롭 (§4.2-2, Phase 3 Stage 3) ────────
+
+    /// <summary>
+    /// 과녁 위에 있는 동안 계속 불린다 — 여기서 강조를 켜고 커서 모양(이동/복사)을 정한다.
+    /// </summary>
+    private void OnFileDropOver(object sender, DragEventArgs e)
+    {
+        var target = ResolveDropTarget(sender, e);
+
+        e.Effects = target is null
+            ? DragDropEffects.None
+            : IsCopyRequested(e) ? DragDropEffects.Copy : DragDropEffects.Move;
+
+        e.Handled = true;
+    }
+
+    private void OnFileDropLeave(object sender, DragEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: IFileDropTarget target })
+        {
+            target.IsDropTarget = false;
+        }
+    }
+
+    private async void OnFileDrop(object sender, DragEventArgs e)
+    {
+        var target = ResolveDropTarget(sender, e);
+
+        if (sender is FrameworkElement { DataContext: IFileDropTarget cleared })
+        {
+            cleared.IsDropTarget = false;
+        }
+
+        if (target is not { } drop)
+        {
+            return;
+        }
+
+        e.Handled = true;
+
+        // 수정키는 <b>놓는 순간</b>으로 판정한다 — 끌기 시작할 때 Ctrl 을 눌렀는지가 아니라.
+        // 조작 실패는 결과로 보고되므로 여기까지 예외로 올라오지 않는다 (§5).
+        await ViewModel.DropOntoFolderAsync(drop.Target.Entry, drop.Payload, IsCopyRequested(e));
+    }
+
+    /// <summary>탐색기 관용 — 기본은 이동, <c>Ctrl</c> 을 누르고 있으면 복사.</summary>
+    private static bool IsCopyRequested(DragEventArgs e) =>
+        (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
+
+    /// <summary>
+    /// 받을 수 있는 조합이면 (목적지 폴더, 뭉치). 아니면 null. 과녁 강조도 여기서 켠다 —
+    /// 판정과 강조가 갈라지면 "파랗게 켜졌는데 안 받는" 자리가 생긴다.
+    /// </summary>
+    private (IFileDropTarget Target, FileDropPayload Payload)? ResolveDropTarget(
+        object sender, DragEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: IFileDropTarget target }
+            || !e.Data.GetDataPresent(FolderPanelView.FileDragFormat)
+            || e.Data.GetData(FolderPanelView.FileDragFormat) is not FileDropPayload payload
+            || !ViewModel.CanDropOnto(target.Entry, payload))
+        {
+            return null;
+        }
+
+        target.IsDropTarget = true;
+        return (target, payload);
+    }
+
     private static IEnumerable<FolderPanelView> FindPanels(DependencyObject root)
     {
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)

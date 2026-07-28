@@ -264,7 +264,12 @@ public sealed class FileOperationEngine(IRecycleBin recycleBin) : IFileOperation
 
         if (token.IsCancellationRequested)
         {
-            return fail($"취소 — 파일 {stats.Copied}개까지만 처리했다", stats.Overwritten > 0);
+            // 취소가 절반 처리 상태를 숨기면 안 된다 — 목적지에 남은 것을 사유에 적는다.
+            // 이동이어도 원본은 그대로다(아래 삭제 단계까지 오지 못했다).
+            return fail(
+                $"취소 — 파일 {stats.Copied}개까지 복사했다. 목적지에 일부가 남았다" +
+                (request.Op == FileOperationKind.Move ? " (원본은 그대로)" : string.Empty),
+                stats.Overwritten > 0);
         }
 
         if (stats.Failures.Count > 0)

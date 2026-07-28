@@ -451,6 +451,122 @@ public sealed class FileOperationEngineTests : IDisposable
     }
 
 
+    // ── 볼륨을 건너뛰는 이동 (§1.1 — 실질적으로 복사 + 삭제) ────────────────
+
+    /// <summary>
+    /// 다른 볼륨으로의 폴더 이동은 <c>Directory.Move</c> 가 못 하므로 복사 후 삭제로 풀린다.
+    /// <b>삭제는 복사가 전부 끝난 뒤에만</b> 일어난다.
+    /// </summary>
+    [Fact]
+    public async Task AFolderMoveAcrossVolumesCopiesThenDeletesTheOriginal()
+    {
+        // 볼륨이 하나뿐인 기기에서는 시험할 대상 자체가 없다 (xunit 2.x 에는 동적 건너뜀이
+        // 없어 조용히 통과한다 — 어느 기기에서 실제로 돌았는지는 보고에 남긴다).
+        if (OtherVolumeDir() is not { } other)
+        {
+            return;
+        }
+
+        try
+        {
+            File_("src/tree/a.txt", "A");
+            File_("src/tree/inner/b.txt", "B");
+            var tree = Path.Combine(_root, "src", "tree");
+
+            var report = await Run(FileOperationKind.Move, [tree], [other]);
+
+            Assert.Equal(OperationItemStatus.Succeeded, Assert.Single(report.Results).Status);
+            Assert.False(Directory.Exists(tree));
+            Assert.Equal("B", File.ReadAllText(Path.Combine(other, "tree", "inner", "b.txt")));
+        }
+        finally
+        {
+            Discard(other);
+        }
+    }
+
+    /// <summary>
+    /// 볼륨 간 이동을 중간에 취소해도 <b>원본은 통째로 남는다</b>. 복사가 다 끝나야 삭제
+    /// 단계로 가므로, 취소는 원본을 반쯤 지운 상태를 만들 수 없다.
+    /// </summary>
+    [Fact]
+    public async Task CancelingAFolderMoveAcrossVolumesLeavesTheWholeOriginal()
+    {
+        // 볼륨이 하나뿐인 기기에서는 시험할 대상 자체가 없다 (xunit 2.x 에는 동적 건너뜀이
+        // 없어 조용히 통과한다 — 어느 기기에서 실제로 돌았는지는 보고에 남긴다).
+        if (OtherVolumeDir() is not { } other)
+        {
+            return;
+        }
+
+        try
+        {
+            for (var i = 0; i < 40; i++)
+            {
+                File_($"src/tree/f{i}.txt", $"{i}");
+            }
+
+            var tree = Path.Combine(_root, "src", "tree");
+
+            using var cts = new CancellationTokenSource();
+            var counting = new DelegateProgress(p =>
+            {
+                if (p.CompletedEntries >= 5)
+                {
+                    cts.Cancel();
+                }
+            });
+
+            var report = await Run(
+                FileOperationKind.Move, [tree], [other], progress: counting, token: cts.Token);
+
+            var result = Assert.Single(report.Results);
+            Assert.Equal(OperationItemStatus.Failed, result.Status);
+            Assert.Contains("취소", result.Reason);
+
+            // 취소가 절반 처리 상태를 숨기지 않는다 — 목적지에 일부가 남았다고 적는다.
+            Assert.Contains("목적지에 일부가 남았다", result.Reason);
+            Assert.Contains("원본은 그대로", result.Reason);
+
+            Assert.True(Directory.Exists(tree));
+            Assert.Equal(40, Directory.GetFiles(tree).Length);
+        }
+        finally
+        {
+            Discard(other);
+        }
+    }
+
+    /// <summary>
+    /// 임시 폴더(대개 <c>C:</c>)와 다른 볼륨에 있는 쓰기 가능한 폴더. 테스트 출력 폴더를 쓴다 —
+    /// 사용자 디스크에 새 자리를 만들지 않기 위해서다. 같은 볼륨이면 null.
+    /// </summary>
+    private static string? OtherVolumeDir()
+    {
+        var here = Path.GetPathRoot(Path.GetFullPath(Path.GetTempPath()));
+        var there = Path.GetPathRoot(Path.GetFullPath(AppContext.BaseDirectory));
+
+        if (string.Equals(here, there, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return Directory.CreateDirectory(Path.Combine(
+            AppContext.BaseDirectory, "cross-volume-tests", Guid.NewGuid().ToString("N"))).FullName;
+    }
+
+    private static void Discard(string dir)
+    {
+        try
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+        catch (IOException)
+        {
+            // 정리 실패는 무시.
+        }
+    }
+
     /// <summary>
     /// 같은 볼륨 + 합칠 것 없음 = 이름만 바꾼다. 트리를 걷지 않으므로 파일 수와 무관하게 한 번에 끝난다
     /// (그래서 이 경우엔 중간 취소도 없다). 볼륨이 다르면 Directory.Move 가 못 하므로 복사 후 삭제로 간다.

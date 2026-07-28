@@ -7,9 +7,13 @@ namespace FolderDeck.App.ViewModels;
 /// <summary>
 /// 왼쪽 폴더 리스트의 한 행. 이 리스트가 순환 칸의 유일한 컨트롤러다 (§2.3 · §3.2).
 /// </summary>
-public sealed partial class FolderRowViewModel(FolderEntry entry) : ObservableObject
+public sealed partial class FolderRowViewModel(FolderEntry entry) : ObservableObject, IFileDropTarget
 {
     public FolderEntry Entry { get; } = entry;
+
+    /// <summary>그리드에서 끌어온 파일이 이 행 위에 있는가 (§4.2-2 드롭 과녁).</summary>
+    [ObservableProperty]
+    private bool isDropTarget;
 
     public string DisplayName => string.IsNullOrWhiteSpace(Entry.DisplayName)
         ? System.IO.Path.GetFileName(Entry.Path.TrimEnd('\\', '/')) is { Length: > 0 } name ? name : Entry.Path

@@ -17,6 +17,12 @@
     <!-- 갱신은 수동(F5) + 창 활성화. FileSystemWatcher 는 뒤 Phase (§8). -->
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding RefreshAllCommand}" />
+        <!-- Del = 휴지통 (§4.4). 검색창처럼 Delete 를 스스로 처리하는 컨트롤 안에서는
+             이벤트가 여기까지 올라오지 않으므로 글자 지우기를 뺏지 않는다.
+             Shift+Del(영구 삭제)은 탐색기와 달리 막는다 — 수정키가 정확히 맞아야
+             걸리므로 두 바인딩이 서로를 가리지 않는다. -->
+        <KeyBinding Key="Delete" Command="{Binding TrashSelectionCommand}" />
+        <KeyBinding Modifiers="Shift" Key="Delete" Command="{Binding RejectPermanentDeleteCommand}" />
     </Window.InputBindings>
 
     <DockPanel>
@@ -31,6 +37,14 @@
                         Content="{Binding EditToggleText}"
                         AutomationProperties.Name="배치 편집"
                         ToolTip="켜면 타일을 옮기고 크기를 바꿀 수 있다. 그동안 파일 목록은 잠긴다." />
+
+                <!-- 휴지통은 목적지가 없으므로 대상함 탭이 아니라 여기다 (§4.4).
+                     확인창은 두지 않는다 — 되돌릴 수 있는 동작이고, 몇 개를 보냈는지 알린다. -->
+                <Button DockPanel.Dock="Right" Padding="12,4"
+                        Command="{Binding TrashSelectionCommand}"
+                        Content="휴지통으로 삭제"
+                        AutomationProperties.Name="휴지통으로 삭제"
+                        ToolTip="고른 것을 휴지통으로 보낸다 (Del) — 영구 삭제가 아니라 되돌릴 수 있다. 폴더는 통째로 간다." />
 
                 <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="11"
                            TextTrimming="CharacterEllipsis"
@@ -65,6 +79,27 @@
                 </TextBlock>
                 <TextBlock Text="{Binding StatusPath}" TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding StatusPath}" />
+            </DockPanel>
+        </Border>
+
+        <!-- ── 진행 줄 (§1.1 — 폴더 재귀·볼륨 간 이동은 오래 걸린다) ──
+                 상태 바 바로 위에 붙는다(DockPanel 은 먼저 붙은 쪽이 바깥이라 순서가 이 뜻이다).
+                 짧은 조작에는 뜨지 않는다 — 뷰모델이 0.4초 뒤에도 돌고 있을 때만 켠다. -->
+        <Border DockPanel.Dock="Bottom" BorderThickness="0,1,0,0" BorderBrush="{StaticResource Brush.Border}"
+                Background="{StaticResource Brush.Chrome}" Padding="10,5"
+                Visibility="{Binding IsProgressVisible, Converter={StaticResource BoolToVisibility}}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="취소" Padding="14,3" Margin="10,0,0,0"
+                        Command="{Binding CancelOperationCommand}"
+                        AutomationProperties.Name="조작 취소"
+                        ToolTip="지금 처리 중인 파일까지만 하고 멈춘다. 이동은 원본을 지우기 전이라 그대로 남는다." />
+                <ProgressBar DockPanel.Dock="Left" Width="180" Height="12" Minimum="0" Maximum="100"
+                             Value="{Binding ProgressValue}"
+                             Foreground="{StaticResource Brush.DropValid}"
+                             Background="{StaticResource Brush.GridCellSurface}"
+                             BorderBrush="{StaticResource Brush.Border}" />
+                <TextBlock Text="{Binding ProgressText}" Margin="10,0,0,0" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" ToolTip="{Binding ProgressText}" />
             </DockPanel>
         </Border>
 
@@ -122,7 +157,7 @@
 
                     <TextBlock DockPanel.Dock="Bottom" Margin="10,4,10,6" FontSize="11"
                                Foreground="{StaticResource Brush.TextSecondary}" TextWrapping="Wrap"
-                               Text="클릭 = 순환 칸에 표시 · 재클릭 = 앵커로 복귀 · 우클릭 = 순환 번호 지정&#x0a;배치 편집 중에는 빈 칸으로 끌어다 놓을 수 있다"
+                               Text="클릭 = 순환 칸에 표시 · 재클릭 = 앵커로 복귀 · 우클릭 = 순환 번호 지정&#x0a;그리드 파일을 이 행으로 끌면 이동 (Ctrl 을 누르면 복사)&#x0a;배치 편집 중에는 빈 칸으로 끌어다 놓을 수 있다"
                                Visibility="{Binding FoldersCollapsed,
                                             Converter={StaticResource InverseBoolToVisibility}}" />
 
@@ -139,6 +174,10 @@
                                             CommandParameter="{Binding}"
                                             PreviewMouseLeftButtonDown="OnFolderRowMouseDown"
                                             PreviewMouseMove="OnFolderRowMouseMove"
+                                            AllowDrop="True"
+                                            DragOver="OnFileDropOver"
+                                            DragLeave="OnFileDropLeave"
+                                            Drop="OnFileDrop"
                                             ToolTip="{Binding PathText}"
                                             Tag="{Binding DataContext,
                                                   RelativeSource={RelativeSource AncestorType=Window}}">
@@ -233,6 +272,18 @@
                                                                    Foreground="{StaticResource Brush.Danger}" />
                                                     </Border>
 
+                                                    <!-- 드롭 과녁 — 끌어온 파일이 이 행 위에 있다 (§4.2-2).
+                                                         테두리만으로는 좁은 행에서 눈에 안 띄어 말로도 적는다. -->
+                                                    <Border Background="{StaticResource Brush.DropValidSurface}"
+                                                            CornerRadius="2" Padding="4,0" Margin="6,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Visibility="{Binding IsDropTarget,
+                                                                Converter={StaticResource BoolToVisibility}}">
+                                                        <TextBlock Text="여기에 놓기" FontSize="10"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource Brush.DropValid}" />
+                                                    </Border>
+
                                                     <!-- 순환 번호 태그. 순환 칸이 하나뿐이면 소음이라 숨긴다. -->
                                                     <Border Background="{StaticResource Brush.RotatingSurface}"
                                                             CornerRadius="2" Padding="4,0" Margin="6,0,0,0"
@@ -324,7 +375,7 @@
                                     </StackPanel>
                                 </StackPanel>
 
-                                <TextBlock Text="왼쪽 폴더를 우클릭해 &#x27;대상함에 추가&#x27;."
+                                <TextBlock Text="왼쪽 폴더를 우클릭해 &#x27;대상함에 추가&#x27;.&#x0a;여기에 항목을 끌어다 놓으면 그 폴더 하나로만 간다."
                                            FontSize="11" TextWrapping="Wrap" Margin="2,4"
                                            Foreground="{StaticResource Brush.TextSecondary}"
                                            Visibility="{Binding TrayIsEmpty,
@@ -334,20 +385,48 @@
                                     <ItemsControl ItemsSource="{Binding Tray}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="{x:Type vm:TrayEntryViewModel}">
-                                                <DockPanel Margin="0,1" ToolTip="{Binding PathText}">
-                                                    <Button DockPanel.Dock="Right" Content="✕"
-                                                            Style="{StaticResource NavButton}"
-                                                            Command="{Binding RemoveCommand}"
-                                                            AutomationProperties.Name="대상함에서 빼기"
-                                                            ToolTip="대상함에서 뺀다 (폴더는 그대로)" />
-                                                    <CheckBox IsChecked="{Binding IsChecked}"
-                                                              VerticalContentAlignment="Center"
-                                                              Checked="OnTrayCheckChanged"
-                                                              Unchecked="OnTrayCheckChanged">
-                                                        <TextBlock Text="{Binding DisplayName}"
-                                                                   TextTrimming="CharacterEllipsis" />
-                                                    </CheckBox>
-                                                </DockPanel>
+                                                <!-- 체크(=버튼 실행의 목적지)와 별개로, 여기로 직접
+                                                     끌어다 놓을 수도 있다 (§4.2-2). -->
+                                                <Border Margin="0,1" CornerRadius="3" Padding="2,1"
+                                                        BorderThickness="1"
+                                                        ToolTip="{Binding PathText}"
+                                                        AllowDrop="True"
+                                                        DragOver="OnFileDropOver"
+                                                        DragLeave="OnFileDropLeave"
+                                                        Drop="OnFileDrop">
+                                                    <!-- 색은 스타일에서만 준다. 로컬 값을 주면
+                                                         스타일 트리거를 영구히 이겨 과녁이 켜지지 않는다
+                                                         (실제로 그랬다 — WPF 값 우선순위). -->
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="Transparent" />
+                                                            <Setter Property="BorderBrush" Value="Transparent" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsDropTarget}"
+                                                                             Value="True">
+                                                                    <Setter Property="Background"
+                                                                        Value="{StaticResource Brush.DropValidSurface}" />
+                                                                    <Setter Property="BorderBrush"
+                                                                        Value="{StaticResource Brush.DropValid}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <DockPanel>
+                                                        <Button DockPanel.Dock="Right" Content="✕"
+                                                                Style="{StaticResource NavButton}"
+                                                                Command="{Binding RemoveCommand}"
+                                                                AutomationProperties.Name="대상함에서 빼기"
+                                                                ToolTip="대상함에서 뺀다 (폴더는 그대로)" />
+                                                        <CheckBox IsChecked="{Binding IsChecked}"
+                                                                  VerticalContentAlignment="Center"
+                                                                  Checked="OnTrayCheckChanged"
+                                                                  Unchecked="OnTrayCheckChanged">
+                                                            <TextBlock Text="{Binding DisplayName}"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                        </CheckBox>
+                                                    </DockPanel>
+                                                </Border>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
