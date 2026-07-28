@@ -53,16 +53,41 @@ public partial class FolderPanelView : UserControl
         SimpleList.UnselectAll();
     }
 
+    /// <summary>
+    /// 목록을 다시 읽었다 — 뷰모델이 붙잡아 둔 항목을 목록에서도 다시 골라 준다 (§4.8).
+    /// </summary>
+    private void OnSelectionRestored(object? sender, EventArgs e)
+    {
+        if (ViewModel is not { } panel)
+        {
+            return;
+        }
+
+        Reapply(DetailsList, panel);
+        Reapply(SimpleList, panel);
+
+        static void Reapply(ListView list, FolderPanelViewModel panel)
+        {
+            list.SelectedItems.Clear();
+            foreach (var item in panel.SelectedItems)
+            {
+                list.SelectedItems.Add(item);
+            }
+        }
+    }
+
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (e.OldValue is FolderPanelViewModel old)
         {
             old.SelectionCleared -= OnSelectionCleared;
+            old.SelectionRestored -= OnSelectionRestored;
         }
 
         if (e.NewValue is FolderPanelViewModel fresh)
         {
             fresh.SelectionCleared += OnSelectionCleared;
+            fresh.SelectionRestored += OnSelectionRestored;
         }
     }
 

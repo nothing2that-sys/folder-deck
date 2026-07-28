@@ -57,6 +57,32 @@ internal sealed class FakeUserPrompt : IUserPrompt
     }
 }
 
+/// <summary>매크로 편집 창 대신 답만 돌려준다 (§4.7).</summary>
+internal sealed class FakeMacroEditor : IMacroEditor
+{
+    /// <summary>창이 돌려줄 값. null 이면 사용자가 취소한 것.</summary>
+    public MacroDraft? Answer { get; set; }
+
+    /// <summary>미리 채워져 들어온 값 — 지금 화면 상태가 제대로 실렸는지 확인용.</summary>
+    public MacroDraft? Suggested { get; private set; }
+
+    public bool? CanFixPath { get; private set; }
+
+    public int CallCount { get; private set; }
+
+    /// <summary>들어온 제안을 그대로 받아들이게 한다(이름만 바꾸는 흔한 경우).</summary>
+    public Func<MacroDraft, MacroDraft>? Transform { get; set; }
+
+    public MacroDraft? Edit(MacroDraft draft, bool canFixPath)
+    {
+        CallCount++;
+        Suggested = draft;
+        CanFixPath = canFixPath;
+
+        return Transform is not null ? Transform(draft) : Answer;
+    }
+}
+
 /// <summary>런처 뷰모델 + 격리된 <c>%APPDATA%</c> 대체 폴더.</summary>
 internal sealed class LauncherFixture : IDisposable
 {

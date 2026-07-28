@@ -75,7 +75,7 @@ public sealed class CopyTrayTests
 
         var reopened = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
         var restarted = new MainViewModel(
-            reopened, f.Store, new FolderEnumerator(), f.Shell, f.Clipboard, f.Engine, f.Prompt);
+            reopened, f.Store, new FolderEnumerator(), f.Shell, f.Clipboard, f.Engine, f.Prompt, f.MacroEditor);
 
         Assert.Equal("문서", Assert.Single(restarted.Tray).DisplayName);
         Assert.True(restarted.Tray[0].IsChecked);
@@ -113,6 +113,45 @@ public sealed class CopyTrayTests
 
         Assert.False(f.Rotating.HasSelection);
         Assert.Null(f.ViewModel.SelectionOwner);
+    }
+
+    /// <summary>
+    /// 목록을 다시 읽어도 고른 것은 살아 있어야 한다 (§4.8).
+    /// </summary>
+    /// <remarks>
+    /// 창을 잠깐 떠났다 돌아오기만 해도(§8 활성화 재조회) 선택이 사라지면, 매크로를 만들고
+    /// 바로 실행할 때 "대상이 없다"가 뜬다 — 실제로 그랬다. 경로로 다시 잡아 준다.
+    /// </remarks>
+    [Fact]
+    public async Task ARefreshKeepsTheSelection()
+    {
+        using var f = await ReadyAsync();
+        var code = f.ViewModel.Panels[0];
+        Select(code, "Main.cs", "Recipe");
+
+        await f.ViewModel.RefreshAllAsync();
+
+        Assert.True(f.ViewModel.HasSelection);
+        Assert.Equal(["Main.cs", "Recipe"], code.SelectedItems.Select(i => i.Name).Order());
+
+        // 옛 객체가 아니라 <b>새 목록의 객체</b>를 잡고 있어야 한다.
+        Assert.All(code.SelectedItems, i => Assert.Contains(i, code.Items));
+    }
+
+    /// <summary>옮겨서 사라진 파일은 선택에서 자연히 빠진다 — 없는 것을 고른 채로 두지 않는다.</summary>
+    [Fact]
+    public async Task AFileThatVanishedDropsOutOfTheSelection()
+    {
+        using var f = await ReadyAsync();
+        await f.ViewModel.ShowFolderAsync(f.Row("작업"));
+        Select(f.Rotating, "Main.cs");
+        f.ViewModel.AddToTray(f.Row("문서"));
+        f.Prompt.Answer = true;
+
+        await f.ViewModel.MoveSelectionAsync();
+
+        Assert.False(f.Rotating.HasSelection);
+        Assert.False(f.ViewModel.HasSelection);
     }
 
     // ── 요약과 버튼 상태 (§4.7 미리보기) ─────────────────────────────────────

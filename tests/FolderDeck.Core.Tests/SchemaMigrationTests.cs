@@ -280,6 +280,63 @@ public sealed class SchemaMigrationTests : IDisposable
         Assert.False(reloaded.AskOnConflict);
     }
 
+    // ── 매크로 슬롯 (§4.7) ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// 매크로는 v1 부터 모델에 자리가 있었고 Stage 5 에서 실제로 쓰기 시작했다 —
+    /// 필드가 늘지 않았으므로 스키마 버전은 그대로다.
+    /// </summary>
+    [Fact]
+    public void MacrosRoundTripWithTheirEnumsAsStrings()
+    {
+        var folderId = Guid.NewGuid();
+        var workspace = new Workspace
+        {
+            Title = "매크로 저장",
+            Macros =
+            [
+                new MacroDefinition
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "산출물로 복사",
+                    Op = FileOperationKind.Copy,
+                    Source = new MacroSource { Kind = MacroSourceKind.FixedPath, Path = @"D:\a\b.txt" },
+                    Dest = new MacroDest { Kind = MacroDestKind.FolderIds, FolderIds = [folderId] },
+                    OnConflict = ConflictPolicy.Rename,
+                    Confirm = false,
+                },
+            ],
+        };
+
+        Assert.Null(_store.SaveWorkspace(workspace));
+        var json = File.ReadAllText(_paths.WorkspaceFile(workspace.Id));
+
+        Assert.Contains("\"op\": \"copy\"", json);
+        Assert.Contains("\"kind\": \"fixedPath\"", json);
+        Assert.Contains("\"kind\": \"folderIds\"", json);
+        Assert.Contains("\"onConflict\": \"rename\"", json);
+
+        var reloaded = _store.LoadWorkspace(workspace.Id).ValueOrThrow();
+        var macro = Assert.Single(reloaded.Macros!);
+
+        Assert.Equal("산출물로 복사", macro.Name);
+        Assert.Equal(MacroSourceKind.FixedPath, macro.Source!.Kind);
+        Assert.Equal(@"D:\a\b.txt", macro.Source.Path);
+        Assert.Equal(folderId, Assert.Single(macro.Dest!.FolderIds!));
+        Assert.Equal(ConflictPolicy.Rename, macro.OnConflict);
+        Assert.False(macro.Confirm);
+    }
+
+    [Fact]
+    public void MacrosAreOmittedWhenThereAreNone()
+    {
+        var workspace = new Workspace { Title = "매크로 없음" };
+
+        Assert.Null(_store.SaveWorkspace(workspace));
+
+        Assert.DoesNotContain("macros", File.ReadAllText(_paths.WorkspaceFile(workspace.Id)));
+    }
+
     /// <summary>기본값이면 슬롯을 남기지 않는다 — 아무 뜻도 없는 줄을 파일에 두지 않는다.</summary>
     [Fact]
     public void ConflictSlotsAreOmittedWhenDefault()

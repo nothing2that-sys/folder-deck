@@ -1,6 +1,7 @@
 using System.Windows;
 using FolderDeck.App.Services;
 using FolderDeck.App.ViewModels;
+using FolderDeck.App.Views;
 using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Models;
 using FolderDeck.Core.Operations;
@@ -79,7 +80,8 @@ public partial class App : Application
             new ShellLauncher(),
             new ClipboardService(),
             new FileOperationEngine(new RecycleBin()),
-            new UserPrompt());
+            new UserPrompt(),
+            new MacroEditor());
         var window = new MainWindow(viewModel);
 
         // 런처를 닫기 전에 메인 창을 띄운다 — 순서가 바뀌면 창이 0개가 되는 순간에

@@ -66,7 +66,7 @@ public sealed class LeftLayoutTests
         var reloaded = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
         var reopened = new MainViewModel(
             reloaded, f.Store, new FolderEnumerator(), new FakeShellLauncher(), new FakeClipboardService(),
-            f.Engine, f.Prompt);
+            f.Engine, f.Prompt, f.MacroEditor);
 
         Assert.True(reopened.FoldersCollapsed);
         Assert.True(reopened.LowerCollapsed);

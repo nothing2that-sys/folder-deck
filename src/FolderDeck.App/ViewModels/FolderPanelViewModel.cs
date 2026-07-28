@@ -190,6 +190,17 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public event EventHandler? SelectionCleared;
 
     /// <summary>
+    /// 목록을 다시 읽은 뒤 <b>같은 경로를 다시 골라 달라</b>고 뷰에 알린다 (§4.8).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Items"/> 를 갈아끼우면 <c>ListView</c> 가 자기 선택을 스스로 비우고
+    /// 그 통지가 <see cref="SelectedItems"/> 까지 지운다. 그대로 두면 창을 잠깐 떠났다
+    /// 돌아오기만 해도(§8 활성화 재조회) 고른 것이 사라진다 — 매크로를 만들고 바로 실행하면
+    /// "대상이 없다"가 뜨는 것이 그 증상이었다.
+    /// </remarks>
+    public event EventHandler? SelectionRestored;
+
+    /// <summary>
     /// 지금 선택을 드래그 뭉치로 만든다 (§4.2-2). 선택이 없으면 null — 끌 것이 없다.
     /// </summary>
     public FileDropPayload? BuildDragPayload() =>
@@ -747,8 +758,21 @@ public sealed partial class FolderPanelViewModel : ObservableObject
                 return;
             }
 
+            // 고른 것은 <b>경로로</b> 기억한다. 아래에서 Items 를 갈아끼우면 뷰가 선택을
+            // 비우고 그 통지가 SelectedItems 까지 지우므로, 새 목록의 객체로 다시 잡아 준다.
+            var chosen = SelectedItems.Count == 0
+                ? null
+                : SelectedItems.Select(i => i.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             Failure = listing.Failure;
             Items = [.. listing.Items.Select(i => new FileItemViewModel(i))];
+
+            if (chosen is not null)
+            {
+                // 사라진 파일은 자연히 빠진다 — 옮기고 난 뒤의 원본이 그렇다.
+                SelectedItems = [.. Items.Where(i => chosen.Contains(i.FullPath))];
+                SelectionRestored?.Invoke(this, EventArgs.Empty);
+            }
         }
         catch (OperationCanceledException)
         {

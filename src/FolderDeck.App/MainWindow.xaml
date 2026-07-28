@@ -456,9 +456,68 @@
                                 </ScrollViewer>
                             </DockPanel>
                         </TabItem>
+                        <!-- 저장된 규칙 카드 (§4.7). 대상함·드래그와 같은 엔진에 얹힌다. -->
                         <TabItem Header="매크로">
-                            <TextBlock Text="Phase 3 에서 채운다.&#x0a;저장된 규칙 카드가 여기 뜬다."
-                                       Foreground="{StaticResource Brush.TextSecondary}" Margin="10" TextWrapping="Wrap" />
+                            <DockPanel Margin="6">
+                                <Button DockPanel.Dock="Bottom" Content="지금 설정으로 매크로 만들기"
+                                        Padding="10,5" Margin="0,6,0,0"
+                                        Command="{Binding CreateMacroCommand}"
+                                        ToolTip="지금 고른 것과 대상함 체크 상태를 규칙으로 굳힌다" />
+
+                                <TextBlock DockPanel.Dock="Bottom" FontSize="11" TextWrapping="Wrap"
+                                           Margin="2,6,2,0"
+                                           Foreground="{StaticResource Brush.TextSecondary}"
+                                           Text="그리드에서 파일을 고른 뒤 만들면 지금 상태가 그대로 채워진다."
+                                           Visibility="{Binding MacrosAreEmpty,
+                                                        Converter={StaticResource BoolToVisibility}}" />
+
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding Macros}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:MacroCardViewModel}">
+                                                <Border Margin="0,0,0,4" Padding="6,4" CornerRadius="3"
+                                                        BorderThickness="1"
+                                                        BorderBrush="{StaticResource Brush.Border}"
+                                                        Background="{StaticResource Brush.Surface}">
+                                                    <DockPanel>
+                                                        <Button DockPanel.Dock="Right" Content="✕"
+                                                                Style="{StaticResource NavButton}"
+                                                                VerticalAlignment="Top"
+                                                                Command="{Binding DataContext.RemoveMacroCommand,
+                                                                          RelativeSource={RelativeSource
+                                                                              AncestorType=Window}}"
+                                                                CommandParameter="{Binding}"
+                                                                AutomationProperties.Name="매크로 지우기"
+                                                                ToolTip="이 규칙을 지운다 (파일은 그대로)" />
+                                                        <Button DockPanel.Dock="Right" Content="실행"
+                                                                Padding="10,2" Margin="0,0,4,0"
+                                                                VerticalAlignment="Top"
+                                                                Command="{Binding DataContext.RunMacroCommand,
+                                                                          RelativeSource={RelativeSource
+                                                                              AncestorType=Window}}"
+                                                                CommandParameter="{Binding}"
+                                                                ToolTip="{Binding Summary}" />
+                                                        <StackPanel>
+                                                            <TextBlock Text="{Binding Name}"
+                                                                       FontWeight="SemiBold"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Text="{Binding Summary}" FontSize="11"
+                                                                       TextWrapping="Wrap"
+                                                                       Foreground="{StaticResource Brush.TextSecondary}" />
+                                                            <!-- 확인 없이 도는 규칙은 눌렀을 때 바로 실행된다.
+                                                                 그 사실이 카드에 보여야 한다. -->
+                                                            <TextBlock Text="확인 없이 바로 실행" FontSize="10"
+                                                                       Foreground="{StaticResource Brush.Danger}"
+                                                                       Visibility="{Binding RunsWithoutConfirm,
+                                                                            Converter={StaticResource BoolToVisibility}}" />
+                                                        </StackPanel>
+                                                    </DockPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
                         </TabItem>
                     </TabControl>
                 </DockPanel>

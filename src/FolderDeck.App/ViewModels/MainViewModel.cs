@@ -23,6 +23,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IClipboardService _clipboard;
     private readonly IFileOperationEngine _engine;
     private readonly IUserPrompt _prompt;
+    private readonly IMacroEditor _macroEditor;
 
     /// <summary>디바운스 저장 실패는 스레드 풀에서 올라온다 — UI 스레드로 되돌리기 위해 잡아 둔다.</summary>
     private readonly SynchronizationContext? _uiContext = SynchronizationContext.Current;
@@ -34,7 +35,8 @@ public sealed partial class MainViewModel : ObservableObject
         IShellLauncher shell,
         IClipboardService clipboard,
         IFileOperationEngine engine,
-        IUserPrompt prompt)
+        IUserPrompt prompt,
+        IMacroEditor macroEditor)
     {
         Workspace = workspace;
         _store = store;
@@ -43,6 +45,7 @@ public sealed partial class MainViewModel : ObservableObject
         _clipboard = clipboard;
         _engine = engine;
         _prompt = prompt;
+        _macroEditor = macroEditor;
 
         Rows = [.. workspace.Folders.Select(f => new FolderRowViewModel(f))];
 
@@ -66,6 +69,8 @@ public sealed partial class MainViewModel : ObservableObject
             .Select(id => Rows.FirstOrDefault(r => r.Entry.Id == id))
             .Where(r => r is not null)
             .Select(r => new TrayEntryViewModel(r!.Entry, RemoveFromTray))];
+
+        Macros = [.. (workspace.Macros ?? []).Select(m => new MacroCardViewModel(m))];
 
         RefreshDerivedLayout();
 
@@ -599,9 +604,11 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(OperationSummary));
         OnPropertyChanged(nameof(CanRunOperation));
         OnPropertyChanged(nameof(CanTrashSelection));
+        OnPropertyChanged(nameof(CanCreateMacro));
         CopySelectionCommand.NotifyCanExecuteChanged();
         MoveSelectionCommand.NotifyCanExecuteChanged();
         TrashSelectionCommand.NotifyCanExecuteChanged();
+        CreateMacroCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>패널이 선택을 얻거나 잃었다. 선택은 한 타일에만 남긴다 (§4.8).</summary>
@@ -796,6 +803,292 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         ReportOperation(verb, report, successMessage);
+    }
+
+    // ── 매크로 (§4.7 · Phase 3 Stage 5) ──────────────────────────────────────
+    //
+    // 대상함·드래그와 <b>같은 엔진</b>에 얹힌 사용자 정의 규칙이다. 여기서 하는 일은
+    // "저장된 규칙을 지금 화면 상태로 풀어(resolve) 요청 하나를 만드는 것"뿐이다.
+
+    /// <summary>저장된 규칙 카드들 (§3.2 매크로 탭).</summary>
+    public ObservableCollection<MacroCardViewModel> Macros { get; }
+
+    public bool MacrosAreEmpty => Macros.Count == 0;
+
+    /// <summary>지금 화면 상태로 매크로를 만들 수 있는가 — 고른 것이 있어야 한다.</summary>
+    public bool CanCreateMacro => HasSelection && !IsOperationRunning;
+
+    /// <summary>
+    /// 방금 손으로 한 조작을 규칙으로 굳힌다. 창은 <b>지금 상태로 미리 채워져</b> 뜨므로
+    /// 대개는 이름만 쓰고 확인을 누르게 된다.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanCreateMacro))]
+    public void CreateMacro()
+    {
+        var selection = Selection;
+
+        if (selection.Count == 0)
+        {
+            return;
+        }
+
+        var checkedTray = CheckedDestinations;
+
+        var suggested = new MacroDraft(
+            Name: SuggestMacroName(selection.Count, checkedTray),
+            Op: FileOperationKind.Copy,
+            SourceKind: MacroSourceKind.Selection,
+            FixedPath: selection.Count == 1 ? selection[0].FullPath : null,
+            DestKind: MacroDestKind.Tray,
+            OnConflict: ConflictPolicy,
+            Confirm: true);
+
+        if (_macroEditor.Edit(suggested, canFixPath: selection.Count == 1) is not { } draft)
+        {
+            return;
+        }
+
+        var definition = new MacroDefinition
+        {
+            Id = Guid.NewGuid(),
+            Name = draft.Name,
+            Op = draft.Op,
+            Source = new MacroSource
+            {
+                Kind = draft.SourceKind,
+                Path = draft.SourceKind == MacroSourceKind.FixedPath ? draft.FixedPath : null,
+            },
+            OnConflict = draft.OnConflict,
+
+            // move·trash 는 확인을 끄지 못한다 (§4.7).
+            Confirm = draft.Confirm || draft.Op != FileOperationKind.Copy,
+        };
+
+        if (draft.Op != FileOperationKind.Trash)
+        {
+            definition.Dest = new MacroDest
+            {
+                Kind = draft.DestKind,
+
+                // "지금 체크된 폴더"는 만드는 순간에 굳힌다 — 나중에 체크가 바뀌어도
+                // 이 규칙이 가리키는 곳은 그대로여야 한다.
+                FolderIds = draft.DestKind == MacroDestKind.FolderIds
+                    ? [.. checkedTray.Select(t => t.Entry.Id)]
+                    : null,
+            };
+        }
+
+        Workspace.Macros ??= [];
+        Workspace.Macros.Add(definition);
+        Macros.Add(new MacroCardViewModel(definition));
+
+        NotifyMacros();
+        Save();
+        Inform($"매크로를 만들었다: {definition.Name}");
+    }
+
+    [RelayCommand]
+    public void RemoveMacro(MacroCardViewModel? card)
+    {
+        if (card is null || !Macros.Contains(card))
+        {
+            return;
+        }
+
+        Workspace.Macros?.Remove(card.Definition);
+        Macros.Remove(card);
+
+        // 비면 슬롯 자체를 지운다 — 빈 배열을 파일에 남기지 않는다.
+        if (Workspace.Macros is { Count: 0 })
+        {
+            Workspace.Macros = null;
+        }
+
+        NotifyMacros();
+        Save();
+        Inform($"매크로를 지웠다: {card.Name}");
+    }
+
+    /// <summary>저장된 규칙을 지금 화면 상태로 풀어 실행한다 (§4.7).</summary>
+    [RelayCommand]
+    public async Task RunMacroAsync(MacroCardViewModel? card)
+    {
+        if (card is null || IsOperationRunning)
+        {
+            return;
+        }
+
+        var macro = card.Definition;
+        var verb = macro.Op switch
+        {
+            FileOperationKind.Move => "이동",
+            FileOperationKind.Trash => "휴지통",
+            _ => "복사",
+        };
+
+        if (ResolveMacroSources(macro) is not { Count: > 0 } items)
+        {
+            Warn($"'{card.Name}' — 대상이 없다. " + (macro.Source?.Kind == MacroSourceKind.FixedPath
+                ? "고정 경로가 사라졌다."
+                : "먼저 그리드에서 파일을 고른다."));
+            return;
+        }
+
+        var destinations = ResolveMacroDestinations(macro);
+
+        if (macro.Op != FileOperationKind.Trash && destinations.Count == 0)
+        {
+            Warn($"'{card.Name}' — 목적지가 없다. 대상함 체크나 화면에 뜬 폴더를 확인한다.");
+            return;
+        }
+
+        // 이동은 목적지가 하나여야 한다 (§4.2) — 규칙이라고 예외가 아니다.
+        if (macro.Op == FileOperationKind.Move && destinations.Count > 1)
+        {
+            Warn($"'{card.Name}' — 이동인데 목적지가 {destinations.Count}개다. " +
+                 "여러 곳에 두려면 복사로 바꾼다.");
+            return;
+        }
+
+        // 겹치는 건수는 정책과 무관하게 세야 하므로 항상 덮어쓰기로 훑는다.
+        var preview = await _engine
+            .PreviewAsync(new FileOperationRequest(
+                macro.Op, items, destinations, ConflictPolicy.Overwrite))
+            .ConfigureAwait(true);
+
+        if (preview.TotalItemCount == 0)
+        {
+            Warn($"'{card.Name}' — {verb}할 곳이 없다. 목적지에 닿지 못했다.");
+            return;
+        }
+
+        IsOperationRunning = true;
+
+        // 실행 전 미리보기가 기본이다 (§4.7). move·trash 는 끄지 못한다.
+        if ((macro.Confirm || macro.Op != FileOperationKind.Copy)
+            && !_prompt.Confirm($"매크로 실행 — {card.Name}", MacroPreviewText(macro, preview, items)))
+        {
+            IsOperationRunning = false;
+            Inform($"'{card.Name}' 실행을 취소했다.");
+            return;
+        }
+
+        // 매크로는 <b>자기 정책</b>을 쓴다 — 워크스페이스의 "겹치면 묻기"(§4.3)는 직접 조작용이다.
+        // 반복 실행이 존재 이유인데 매번 물으면 자동화가 아니다. 대신 미리보기가 건수를 미리 알린다.
+        await RunGuardedAsync(
+            new FileOperationRequest(macro.Op, items, destinations, macro.OnConflict), verb)
+            .ConfigureAwait(true);
+    }
+
+    /// <summary>규칙의 대상을 지금 상태로 푼다. 없으면 빈 목록.</summary>
+    private List<OperationItem> ResolveMacroSources(MacroDefinition macro)
+    {
+        if (macro.Source?.Kind == MacroSourceKind.FixedPath)
+        {
+            var path = macro.Source.Path;
+
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return [];
+            }
+
+            var isDirectory = System.IO.Directory.Exists(path);
+
+            // 사라진 경로는 여기서 걸러 낸다 — 엔진까지 보내면 "원본이 없다" 한 줄로 끝나서
+            // 규칙이 고장난 것인지 이번만 없는 것인지 구분이 안 된다.
+            return isDirectory || System.IO.File.Exists(path)
+                ? [new OperationItem(path, isDirectory)]
+                : [];
+        }
+
+        return [.. Selection.Select(i => new OperationItem(i.FullPath, i.IsDirectory))];
+    }
+
+    /// <summary>규칙의 목적지를 지금 상태로 푼다. 휴지통은 목적지가 없다.</summary>
+    private List<string> ResolveMacroDestinations(MacroDefinition macro)
+    {
+        if (macro.Op == FileOperationKind.Trash || macro.Dest is null)
+        {
+            return [];
+        }
+
+        var paths = macro.Dest.Kind switch
+        {
+            // 앵커가 아니라 <b>화면에 뜬 그대로</b>가 대상이다 (§4.7) — 미리보기에 경로가 다 찍힌다.
+            MacroDestKind.AllVisible => Panels
+                .Where(p => p.Entry is not null && p.CurrentPath is not null)
+                .Select(p => p.CurrentPath!),
+
+            MacroDestKind.FolderIds => (macro.Dest.FolderIds ?? [])
+                .Select(id => Rows.FirstOrDefault(r => r.Entry.Id == id)?.Entry.Path)
+                .Where(p => p is not null)
+                .Select(p => p!),
+
+            _ => CheckedDestinations.Select(t => t.Entry.Path),
+        };
+
+        // 같은 폴더가 두 타일에 떠 있을 수 있다. 같은 곳에 두 번 넣지 않는다.
+        return [.. paths.Distinct(StringComparer.OrdinalIgnoreCase)];
+    }
+
+    /// <summary>"무엇 → 어디, N건, 덮어쓸 것 M건 + 목적지별 내역" (§4.7 안전장치).</summary>
+    private static string MacroPreviewText(
+        MacroDefinition macro, FileOperationPreview preview, List<OperationItem> items)
+    {
+        var lines = new List<string>
+        {
+            macro.Op == FileOperationKind.Trash
+                ? $"{items.Count}개를 휴지통으로 보냅니다 — 되돌릴 수 있습니다."
+                : $"{items.Count}개 → 폴더 {preview.PerDestination.Count}개 = {preview.TotalItemCount}건",
+        };
+
+        if (macro.Op == FileOperationKind.Move)
+        {
+            lines.Add("이동이므로 원본은 사라집니다.");
+        }
+
+        if (preview.TotalOverwriteCount > 0)
+        {
+            var verb = macro.OnConflict switch
+            {
+                ConflictPolicy.Skip => "건너뜁니다",
+                ConflictPolicy.Rename => "둘 다 둡니다",
+                _ => "덮어씁니다",
+            };
+
+            lines.Add($"같은 이름 {preview.TotalOverwriteCount}건은 {verb}.");
+        }
+
+        if (preview.PerDestination.Count > 0)
+        {
+            lines.Add(string.Empty);
+            lines.AddRange(preview.PerDestination.Select(
+                d => $"  → {d.Destination} ({d.ItemCount}건" +
+                     (d.OverwriteCount > 0 ? $", 같은 이름 {d.OverwriteCount}" : string.Empty) + ")"));
+        }
+
+        if (preview.SkippedDestinations.Count > 0)
+        {
+            lines.Add(string.Empty);
+            lines.AddRange(preview.SkippedDestinations.Select(d => $"  ✕ {d} (닿을 수 없음 — 제외)"));
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private string SuggestMacroName(int sourceCount, List<TrayEntryViewModel> checkedTray) =>
+        checkedTray.Count switch
+        {
+            0 => $"{sourceCount}개 복사",
+            1 => $"{checkedTray[0].DisplayName}(으)로 복사",
+            _ => $"{checkedTray.Count}곳으로 복사",
+        };
+
+    private void NotifyMacros()
+    {
+        OnPropertyChanged(nameof(MacrosAreEmpty));
+        OnPropertyChanged(nameof(CanCreateMacro));
+        CreateMacroCommand.NotifyCanExecuteChanged();
     }
 
     // ── 동일 이름 충돌 (§4.3 · Phase 3 Stage 4) ──────────────────────────────
