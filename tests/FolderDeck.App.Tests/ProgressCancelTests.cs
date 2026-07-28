@@ -1,3 +1,5 @@
+using FolderDeck.App.Services;
+using FolderDeck.Core.Models;
 using System.ComponentModel;
 using System.Diagnostics;
 
@@ -109,6 +111,36 @@ public sealed class ProgressCancelTests
         Assert.False(f.ViewModel.IsProgressVisible);
         Assert.False(f.ViewModel.IsOperationRunning);
     }
+
+    /// <summary>
+    /// 눈 깜짝할 사이에 끝난 조작 뒤에 진행 줄이 <b>되살아나면</b> 안 된다.
+    /// </summary>
+    /// <remarks>
+    /// 0.4초 예약이 결과 대화상자(모달) 뒤에서 뒤늦게 터지던 버그다 — 실행은 이미 끝났는데
+    /// 다 찬 막대가 다시 떠서 아직 도는 중인 것처럼 보였다. 실행 중에 발견해 고쳤다.
+    /// </remarks>
+    [Fact]
+    public async Task AFinishedOperationDoesNotResurrectTheProgressRow()
+    {
+        using var f = await ReadyAsync();
+
+        // 건너뜀을 만들어 결과 보고(대화상자) 경로까지 타게 한다.
+        File.WriteAllText(Path.Combine(f.DocsPath, "Main.cs"), "옛 내용");
+        f.Prompt.ConflictAnswer = new ConflictDecision(ConflictPolicy.Skip, Remember: false);
+
+        Select(f.ViewModel.Panels[0], "Main.cs");
+        f.ViewModel.AddToTray(f.Row("문서"));
+
+        await f.ViewModel.CopySelectionAsync();
+
+        // 예약된 0.4초가 지나도 접혀 있어야 한다.
+        await Task.Delay(ProgressRevealGraceMs);
+
+        Assert.False(f.ViewModel.IsProgressVisible);
+    }
+
+    /// <summary>뷰모델의 0.4초 예약이 지나갔음을 확실히 하는 여유.</summary>
+    private const int ProgressRevealGraceMs = 800;
 
     // ── 취소 ─────────────────────────────────────────────────────────────────
 

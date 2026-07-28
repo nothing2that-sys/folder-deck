@@ -180,9 +180,15 @@ public sealed class DragDropTests
 
     // ── 실패 · 갱신 ──────────────────────────────────────────────────────────
 
-    /// <summary>닿을 수 없는 목적지에 놓으면 요약이 상태 바에 남는다 (§5).</summary>
+    /// <summary>
+    /// 닿을 수 없는 목적지에 놓으면 시작하기 전에 막고 이유가 상태 바에 남는다 (§5).
+    /// </summary>
+    /// <remarks>
+    /// 미리보기가 살아 있는 목적지를 하나도 못 찾으면 엔진을 부르지 않는다 — 어차피 전부
+    /// "건너뜀"으로 돌아올 것을 실행해 보고 알려 주는 것보다 낫다.
+    /// </remarks>
     [Fact]
-    public async Task DroppingOnAnUnreachableFolderLeavesAWarningThatStays()
+    public async Task DroppingOnAnUnreachableFolderIsRefusedWithAReasonThatStays()
     {
         using var f = await ReadyAsync();
         await f.ViewModel.ShowFolderAsync(f.Row("작업"));
@@ -191,7 +197,7 @@ public sealed class DragDropTests
         await f.ViewModel.DropOntoFolderAsync(
             f.Row("설비 로그").Entry, f.Rotating.BuildDragPayload()!, copy: false);
 
-        Assert.Contains("건너뜀 1", f.ViewModel.Message);
+        Assert.Contains("목적지에 닿지 못했다", f.ViewModel.Message);
         Assert.True(f.ViewModel.MessageIsWarning);
         Assert.False(f.ViewModel.MessageIsTransient);
 

@@ -652,23 +652,15 @@ public sealed partial class MainViewModel : ObservableObject
 
     private bool _isOperationRunning;
 
-    private async Task RunOperationAsync(FileOperationKind op)
+    private Task RunOperationAsync(FileOperationKind op)
     {
         var sources = Selection;
         var destinations = CheckedDestinations;
 
         if (sources.Count == 0 || destinations.Count == 0)
         {
-            return;
+            return Task.CompletedTask;
         }
-
-        var request = new FileOperationRequest(
-            op,
-            [.. sources.Select(i => new OperationItem(i.FullPath, i.IsDirectory))],
-            [.. destinations.Select(t => t.Entry.Path)],
-            ConflictPolicy.Overwrite);
-
-        var verb = op == FileOperationKind.Copy ? "복사" : "이동";
 
         // 파일 하나가 두 곳에 동시에 있을 수는 없다. 그대로 실행하면 첫 목적지로 옮겨진 뒤
         // 나머지가 전부 "원본이 없다"로 실패한다 — 시도 자체를 막고 이유를 말한다.
@@ -677,29 +669,82 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Warn($"이동은 목적지 하나만 고를 수 있다 (지금 {destinations.Count}개). " +
                  "여러 곳에 두려면 복사를 쓴다.");
-            return;
+            return Task.CompletedTask;
         }
 
-        var preview = await _engine.PreviewAsync(request).ConfigureAwait(true);
+        return StartOperationAsync(
+            op,
+            [.. sources.Select(i => new OperationItem(i.FullPath, i.IsDirectory))],
+            [.. destinations.Select(t => t.Entry.Path)],
+            confirmMove: true);
+    }
+
+    /// <summary>
+    /// 미리보기 → (필요하면) 물어보기 → 실행. 대상함 버튼과 드래그드롭이 공유한다.
+    /// </summary>
+    /// <param name="confirmMove">
+    /// 겹치는 것이 없을 때 이동 확인창을 띄울지. 대상함 버튼은 띄우고 드래그는 띄우지 않는다
+    /// (§4.2-2 — 손으로 과녁을 겨눈 한 번의 동작이다).
+    /// </param>
+    private async Task StartOperationAsync(
+        FileOperationKind op,
+        IReadOnlyList<OperationItem> items,
+        IReadOnlyList<string> destinations,
+        bool confirmMove)
+    {
+        var verb = op == FileOperationKind.Copy ? "복사" : "이동";
+
+        // 겹치는 건수는 <b>정책과 무관하게</b> 세야 한다. 엔진은 덮어쓰기일 때만 세므로
+        // (건너뛰기·이름바꾸기는 덮어쓰지 않으니까) 여기서는 항상 덮어쓰기로 훑는다.
+        var preview = await _engine
+            .PreviewAsync(new FileOperationRequest(op, items, destinations, ConflictPolicy.Overwrite))
+            .ConfigureAwait(true);
 
         if (preview.TotalItemCount == 0)
         {
-            Warn($"{verb}할 곳이 없다 — 체크한 목적지에 모두 닿지 못했다.");
+            // 대상함 버튼과 드롭이 함께 쓰는 문구다 — "체크한 목적지"라고 하면 드롭에는 거짓말이 된다.
+            Warn($"{verb}할 곳이 없다 — 목적지에 닿지 못했다.");
             return;
         }
 
         IsOperationRunning = true;
 
-        // 이동은 원본이 사라진다. 되돌릴 수 없으니 한 번 확인받는다 (§4.7 — move 는 확인 강제).
-        if (op == FileOperationKind.Move
-            && !_prompt.Confirm($"{verb} 확인", MoveWarning(preview, sources.Count)))
+        var policy = ConflictPolicy;
+
+        if (preview.TotalOverwriteCount > 0 && AskOnConflict)
         {
+            // 겹칠 때만 묻는다. 이동이면 "원본은 사라진다"까지 이 창 하나에 담는다 —
+            // 확인창과 충돌창이 잇달아 뜨면 두 번 읽고 두 번 눌러야 한다.
+            var decision = _prompt.AskConflict(
+                $"같은 이름 {preview.TotalOverwriteCount}건이 이미 있다",
+                ConflictMessage(op, preview, items.Count),
+                policy);
+
+            if (decision is null)
+            {
+                IsOperationRunning = false;
+                Inform($"{verb}를 취소했다.");
+                return;
+            }
+
+            policy = decision.Policy;
+
+            if (decision.Remember)
+            {
+                RememberConflictPolicy(policy);
+            }
+        }
+        else if (op == FileOperationKind.Move && confirmMove
+                 && !_prompt.Confirm($"{verb} 확인", MoveWarning(preview, items.Count, policy)))
+        {
+            // 이동은 원본이 사라진다. 되돌릴 수 없으니 한 번 확인받는다 (§4.7).
             IsOperationRunning = false;
             Inform("이동을 취소했다.");
             return;
         }
 
-        await RunGuardedAsync(request, verb).ConfigureAwait(true);
+        await RunGuardedAsync(new FileOperationRequest(op, items, destinations, policy), verb)
+            .ConfigureAwait(true);
     }
 
     /// <summary>
@@ -731,6 +776,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         ProgressValue = 0;
         ProgressText = $"{verb} 준비 중…";
+        _progressRevealPending = true;
         _ = RevealProgressSoonAsync();
 
         FileOperationReport report;
@@ -744,11 +790,91 @@ public sealed partial class MainViewModel : ObservableObject
         {
             // 진행 줄은 결과를 알리기 <b>전에</b> 접는다 — 부분 실패 대화상자 뒤에 다 끝난
             // 진행 막대가 남아 있으면 아직 도는 중인지 끝난 건지 알 수 없다.
+            _progressRevealPending = false;
             _operationCts = null;
             IsProgressVisible = false;
         }
 
         ReportOperation(verb, report, successMessage);
+    }
+
+    // ── 동일 이름 충돌 (§4.3 · Phase 3 Stage 4) ──────────────────────────────
+    //
+    // 엔진은 Stage 1 부터 세 정책을 다 할 줄 알았다(덮어쓰기 / 건너뛰기 / 둘 다 두기).
+    // 여기서 하는 일은 "언제 물어보고 무엇을 기억할지"뿐이다.
+
+    /// <summary>지금 쓰는 정책. 아무것도 안 정했으면 덮어쓰기 (§4.3).</summary>
+    public ConflictPolicy ConflictPolicy => Workspace.OnConflict ?? ConflictPolicy.Overwrite;
+
+    /// <summary>겹칠 때 물어보는가. 슬롯이 없는 구파일도 <b>묻는 쪽</b>이 기본이다.</summary>
+    public bool AskOnConflict => Workspace.AskOnConflict ?? true;
+
+    /// <summary>대상함에 한 줄로 보이는 지금 상태.</summary>
+    public string ConflictPolicyText => AskOnConflict
+        ? "같은 이름이 있으면 물어본다."
+        : $"같은 이름이 있으면 {PolicyVerb(ConflictPolicy)} (묻지 않음).";
+
+    /// <summary>"다시 묻기" 링크를 보일지 — 묻지 않기로 해 둔 상태에서만.</summary>
+    public bool CanRestoreConflictPrompt => !AskOnConflict;
+
+    private static string PolicyVerb(ConflictPolicy policy) => policy switch
+    {
+        ConflictPolicy.Skip => "건너뛴다",
+        ConflictPolicy.Rename => "둘 다 둔다",
+        _ => "덮어쓴다",
+    };
+
+    /// <summary>
+    /// "다음부터 묻지 않기"를 되돌린다. 묻지 않기로 해 둔 것을 잊고 조용히 덮어쓰는 일이
+    /// 없도록, 상태와 되돌릴 자리를 대상함에 늘 보여 둔다.
+    /// </summary>
+    [RelayCommand]
+    public void RestoreConflictPrompt()
+    {
+        Workspace.AskOnConflict = null;
+        NotifyConflictPolicy();
+        Save();
+        Inform("같은 이름이 있으면 다시 물어본다.");
+    }
+
+    private void RememberConflictPolicy(ConflictPolicy policy)
+    {
+        // 기본값(덮어쓰기)은 슬롯을 남기지 않는다 — rotationSlot 과 같은 결.
+        Workspace.OnConflict = policy == ConflictPolicy.Overwrite ? null : policy;
+        Workspace.AskOnConflict = false;
+        NotifyConflictPolicy();
+        Save();
+    }
+
+    private void NotifyConflictPolicy()
+    {
+        OnPropertyChanged(nameof(ConflictPolicy));
+        OnPropertyChanged(nameof(AskOnConflict));
+        OnPropertyChanged(nameof(ConflictPolicyText));
+        OnPropertyChanged(nameof(CanRestoreConflictPrompt));
+    }
+
+    /// <summary>충돌 창 본문 — 몇 건이 겹치는지, 이동이면 원본이 사라진다는 것까지.</summary>
+    private static string ConflictMessage(
+        FileOperationKind op, FileOperationPreview preview, int sourceCount)
+    {
+        var verb = op == FileOperationKind.Copy ? "복사" : "이동";
+        var text = $"{sourceCount}개를 폴더 {preview.PerDestination.Count}개로 {verb}합니다 " +
+                   $"({preview.TotalItemCount}건).{Environment.NewLine}" +
+                   $"그중 {preview.TotalOverwriteCount}건이 목적지에 같은 이름으로 이미 있습니다.";
+
+        if (op == FileOperationKind.Move)
+        {
+            text += $"{Environment.NewLine}이동이므로 원본은 사라집니다.";
+        }
+
+        if (preview.SkippedDestinations.Count > 0)
+        {
+            text += $"{Environment.NewLine}닿지 못한 목적지 " +
+                    $"{preview.SkippedDestinations.Count}개는 제외됩니다.";
+        }
+
+        return text;
     }
 
     // ── 진행 · 취소 (§1.1 — 폴더 재귀·볼륨 간 이동은 오래 걸린다) ────────────
@@ -761,6 +887,16 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>지금 도는 조작의 취소 손잡이. 도는 것이 없으면 null.</summary>
     private CancellationTokenSource? _operationCts;
+
+    /// <summary>
+    /// 진행 줄 예약이 아직 유효한가. 실행이 끝나면 내려서 <b>늦게 도착한 예약을 무시</b>한다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="IsOperationRunning"/> 으로 판단하면 안 된다 — 조작이 눈 깜짝할 사이에 끝나고
+    /// 결과 대화상자(모달)가 뜬 상태에서 0.4초가 지나면, 그 플래그는 아직 켜져 있어서
+    /// <b>다 끝난 진행 막대가 대화상자 뒤에 되살아난다</b>(실제로 그랬다).
+    /// </remarks>
+    private bool _progressRevealPending;
 
     /// <summary>진행 줄이 보이는가. <see cref="IsOperationRunning"/> 보다 늦게 켜진다.</summary>
     [ObservableProperty]
@@ -795,7 +931,7 @@ public sealed partial class MainViewModel : ObservableObject
         await Task.Delay(ProgressRevealDelayMs).ConfigureAwait(true);
 
         // 그새 끝났으면 띄우지 않는다.
-        if (IsOperationRunning)
+        if (_progressRevealPending)
         {
             IsProgressVisible = true;
         }
@@ -895,6 +1031,10 @@ public sealed partial class MainViewModel : ObservableObject
     /// 대상함 버튼의 이동과 달리 <b>확인창을 띄우지 않는다</b>. 드래그는 손으로 과녁을 겨눈
     /// 한 번의 동작이라 "무엇을 어디로"가 이미 눈앞에 있고, 매번 대화상자가 뜨면 즉흥적인
     /// 단건 이동이라는 이 경로의 존재 이유가 없어진다. 대신 결과를 상태 바에 반드시 적는다.
+    /// <para>
+    /// 다만 <b>같은 이름이 겹치면 여기서도 묻는다</b>(§4.3) — 그때는 멈춰야 할 이유가 실제로
+    /// 있고, 안 겹치는 대부분의 드롭은 여전히 창 없이 지나간다.
+    /// </para>
     /// </remarks>
     public async Task DropOntoFolderAsync(FolderEntry destination, FileDropPayload payload, bool copy)
     {
@@ -903,13 +1043,11 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        var request = new FileOperationRequest(
+        await StartOperationAsync(
             copy ? FileOperationKind.Copy : FileOperationKind.Move,
             payload.Items,
             [destination.Path],
-            ConflictPolicy.Overwrite);
-
-        await RunGuardedAsync(request, copy ? "복사" : "이동").ConfigureAwait(true);
+            confirmMove: false).ConfigureAwait(true);
     }
 
     // ── 휴지통 정리 (§4.4 · Phase 3 Stage 3) ─────────────────────────────────
@@ -984,14 +1122,17 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    private static string MoveWarning(FileOperationPreview preview, int sourceCount)
+    private static string MoveWarning(
+        FileOperationPreview preview, int sourceCount, ConflictPolicy policy)
     {
         var text = $"파일 {sourceCount}개를 폴더 {preview.PerDestination.Count}개로 옮긴다 " +
                    $"({preview.TotalItemCount}건).{Environment.NewLine}원본은 사라진다.";
 
+        // 겹치는 것이 있는데도 여기까지 왔다면 "묻지 않기"로 해 둔 상태다 — 무엇을 할지 적는다.
         if (preview.TotalOverwriteCount > 0)
         {
-            text += $"{Environment.NewLine}같은 이름 {preview.TotalOverwriteCount}건을 덮어쓴다.";
+            text += $"{Environment.NewLine}같은 이름 {preview.TotalOverwriteCount}건은 " +
+                    $"{PolicyVerb(policy)}.";
         }
 
         if (preview.SkippedDestinations.Count > 0)

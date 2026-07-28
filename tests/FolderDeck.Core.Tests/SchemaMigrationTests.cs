@@ -6,8 +6,8 @@ using FolderDeck.Core.Storage;
 namespace FolderDeck.Core.Tests;
 
 /// <summary>
-/// schemaVersion 1 → 2 (<c>leftLayout</c>) → 3 (<c>grid</c>·<c>tiles</c>·<c>rotationSlot</c>).
-/// 구파일을 거부하지 않는다.
+/// schemaVersion 1 → 2 (<c>leftLayout</c>) → 3 (<c>grid</c>·<c>tiles</c>·<c>rotationSlot</c>)
+/// → 4 (<c>onConflict</c>·<c>askOnConflict</c>). 구파일을 거부하지 않는다.
 /// </summary>
 public sealed class SchemaMigrationTests : IDisposable
 {
@@ -66,9 +66,9 @@ public sealed class SchemaMigrationTests : IDisposable
     }
 
     [Fact]
-    public void CurrentSchemaVersionIsThree()
+    public void CurrentSchemaVersionIsFour()
     {
-        Assert.Equal(3, Workspace.CurrentSchemaVersion);
+        Assert.Equal(4, Workspace.CurrentSchemaVersion);
     }
 
     [Fact]
@@ -122,9 +122,9 @@ public sealed class SchemaMigrationTests : IDisposable
         Assert.Null(workspace.Folders[0].RotationSlot);
     }
 
-    /// <summary>구파일을 열어 배치를 유도하고 저장하면 v3 파일이 된다.</summary>
+    /// <summary>구파일을 열어 배치를 유도하고 저장하면 최신 버전 파일이 된다.</summary>
     [Fact]
-    public void DerivingTilesFromAV1FilePromotesItToV3()
+    public void DerivingTilesFromAV1FilePromotesItToTheCurrentVersion()
     {
         var id = WriteV1File();
         var workspace = _store.LoadWorkspace(id).ValueOrThrow();
@@ -133,7 +133,7 @@ public sealed class SchemaMigrationTests : IDisposable
         Assert.Null(_store.SaveWorkspace(workspace));
 
         var json = File.ReadAllText(_paths.WorkspaceFile(id));
-        Assert.Contains("\"schemaVersion\": 3", json);
+        Assert.Contains($"\"schemaVersion\": {Workspace.CurrentSchemaVersion}", json);
         Assert.Contains("\"tiles\"", json);
         Assert.Contains("\"rotationIndex\": 1", json);
         Assert.Contains("\"kind\": \"rotating\"", json);
@@ -238,7 +238,59 @@ public sealed class SchemaMigrationTests : IDisposable
         var json = File.ReadAllText(_paths.WorkspaceFile(workspace.Id));
 
         Assert.DoesNotContain("leftLayout", json);
-        Assert.Contains("\"schemaVersion\": 3", json);
+        Assert.Contains($"\"schemaVersion\": {Workspace.CurrentSchemaVersion}", json);
+    }
+
+    // ── v3 → v4: onConflict / askOnConflict (§4.3) ───────────────────────────
+
+    /// <summary>
+    /// 슬롯이 없는 구파일은 "묻는다 · 덮어쓴다"로 읽혀야 한다. <c>askOnConflict</c> 를
+    /// <c>bool</c> 로 뒀다면 여기서 <c>false</c> 가 되어 <b>묻지 않고 덮어쓰는</b> 상태가 됐다.
+    /// </summary>
+    [Fact]
+    public void MissingConflictSlotsReadAsNullSoCallersAskFirst()
+    {
+        var id = WriteV1File();
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        Assert.Null(workspace.OnConflict);
+        Assert.Null(workspace.AskOnConflict);
+    }
+
+    [Fact]
+    public void ConflictSlotsRoundTrip()
+    {
+        var workspace = new Workspace
+        {
+            Title = "충돌 설정",
+            OnConflict = ConflictPolicy.Skip,
+            AskOnConflict = false,
+        };
+
+        Assert.Null(_store.SaveWorkspace(workspace));
+        var json = File.ReadAllText(_paths.WorkspaceFile(workspace.Id));
+
+        // enum 은 camelCase 문자열로 나간다 — 손으로 열어 읽을 수 있어야 한다.
+        Assert.Contains("\"onConflict\": \"skip\"", json);
+        Assert.Contains("\"askOnConflict\": false", json);
+
+        var reloaded = _store.LoadWorkspace(workspace.Id).ValueOrThrow();
+        Assert.Equal(ConflictPolicy.Skip, reloaded.OnConflict);
+        Assert.False(reloaded.AskOnConflict);
+    }
+
+    /// <summary>기본값이면 슬롯을 남기지 않는다 — 아무 뜻도 없는 줄을 파일에 두지 않는다.</summary>
+    [Fact]
+    public void ConflictSlotsAreOmittedWhenDefault()
+    {
+        var workspace = new Workspace { Title = "기본 충돌 설정" };
+
+        Assert.Null(_store.SaveWorkspace(workspace));
+        var json = File.ReadAllText(_paths.WorkspaceFile(workspace.Id));
+
+        Assert.DoesNotContain("onConflict", json);
+        Assert.DoesNotContain("askOnConflict", json);
     }
 
     [Fact]

@@ -363,8 +363,31 @@
                             <DockPanel Margin="6">
                                 <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
                                     <TextBlock Text="{Binding OperationSummary}" FontSize="11"
-                                               TextWrapping="Wrap" Margin="2,0,2,6"
+                                               TextWrapping="Wrap" Margin="2,0,2,4"
                                                Foreground="{StaticResource Brush.TextSecondary}" />
+
+                                    <!-- 동일 이름 충돌 (§4.3). 평소엔 "물어본다"고만 적혀 있고,
+                                         "다음부터 묻지 않기"를 켠 뒤에는 무엇을 하는지와
+                                         되돌릴 자리가 같이 보인다 — 잊고 조용히 덮어쓰지 않게. -->
+                                    <StackPanel Orientation="Horizontal" Margin="2,0,2,6">
+                                        <TextBlock Text="{Binding ConflictPolicyText}" FontSize="11"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{StaticResource Brush.TextSecondary}" />
+                                        <Button Style="{StaticResource LinkButton}"
+                                                Content="다시 묻기" FontSize="11" Margin="4,0,0,0"
+                                                Command="{Binding RestoreConflictPromptCommand}"
+                                                ToolTip="같은 이름이 있을 때 다시 물어보게 되돌린다"
+                                                Visibility="{Binding CanRestoreConflictPrompt,
+                                                             Converter={StaticResource BoolToVisibility}}">
+                                            <Button.Resources>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground"
+                                                            Value="{StaticResource Brush.DropValid}" />
+                                                </Style>
+                                            </Button.Resources>
+                                        </Button>
+                                    </StackPanel>
                                     <StackPanel Orientation="Horizontal">
                                         <Button Content="복사" Padding="14,4" Margin="0,0,6,0"
                                                 Command="{Binding CopySelectionCommand}"

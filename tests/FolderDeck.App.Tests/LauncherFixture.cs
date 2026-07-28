@@ -33,6 +33,28 @@ internal sealed class FakeUserPrompt : IUserPrompt
     }
 
     public void Report(string title, string message) => Reports.Add(message);
+
+    // ── 동일 이름 충돌 (§4.3) ────────────────────────────────────────────────
+
+    /// <summary>충돌 창이 뜬 횟수와 본문. 안 겹치면 비어 있어야 한다.</summary>
+    public List<string> ConflictMessages { get; } = [];
+
+    /// <summary>
+    /// 창이 돌려줄 답. 기본은 "덮어쓰기 · 기억 안 함"이라 Stage 3 까지의 동작이 그대로다.
+    /// null 로 두면 사용자가 취소한 것.
+    /// </summary>
+    public ConflictDecision? ConflictAnswer { get; set; } =
+        new(ConflictPolicy.Overwrite, Remember: false);
+
+    /// <summary>창을 띄울 때 넘어온 "지금 정책" — 기본 단추가 무엇이었는지 확인용.</summary>
+    public ConflictPolicy? SuggestedPolicy { get; private set; }
+
+    public ConflictDecision? AskConflict(string title, string message, ConflictPolicy suggested)
+    {
+        ConflictMessages.Add(message);
+        SuggestedPolicy = suggested;
+        return ConflictAnswer;
+    }
 }
 
 /// <summary>런처 뷰모델 + 격리된 <c>%APPDATA%</c> 대체 폴더.</summary>
