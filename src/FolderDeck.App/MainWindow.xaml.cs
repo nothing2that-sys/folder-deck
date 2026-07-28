@@ -62,6 +62,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        // 파일 조작 중이면 건너뛴다 — 확인·결과 대화상자가 이 활성화를 일으키는데,
+        // 조작이 끝나고 스스로 한 번 읽으므로 여기서 또 읽으면 열거가 겹친다.
+        if (ViewModel.IsOperationRunning)
+        {
+            return;
+        }
+
         // 창으로 돌아오면 재조회 (§8 — 수동 F5 + 창 활성화 시 재조회).
         await ViewModel.RefreshAllCommand.ExecuteAsync(null);
     }
@@ -145,6 +152,13 @@ public partial class MainWindow : Window
             }
         }
     }
+
+    /// <summary>
+    /// 대상함 체크는 실행 대상 수를 바꾼다 — 요약과 버튼 활성 상태를 다시 계산시킨다.
+    /// (개별 <c>IsChecked</c> 는 뷰모델마다라 루트가 스스로 알 방법이 없다.)
+    /// </summary>
+    private void OnTrayCheckChanged(object sender, RoutedEventArgs e) =>
+        ViewModel.NotifyOperationState();
 
     private void OnMessageExpired(object? sender, EventArgs e)
     {

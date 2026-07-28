@@ -20,6 +20,40 @@ public partial class FolderPanelView : UserControl
     private FolderPanelViewModel? ViewModel => DataContext as FolderPanelViewModel;
 
     /// <summary>
+    /// <c>ListView.SelectedItems</c> 는 바인딩할 수 없는 읽기 전용 컬렉션이라 여기서 옮긴다
+    /// (§4.2 다중 선택). 두 ListView(details/list) 중 지금 보이는 쪽만 값을 낸다.
+    /// </summary>
+    private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ListView list || ViewModel is not { } panel || !list.IsVisible)
+        {
+            return;
+        }
+
+        panel.SelectedItems = [.. list.SelectedItems.OfType<FileItemViewModel>()];
+    }
+
+    /// <summary>다른 타일이 선택을 가져갔다 — 목록에서도 실제로 풀어 준다.</summary>
+    private void OnSelectionCleared(object? sender, EventArgs e)
+    {
+        DetailsList.UnselectAll();
+        SimpleList.UnselectAll();
+    }
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.OldValue is FolderPanelViewModel old)
+        {
+            old.SelectionCleared -= OnSelectionCleared;
+        }
+
+        if (e.NewValue is FolderPanelViewModel fresh)
+        {
+            fresh.SelectionCleared += OnSelectionCleared;
+        }
+    }
+
+    /// <summary>
     /// 검색창을 펴고 포커스를 준다 (<c>Ctrl+F</c> · 접힌 검색줄 클릭).
     /// </summary>
     public void FocusSearch()

@@ -23,11 +23,16 @@ internal sealed class FakeUserPrompt : IUserPrompt
 
     public List<string> Messages { get; } = [];
 
+    /// <summary>Report 로 올라온 것만 따로 — 부분 실패 내역 검증용.</summary>
+    public List<string> Reports { get; } = [];
+
     public bool Confirm(string title, string message)
     {
         Messages.Add(message);
         return Answer;
     }
+
+    public void Report(string title, string message) => Reports.Add(message);
 }
 
 /// <summary>런처 뷰모델 + 격리된 <c>%APPDATA%</c> 대체 폴더.</summary>

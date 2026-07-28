@@ -114,7 +114,11 @@ public sealed class FileOperationEngineTests : IDisposable
         Assert.Equal("A", File.ReadAllText(Path.Combine(one, "a.txt")));
     }
 
-    /// <summary>목적지가 여럿인 이동은 첫 목적지에서 원본이 사라진다 — 그래서 UI 가 확인을 받는다.</summary>
+    /// <summary>
+    /// 목적지가 여럿인 이동은 첫 목적지에서 원본이 사라지고 나머지가 실패한다. 엔진은
+    /// 시키는 대로 할 뿐이고, <b>그런 요청을 만들지 않는 것은 진입점의 몫</b>이다 —
+    /// UI 는 목적지 2개 이상에서의 이동을 아예 거부한다(§4.2).
+    /// </summary>
     [Fact]
     public async Task MoveToTwoDestinationsSucceedsOnceAndReportsTheRest()
     {

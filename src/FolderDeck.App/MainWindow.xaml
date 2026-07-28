@@ -139,9 +139,21 @@
                                             CommandParameter="{Binding}"
                                             PreviewMouseLeftButtonDown="OnFolderRowMouseDown"
                                             PreviewMouseMove="OnFolderRowMouseMove"
-                                            ToolTip="{Binding PathText}">
+                                            ToolTip="{Binding PathText}"
+                                            Tag="{Binding DataContext,
+                                                  RelativeSource={RelativeSource AncestorType=Window}}">
                                         <Button.ContextMenu>
                                             <ContextMenu>
+                                                <!-- 대상함 출처: 왼쪽 리스트가 진입점이다
+                                                     (임의 경로 직접 추가는 후순위, §11). -->
+                                                <MenuItem Header="대상함에 추가"
+                                                          Command="{Binding PlacementTarget.Tag.AddToTrayCommand,
+                                                                    RelativeSource={RelativeSource
+                                                                        AncestorType=ContextMenu}}"
+                                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                    RelativeSource={RelativeSource
+                                                                        AncestorType=ContextMenu}}" />
+                                                <Separator />
                                                 <!-- 상시 칸에 못박힌 폴더는 순환 칸으로 가지 않는다.
                                                      메뉴를 없애 버리면 왜 없는지 알 수 없으니,
                                                      비활성으로 두고 이유를 헤더에 적는다. -->
@@ -296,8 +308,51 @@
                                 Visibility="{Binding LowerCollapsed,
                                              Converter={StaticResource InverseBoolToVisibility}}">
                         <TabItem Header="복사 대상함">
-                            <TextBlock Text="Phase 3 에서 채운다.&#x0a;복사·이동 목적지를 여기에 상주시킨다."
-                                       Foreground="{StaticResource Brush.TextSecondary}" Margin="10" TextWrapping="Wrap" />
+                            <!-- 체크된 폴더가 목적지다. 다중 체크 = 동시 복사 (§4.2-1). -->
+                            <DockPanel Margin="6">
+                                <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                                    <TextBlock Text="{Binding OperationSummary}" FontSize="11"
+                                               TextWrapping="Wrap" Margin="2,0,2,6"
+                                               Foreground="{StaticResource Brush.TextSecondary}" />
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="복사" Padding="14,4" Margin="0,0,6,0"
+                                                Command="{Binding CopySelectionCommand}"
+                                                ToolTip="고른 파일을 체크된 폴더 전부에 복사한다" />
+                                        <Button Content="이동" Padding="14,4"
+                                                Command="{Binding MoveSelectionCommand}"
+                                                ToolTip="고른 파일을 체크된 폴더로 옮긴다 — 원본이 사라지므로 확인을 받는다" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <TextBlock Text="왼쪽 폴더를 우클릭해 &#x27;대상함에 추가&#x27;."
+                                           FontSize="11" TextWrapping="Wrap" Margin="2,4"
+                                           Foreground="{StaticResource Brush.TextSecondary}"
+                                           Visibility="{Binding TrayIsEmpty,
+                                                        Converter={StaticResource BoolToVisibility}}" />
+
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding Tray}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:TrayEntryViewModel}">
+                                                <DockPanel Margin="0,1" ToolTip="{Binding PathText}">
+                                                    <Button DockPanel.Dock="Right" Content="✕"
+                                                            Style="{StaticResource NavButton}"
+                                                            Command="{Binding RemoveCommand}"
+                                                            AutomationProperties.Name="대상함에서 빼기"
+                                                            ToolTip="대상함에서 뺀다 (폴더는 그대로)" />
+                                                    <CheckBox IsChecked="{Binding IsChecked}"
+                                                              VerticalContentAlignment="Center"
+                                                              Checked="OnTrayCheckChanged"
+                                                              Unchecked="OnTrayCheckChanged">
+                                                        <TextBlock Text="{Binding DisplayName}"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                    </CheckBox>
+                                                </DockPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
                         </TabItem>
                         <TabItem Header="매크로">
                             <TextBlock Text="Phase 3 에서 채운다.&#x0a;저장된 규칙 카드가 여기 뜬다."

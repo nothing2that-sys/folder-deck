@@ -103,4 +103,34 @@ public sealed class AtomicWriteTests
         Assert.False(bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF);
         Assert.Contains("한글 제목", File.ReadAllText(temp.Paths.WorkspaceFile(workspace.Id)));
     }
+
+    /// <summary>
+    /// 디바운스 저장(타이머 스레드)과 즉시 저장(UI 스레드)이 같은 파일에 겹칠 수 있다.
+    /// 임시 파일 이름이 대상마다 하나뿐이라 예전에는 공유 위반으로 저장이 실패했다.
+    /// </summary>
+    [Fact]
+    public void ConcurrentWritesToTheSameFileAllSucceed()
+    {
+        using var temp = new TempStore();
+        var target = Path.Combine(temp.Paths.WorkspacesDir, "race.json");
+        var failures = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+
+        Parallel.For(0, 40, i =>
+        {
+            try
+            {
+                AtomicFile.WriteAllText(target, $$"""{ "n": {{i}} }""");
+            }
+            catch (Exception ex)
+            {
+                failures.Add(ex);
+            }
+        });
+
+        Assert.Empty(failures);
+        Assert.StartsWith("{", File.ReadAllText(target));
+
+        // 교체가 끝났으면 임시 파일은 남지 않는다.
+        Assert.Empty(Directory.GetFiles(temp.Paths.WorkspacesDir, "*" + AtomicFile.TempSuffix));
+    }
 }

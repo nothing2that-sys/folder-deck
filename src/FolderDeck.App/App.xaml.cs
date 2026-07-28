@@ -3,6 +3,7 @@ using FolderDeck.App.Services;
 using FolderDeck.App.ViewModels;
 using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Models;
+using FolderDeck.Core.Operations;
 using FolderDeck.Core.Storage;
 
 namespace FolderDeck.App;
@@ -72,7 +73,13 @@ public partial class App : Application
         }
 
         var viewModel = new MainViewModel(
-            workspace, _store!, new FolderEnumerator(), new ShellLauncher(), new ClipboardService());
+            workspace,
+            _store!,
+            new FolderEnumerator(),
+            new ShellLauncher(),
+            new ClipboardService(),
+            new FileOperationEngine(new RecycleBin()),
+            new UserPrompt());
         var window = new MainWindow(viewModel);
 
         // 런처를 닫기 전에 메인 창을 띄운다 — 순서가 바뀌면 창이 0개가 되는 순간에

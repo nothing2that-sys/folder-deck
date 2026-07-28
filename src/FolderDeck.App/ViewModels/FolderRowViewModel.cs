@@ -21,8 +21,15 @@ public sealed partial class FolderRowViewModel(FolderEntry entry) : ObservableOb
 
     public bool HasDescription => !string.IsNullOrWhiteSpace(Entry.Description);
 
-    /// <summary>상시(실선 pin) 대 순환 전용(점선 글리프). §3.2</summary>
-    public bool Pinned => Entry.Pinned;
+    /// <summary>
+    /// 상시(실선 pin) 대 순환 전용(점선 글리프). §3.2
+    /// <para>
+    /// Phase 2 부터 "상시"는 <b>상시 타일이 있다</b>는 뜻이다 — <c>folders[].pinned</c> 가
+    /// 아니라. 옛 플래그를 그대로 보면 빈 칸에 폴더를 넣어 상시로 만들어도 글리프가
+    /// 순환인 채로 남는다(실제로 그랬다). 저장 필드는 이 상태의 그림자로 따라간다.
+    /// </para>
+    /// </summary>
+    public bool Pinned => HasPinnedTile;
 
     /// <summary>앵커를 벗어나 있으면 그 상태 — 예: "지금 src › Recipe 안" (§3.2).</summary>
     [ObservableProperty]
@@ -62,6 +69,7 @@ public sealed partial class FolderRowViewModel(FolderEntry entry) : ObservableOb
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanPlaceInGrid))]
+    [NotifyPropertyChangedFor(nameof(Pinned))]
     private bool hasPinnedTile;
 
     /// <summary>배치 편집에서 빈 칸에 넣을 수 있는 폴더인가.</summary>

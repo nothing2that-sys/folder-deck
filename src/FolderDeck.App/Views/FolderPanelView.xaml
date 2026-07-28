@@ -8,6 +8,7 @@
              d:DataContext="{d:DesignInstance Type=vm:FolderPanelViewModel}"
              Focusable="True"
              PreviewMouseDown="OnPreviewMouseDown"
+             DataContextChanged="OnDataContextChanged"
              Margin="4">
 
     <!-- 앵커 복귀 Alt+Home, 상위 Alt+↑, 뒤로/앞으로 Alt+←/→.
@@ -248,6 +249,11 @@
                                FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
                                Visibility="{Binding IsAwayFromAnchor,
                                                     Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock Text="{Binding SelectionText}" FontSize="11" Margin="6,0,0,0"
+                               VerticalAlignment="Center" FontWeight="SemiBold"
+                               Foreground="{StaticResource Brush.DropValid}"
+                               Visibility="{Binding HasSelection,
+                                                    Converter={StaticResource BoolToVisibility}}" />
                     <TextBlock Text="읽는 중…" Foreground="{StaticResource Brush.TextSecondary}"
                                FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
                                Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}" />
@@ -312,9 +318,11 @@
 
                 <!-- ── 파일 목록 · 가상화 켬 (§8 — 로그 수천 개 폴더에서 UI 멈춤 방지) ──
                      View 는 Style 로만 정한다(로컬 값을 주면 검색 시 열 교체 트리거가 이기지 못한다). -->
-                <ListView ItemsSource="{Binding DisplayItems}"
+                <ListView x:Name="DetailsList" ItemsSource="{Binding DisplayItems}"
                           ItemContainerStyle="{StaticResource FileItemContainer}"
                           BorderThickness="0" Background="Transparent"
+                          SelectionMode="Extended"
+                          SelectionChanged="OnSelectionChanged"
                           VirtualizingPanel.IsVirtualizing="True"
                           VirtualizingPanel.VirtualizationMode="Recycling"
                           ScrollViewer.CanContentScroll="True">
@@ -339,9 +347,11 @@
                     </ListView.Style>
                 </ListView>
 
-                <ListView ItemsSource="{Binding DisplayItems}"
+                <ListView x:Name="SimpleList" ItemsSource="{Binding DisplayItems}"
                           ItemContainerStyle="{StaticResource FileItemContainer}"
                           BorderThickness="0" Background="Transparent"
+                          SelectionMode="Extended"
+                          SelectionChanged="OnSelectionChanged"
                           VirtualizingPanel.IsVirtualizing="True"
                           VirtualizingPanel.VirtualizationMode="Recycling"
                           ScrollViewer.CanContentScroll="True"

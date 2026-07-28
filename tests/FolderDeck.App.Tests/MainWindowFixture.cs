@@ -2,6 +2,7 @@ using FolderDeck.App.Services;
 using FolderDeck.App.ViewModels;
 using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Models;
+using FolderDeck.Core.Operations;
 using FolderDeck.Core.Storage;
 
 namespace FolderDeck.App.Tests;
@@ -42,6 +43,34 @@ internal sealed class FakeClipboardService : IClipboardService
     {
         Texts.Add(text);
         return Error;
+    }
+}
+
+/// <summary>진짜 휴지통을 건드리지 않고 지운다 — 무엇을 보냈는지만 적는다.</summary>
+internal sealed class FakeRecycleBin : IRecycleBin
+{
+    public List<string> Sent { get; } = [];
+
+    public string? Error { get; set; }
+
+    public string? Send(string path)
+    {
+        if (Error is not null)
+        {
+            return Error;
+        }
+
+        Sent.Add(path);
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+        else if (Directory.Exists(path))
+        {
+            Directory.Delete(path, recursive: true);
+        }
+
+        return null;
     }
 }
 
@@ -119,7 +148,11 @@ internal sealed class MainWindowFixture : IDisposable
         Store = new WorkspaceStore(Paths, new DebouncedSaveScheduler(TimeSpan.FromMilliseconds(20)));
         Shell = new FakeShellLauncher();
         Clipboard = new FakeClipboardService();
-        ViewModel = new MainViewModel(Workspace, Store, new FolderEnumerator(), Shell, Clipboard);
+        RecycleBin = new FakeRecycleBin();
+        Prompt = new FakeUserPrompt();
+        Engine = new FileOperationEngine(RecycleBin);
+        ViewModel = new MainViewModel(
+            Workspace, Store, new FolderEnumerator(), Shell, Clipboard, Engine, Prompt);
     }
 
     public string CodePath { get; }
@@ -140,6 +173,12 @@ internal sealed class MainWindowFixture : IDisposable
     public FakeShellLauncher Shell { get; }
 
     public FakeClipboardService Clipboard { get; }
+
+    public FakeRecycleBin RecycleBin { get; }
+
+    public FakeUserPrompt Prompt { get; }
+
+    public FileOperationEngine Engine { get; }
 
     public MainViewModel ViewModel { get; }
 

@@ -9,6 +9,7 @@ using FolderDeck.App.Services;
 using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Layout;
 using FolderDeck.Core.Models;
+using FolderDeck.Core.Operations;
 using FolderDeck.Core.Storage;
 
 namespace FolderDeck.App.ViewModels;
@@ -20,6 +21,8 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IFolderEnumerator _enumerator;
     private readonly IShellLauncher _shell;
     private readonly IClipboardService _clipboard;
+    private readonly IFileOperationEngine _engine;
+    private readonly IUserPrompt _prompt;
 
     /// <summary>디바운스 저장 실패는 스레드 풀에서 올라온다 — UI 스레드로 되돌리기 위해 잡아 둔다.</summary>
     private readonly SynchronizationContext? _uiContext = SynchronizationContext.Current;
@@ -29,13 +32,17 @@ public sealed partial class MainViewModel : ObservableObject
         IWorkspaceStore store,
         IFolderEnumerator enumerator,
         IShellLauncher shell,
-        IClipboardService clipboard)
+        IClipboardService clipboard,
+        IFileOperationEngine engine,
+        IUserPrompt prompt)
     {
         Workspace = workspace;
         _store = store;
         _enumerator = enumerator;
         _shell = shell;
         _clipboard = clipboard;
+        _engine = engine;
+        _prompt = prompt;
 
         Rows = [.. workspace.Folders.Select(f => new FolderRowViewModel(f))];
 
@@ -52,6 +59,13 @@ public sealed partial class MainViewModel : ObservableObject
 
         Cells = [.. Enumerable.Range(0, GridRows)
             .SelectMany(y => Enumerable.Range(0, GridCols).Select(x => new GridCellViewModel(x, y)))];
+
+        // 대상함: copyTray[] 는 폴더 id 목록이다. 사라진 id 는 조용히 흘린다 —
+        // 폴더 등록이 없어졌으면 목적지로 쓸 수도 없다.
+        Tray = [.. (workspace.CopyTray ?? [])
+            .Select(id => Rows.FirstOrDefault(r => r.Entry.Id == id))
+            .Where(r => r is not null)
+            .Select(r => new TrayEntryViewModel(r!.Entry, RemoveFromTray))];
 
         RefreshDerivedLayout();
 
@@ -490,6 +504,261 @@ public sealed partial class MainViewModel : ObservableObject
         Inform($"{choice.Row.DisplayName} → {choice.Label} 칸");
     }
 
+    // ── 복사 대상함 + 다중 선택 복사/이동 (§3.2 · §4.2 · Phase 3 Stage 2) ────
+
+    /// <summary>목적지로 상주하는 폴더들. 체크된 것이 이번 실행의 목적지다.</summary>
+    public ObservableCollection<TrayEntryViewModel> Tray { get; }
+
+    public bool TrayIsEmpty => Tray.Count == 0;
+
+    /// <summary>
+    /// 지금 선택을 들고 있는 패널. 선택은 타일 하나에만 존재한다 (§4.8) —
+    /// "현재 선택"이 어느 타일 것인지 흔들리면 복사가 엉뚱한 파일을 집는다.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelection))]
+    [NotifyPropertyChangedFor(nameof(OperationSummary))]
+    [NotifyPropertyChangedFor(nameof(CanRunOperation))]
+    private FolderPanelViewModel? selectionOwner;
+
+    public bool HasSelection => SelectionOwner?.HasSelection == true;
+
+    private IReadOnlyList<FileItemViewModel> Selection => SelectionOwner?.SelectedItems ?? [];
+
+    private List<TrayEntryViewModel> CheckedDestinations => [.. Tray.Where(t => t.IsChecked)];
+
+    /// <summary>실행하기 전에 "무엇 → 어디, 몇 건"을 미리 보여준다 (§4.7 안전장치).</summary>
+    public string OperationSummary
+    {
+        get
+        {
+            var sources = Selection.Count;
+            var destinations = CheckedDestinations.Count;
+
+            if (sources == 0)
+            {
+                return "그리드에서 파일을 고르면 여기에 요약이 나온다.";
+            }
+
+            if (destinations == 0)
+            {
+                return $"파일 {sources}개 선택 — 대상함에서 목적지를 체크하라.";
+            }
+
+            var text = $"파일 {sources}개 → 폴더 {destinations}개 = {sources * destinations}건";
+
+            // 이동은 원본을 옮기는 것이라 목적지가 하나여야 한다. 누르기 전에 미리 말해 준다.
+            return destinations > 1 ? text + " · 이동은 목적지 하나만" : text;
+        }
+    }
+
+    public bool CanRunOperation => HasSelection && CheckedDestinations.Count > 0;
+
+    /// <summary>왼쪽 리스트 폴더를 대상함에 넣는다 (§11 — 임의 경로 추가는 후순위).</summary>
+    [RelayCommand]
+    public void AddToTray(FolderRowViewModel? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        if (Tray.Any(t => t.Entry.Id == row.Entry.Id))
+        {
+            Warn($"대상함에 이미 있다: {row.DisplayName}", transient: true);
+            return;
+        }
+
+        Tray.Add(new TrayEntryViewModel(row.Entry, RemoveFromTray));
+        SaveTray();
+        Inform($"대상함에 넣었다: {row.DisplayName}");
+    }
+
+    private void RemoveFromTray(TrayEntryViewModel entry)
+    {
+        if (Tray.Remove(entry))
+        {
+            SaveTray();
+            Inform($"대상함에서 뺐다: {entry.DisplayName}");
+        }
+    }
+
+    private void SaveTray()
+    {
+        // 비면 슬롯 자체를 지운다 — 빈 배열을 파일에 남기지 않는다.
+        Workspace.CopyTray = Tray.Count == 0 ? null : [.. Tray.Select(t => t.Entry.Id)];
+        OnPropertyChanged(nameof(TrayIsEmpty));
+        NotifyOperationState();
+        Save();
+    }
+
+    /// <summary>체크가 바뀌면 요약과 버튼 상태를 다시 계산한다.</summary>
+    public void NotifyOperationState()
+    {
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(OperationSummary));
+        OnPropertyChanged(nameof(CanRunOperation));
+        CopySelectionCommand.NotifyCanExecuteChanged();
+        MoveSelectionCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>패널이 선택을 얻거나 잃었다. 선택은 한 타일에만 남긴다 (§4.8).</summary>
+    public void OnPanelSelectionChanged(FolderPanelViewModel panel)
+    {
+        ArgumentNullException.ThrowIfNull(panel);
+
+        if (panel.HasSelection)
+        {
+            foreach (var other in Panels.Where(p => !ReferenceEquals(p, panel)))
+            {
+                other.ClearSelection();
+            }
+
+            SelectionOwner = panel;
+        }
+        else if (ReferenceEquals(SelectionOwner, panel))
+        {
+            SelectionOwner = null;
+        }
+
+        NotifyOperationState();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRunOperation))]
+    public Task CopySelectionAsync() => RunOperationAsync(FileOperationKind.Copy);
+
+    [RelayCommand(CanExecute = nameof(CanRunOperation))]
+    public Task MoveSelectionAsync() => RunOperationAsync(FileOperationKind.Move);
+
+    /// <summary>
+    /// 파일 조작이 도는 중인가. 확인·결과 대화상자가 창을 껐다 켜면서 "창 활성화 시 재조회"
+    /// (§8)를 불러 실행 중의 새로고침과 겹친다 — 같은 폴더를 두 번 읽을 뿐 아니라
+    /// 열거가 서로를 취소하며 엉킨다. 조작이 끝나고 한 번만 읽는다.
+    /// </summary>
+    public bool IsOperationRunning { get; private set; }
+
+    private async Task RunOperationAsync(FileOperationKind op)
+    {
+        var sources = Selection;
+        var destinations = CheckedDestinations;
+
+        if (sources.Count == 0 || destinations.Count == 0)
+        {
+            return;
+        }
+
+        var request = new FileOperationRequest(
+            op,
+            [.. sources.Select(i => new OperationItem(i.FullPath, i.IsDirectory))],
+            [.. destinations.Select(t => t.Entry.Path)],
+            ConflictPolicy.Overwrite);
+
+        var verb = op == FileOperationKind.Copy ? "복사" : "이동";
+
+        // 파일 하나가 두 곳에 동시에 있을 수는 없다. 그대로 실행하면 첫 목적지로 옮겨진 뒤
+        // 나머지가 전부 "원본이 없다"로 실패한다 — 시도 자체를 막고 이유를 말한다.
+        // (복사는 다중 목적지가 정상이다, §4.2.)
+        if (op == FileOperationKind.Move && destinations.Count > 1)
+        {
+            Warn($"이동은 목적지 하나만 고를 수 있다 (지금 {destinations.Count}개). " +
+                 "여러 곳에 두려면 복사를 쓴다.");
+            return;
+        }
+
+        var preview = await _engine.PreviewAsync(request).ConfigureAwait(true);
+
+        if (preview.TotalItemCount == 0)
+        {
+            Warn($"{verb}할 곳이 없다 — 체크한 목적지에 모두 닿지 못했다.");
+            return;
+        }
+
+        IsOperationRunning = true;
+
+        // 이동은 원본이 사라진다. 되돌릴 수 없으니 한 번 확인받는다 (§4.7 — move 는 확인 강제).
+        if (op == FileOperationKind.Move
+            && !_prompt.Confirm($"{verb} 확인", MoveWarning(preview, sources.Count)))
+        {
+            IsOperationRunning = false;
+            Inform("이동을 취소했다.");
+            return;
+        }
+
+        try
+        {
+            var report = await _engine.ExecuteAsync(request).ConfigureAwait(true);
+            ReportOperation(verb, report);
+        }
+        finally
+        {
+            // 옮긴 뒤의 실제 상태를 보여준다 — 목록이 옛것이면 방금 한 일을 못 믿는다.
+            await RefreshAllPanelsAsync().ConfigureAwait(true);
+            IsOperationRunning = false;
+        }
+    }
+
+    private static string MoveWarning(FileOperationPreview preview, int sourceCount)
+    {
+        var text = $"파일 {sourceCount}개를 폴더 {preview.PerDestination.Count}개로 옮긴다 " +
+                   $"({preview.TotalItemCount}건).{Environment.NewLine}원본은 사라진다.";
+
+        if (preview.TotalOverwriteCount > 0)
+        {
+            text += $"{Environment.NewLine}같은 이름 {preview.TotalOverwriteCount}건을 덮어쓴다.";
+        }
+
+        if (preview.SkippedDestinations.Count > 0)
+        {
+            text += $"{Environment.NewLine}닿지 못한 목적지 " +
+                    $"{preview.SkippedDestinations.Count}개는 제외된다.";
+        }
+
+        return text;
+    }
+
+    /// <summary>결과 보고 = 성공 / 건너뜀 / 실패 + 이유 (§5).</summary>
+    private void ReportOperation(string verb, FileOperationReport report)
+    {
+        var ok = report.Results.Count(r => r.Status == OperationItemStatus.Succeeded);
+        var skipped = report.Results.Count(r => r.Status == OperationItemStatus.Skipped);
+        var failed = report.Results.Count(r => r.Status == OperationItemStatus.Failed);
+        var overwritten = report.Results.Count(r => r.Overwritten);
+
+        var summary = $"{verb} — 성공 {ok} · 건너뜀 {skipped} · 실패 {failed}";
+        if (overwritten > 0)
+        {
+            // 덮어쓰기는 차단하지 않되 일어났음을 반드시 알린다 (§4.3).
+            summary += $" · 덮어씀 {overwritten}";
+        }
+
+        if (report.Canceled)
+        {
+            summary += " · 취소됨";
+        }
+
+        if (failed == 0 && skipped == 0)
+        {
+            Inform(summary);
+            return;
+        }
+
+        // 성공하지 못한 것이 있으면 요약은 상태 바에 남기고, 사유는 한 줄씩 따로 보여준다.
+        Warn(summary);
+
+        var lines = report.Results
+            .Where(r => r.Status != OperationItemStatus.Succeeded)
+            .Select(r => $"[{(r.Status == OperationItemStatus.Skipped ? "건너뜀" : "실패")}] " +
+                         $"{System.IO.Path.GetFileName(r.SourcePath)} -> " +
+                         $"{(string.IsNullOrEmpty(r.Destination) ? "휴지통" : r.Destination)} : {r.Reason}");
+
+        _prompt.Report(
+            $"{verb} 결과",
+            summary + Environment.NewLine + Environment.NewLine + string.Join(Environment.NewLine, lines));
+    }
+
+    private Task RefreshAllPanelsAsync() =>
+        Task.WhenAll(Panels.Where(p => p.Entry is not null).Select(p => p.RefreshAsync()));
+
     // ── 초기화 · 갱신 ────────────────────────────────────────────────────────
 
     /// <summary>창이 열릴 때 한 번. 상시 패널을 병렬로 채우고 접근 가능 여부를 확인한다.</summary>
@@ -783,10 +1052,20 @@ public sealed partial class MainViewModel : ObservableObject
             .Select(t => t.Spec.FolderId!.Value)
             .ToHashSet();
 
+        var pinnedFlagChanged = false;
+
         foreach (var row in Rows)
         {
             row.HasPinnedTile = pinnedFolders.Contains(row.Entry.Id);
             row.ShowRotationTag = showTag && !row.HasPinnedTile;
+
+            // folders[].pinned 는 이제 상시 타일의 그림자다. 런처 카드의 칩과 v1/v2 배치
+            // 유도가 이 필드를 보므로, 배치를 바꿔 놓고 플래그만 옛날 값이면 둘이 어긋난다.
+            if (row.Entry.Pinned != row.HasPinnedTile)
+            {
+                row.Entry.Pinned = row.HasPinnedTile;
+                pinnedFlagChanged = true;
+            }
 
             // 상시 칸에 못박힌 폴더는 클릭해도 순환 칸으로 가지 않는다 — 번호를 고르게 두면
             // 아무 일도 일으키지 않는 설정을 만지게 된다. 선택지를 아예 주지 않는다.
@@ -809,6 +1088,11 @@ public sealed partial class MainViewModel : ObservableObject
                 }),
             ];
         }
+
+        if (pinnedFlagChanged)
+        {
+            Save();
+        }
     }
 
     private async Task ProbeRowAsync(FolderRowViewModel row)
@@ -819,6 +1103,13 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void OnPanelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(FolderPanelViewModel.SelectedItems)
+            && sender is FolderPanelViewModel panel)
+        {
+            OnPanelSelectionChanged(panel);
+            return;
+        }
+
         if (e.PropertyName is nameof(FolderPanelViewModel.CurrentPath)
             or nameof(FolderPanelViewModel.Entry)
             or nameof(FolderPanelViewModel.Failure)

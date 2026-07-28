@@ -157,7 +157,39 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [ObservableProperty]
     private bool isSearchExpanded;
 
-    /// <summary>아직 아무 폴더도 안 띄운 순환 칸.</summary>
+    /// <summary>
+    /// 지금 이 패널에서 고른 항목들 (§4.2 · §4.8). 뷰의 ListView 선택이 그대로 흘러든다.
+    /// </summary>
+    /// <remarks>
+    /// <b>선택은 타일 하나에만 존재한다</b>(§4.8) — 다른 타일을 고르면 이전 타일이 풀린다.
+    /// 그 조정은 <see cref="MainViewModel"/> 이 한다. 매크로·대상함의 "현재 선택"이
+    /// 어디를 말하는지가 흔들리지 않게 하려는 규칙이다.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelection))]
+    [NotifyPropertyChangedFor(nameof(SelectionText))]
+    private IReadOnlyList<FileItemViewModel> selectedItems = [];
+
+    public bool HasSelection => SelectedItems.Count > 0;
+
+    public string? SelectionText => HasSelection ? $"{SelectedItems.Count}개 선택" : null;
+
+    /// <summary>선택을 푼다. 뷰가 목록에서 실제로 풀도록 이벤트로도 알린다.</summary>
+    public void ClearSelection()
+    {
+        if (!HasSelection)
+        {
+            return;
+        }
+
+        SelectedItems = [];
+        SelectionCleared?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>다른 타일이 선택을 가져가서 여기 선택을 풀어야 한다.</summary>
+    public event EventHandler? SelectionCleared;
+
+        /// <summary>아직 아무 폴더도 안 띄운 순환 칸.</summary>
     public bool IsEmpty => Entry is null;
 
     public string AnchorName => Entry is null
@@ -262,6 +294,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         Failure = null;
         IsLoading = false;
         SearchText = string.Empty;
+        ClearSelection();
     }
 
     // ── 이동 ─────────────────────────────────────────────────────────────────
@@ -615,6 +648,9 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         CancelSearch();
         SearchText = string.Empty;
 
+        // 다른 폴더를 보는데 이전 폴더의 선택이 남아 있으면 그 선택으로 파일을 옮기게 된다.
+        ClearSelection();
+
         Entry = entry;
 
         // breadcrumb 을 먼저 세운다. CurrentPath 변경 통지를 받은 쪽(왼쪽 리스트 행)이
@@ -658,21 +694,35 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
         // 이전 열거를 취소한다 — 큰 폴더나 죽은 네트워크 경로를 기다리다가
         // 다음 클릭이 막히지 않게 한다.
-        var previous = _cts;
+        //
+        // 취소만 하고 <b>Dispose 는 하지 않는다</b>. 그 CTS 는 아직 await 에 걸려 있는
+        // 이전 호출의 것이고, 남이 쓰는 것을 여기서 버리면 그쪽이 깨어나 자기 토큰을 읽는
+        // 순간 ObjectDisposedException 으로 죽는다(실제로 그렇게 터졌다 — 파일 이동 뒤
+        // 결과 대화상자가 창을 재활성화해 새로고침이 겹치면서). 각 호출이 자기 것만 정리한다.
         var cts = new CancellationTokenSource();
-        _cts = cts;
-        previous?.Cancel();
-        previous?.Dispose();
+        var previous = Interlocked.Exchange(ref _cts, cts);
+
+        // 토큰은 지금 꺼내 둔다 — Dispose 된 CTS 는 Token 게터부터 던진다.
+        var token = cts.Token;
+
+        try
+        {
+            previous?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 그 열거는 이미 스스로 끝나고 정리됐다.
+        }
 
         IsLoading = true;
 
         try
         {
             var listing = await _enumerator
-                .ListAsync(path, Entry.SortBy, Entry.SortDesc, cts.Token)
+                .ListAsync(path, Entry.SortBy, Entry.SortDesc, token)
                 .ConfigureAwait(true);
 
-            if (cts.Token.IsCancellationRequested || !ReferenceEquals(_cts, cts))
+            if (token.IsCancellationRequested || !ReferenceEquals(_cts, cts))
             {
                 return;
             }
@@ -688,8 +738,11 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         {
             if (ReferenceEquals(_cts, cts))
             {
+                Interlocked.CompareExchange(ref _cts, null, cts);
                 IsLoading = false;
             }
+
+            cts.Dispose();
         }
     }
 
