@@ -83,6 +83,66 @@ internal sealed class FakeMacroEditor : IMacroEditor
     }
 }
 
+/// <summary>
+/// 인스턴스 상태를 흉내낸다 (§6.2). 실제 뮤텍스·파이프를 건드리지 않고
+/// "지금 떠 있는 것"과 "신호가 통하는가"만 정해 준다.
+/// </summary>
+internal sealed class FakeInstanceSignals : IInstanceSignals
+{
+    /// <summary>신호를 받을 수 있는 워크스페이스 — 배지가 이걸 본다.</summary>
+    public HashSet<Guid> Listening { get; } = [];
+
+    /// <summary>신호를 보낸 대상 순서대로.</summary>
+    public List<Guid> Sent { get; } = [];
+
+    /// <summary>파이프 이름공간을 몇 번 열거했는지 — 폴링하지 않는다는 것을 확인한다.</summary>
+    public int QueryCount { get; private set; }
+
+    public IReadOnlyCollection<Guid> WhichAreOpen(IEnumerable<Guid> candidates)
+    {
+        QueryCount++;
+        return [.. candidates.Where(Listening.Contains)];
+    }
+
+    public bool TrySendActivate(Guid workspaceId)
+    {
+        Sent.Add(workspaceId);
+        return Listening.Contains(workspaceId);
+    }
+}
+
+/// <summary>프로세스를 띄우지 않고 무엇을 띄우려 했는지만 적는다.</summary>
+internal sealed class FakeSelfLauncher : ISelfLauncher
+{
+    public List<Guid> Workspaces { get; } = [];
+
+    public int LauncherCount { get; private set; }
+
+    public string? Error { get; set; }
+
+    public string? OpenWorkspace(Guid workspaceId)
+    {
+        if (Error is not null)
+        {
+            return Error;
+        }
+
+        Workspaces.Add(workspaceId);
+        return null;
+    }
+
+    public string? OpenLauncher()
+    {
+        if (Error is not null)
+        {
+            return Error;
+        }
+
+        LauncherCount++;
+        return null;
+    }
+}
+
 /// <summary>런처 뷰모델 + 격리된 <c>%APPDATA%</c> 대체 폴더.</summary>
 internal sealed class LauncherFixture : IDisposable
 {
@@ -98,8 +158,10 @@ internal sealed class LauncherFixture : IDisposable
         Picker = new FakeFolderPicker();
         Prompt = new FakeUserPrompt();
         Shell = new FakeShellLauncher();
+        Signals = new FakeInstanceSignals();
+        SelfLauncher = new FakeSelfLauncher();
         ViewModel = new LauncherViewModel(
-            Store, Settings, Opened.Add, Picker, Prompt, Shell, settingsWritable);
+            Store, Settings, Picker, Prompt, Shell, Signals, SelfLauncher, settingsWritable);
     }
 
     public FolderDeckPaths Paths { get; }
@@ -114,7 +176,12 @@ internal sealed class LauncherFixture : IDisposable
 
     public FakeShellLauncher Shell { get; }
 
-    public List<Workspace> Opened { get; } = [];
+    public FakeInstanceSignals Signals { get; }
+
+    public FakeSelfLauncher SelfLauncher { get; }
+
+    /// <summary>새 프로세스로 열린 워크스페이스 — 워크스페이스당 프로세스 구조의 관찰점.</summary>
+    public List<Guid> Opened => SelfLauncher.Workspaces;
 
     public LauncherViewModel ViewModel { get; }
 

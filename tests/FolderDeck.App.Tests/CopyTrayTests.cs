@@ -1,4 +1,4 @@
-using FolderDeck.Core.Enumeration;
+﻿using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Operations;
 
 namespace FolderDeck.App.Tests;
@@ -75,7 +75,8 @@ public sealed class CopyTrayTests
 
         var reopened = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
         var restarted = new MainViewModel(
-            reopened, f.Store, new FolderEnumerator(), f.Shell, f.Clipboard, f.Engine, f.Prompt, f.MacroEditor);
+            reopened, f.Store, new FolderEnumerator(), f.Shell, f.Clipboard, f.Engine, f.Prompt, f.MacroEditor,
+            f.SelfLauncher);
 
         Assert.Equal("문서", Assert.Single(restarted.Tray).DisplayName);
         Assert.True(restarted.Tray[0].IsChecked);

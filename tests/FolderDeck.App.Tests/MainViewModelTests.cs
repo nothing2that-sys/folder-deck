@@ -320,4 +320,63 @@ public sealed class MainViewModelTests
         Assert.True(f.ViewModel.HasMessage);
         Assert.Contains("연결된 프로그램이 없다", f.ViewModel.Message);
     }
+
+    // ── 인스턴스 관리 (§6.2 · Phase 4 Stage 1) ────────────────────────────────
+
+    /// <summary>자동 열기가 켜져 있어도 다른 작업 관리로 갈 길이 있어야 한다 (§5).</summary>
+    [Fact]
+    public void OpenLauncherStartsTheLauncher()
+    {
+        using var f = new MainWindowFixture();
+
+        f.ViewModel.OpenLauncherCommand.Execute(null);
+
+        Assert.Equal(1, f.SelfLauncher.LauncherCount);
+        Assert.False(f.ViewModel.MessageIsWarning);
+    }
+
+    [Fact]
+    public void FailingToStartTheLauncherIsSurfacedAndStays()
+    {
+        using var f = new MainWindowFixture();
+        f.SelfLauncher.Error = "실행 파일 경로를 알 수 없다";
+
+        f.ViewModel.OpenLauncherCommand.Execute(null);
+
+        Assert.True(f.ViewModel.MessageIsWarning);
+        Assert.False(f.ViewModel.MessageIsTransient);
+        Assert.Contains("실행 파일 경로를 알 수 없다", f.ViewModel.Message);
+    }
+
+    /// <summary>
+    /// 좀비 때문에 같은 워크스페이스가 두 창에 떴다 — 그 말이 문구에 있고, 경고는 사라지지
+    /// 않는다 (§3.2-3 · §5.1 "실패·경고").
+    /// </summary>
+    [Fact]
+    public void ADuplicateWindowWarningStaysAndSaysWhy()
+    {
+        using var f = new MainWindowFixture();
+
+        f.ViewModel.ReportDuplicateWindow();
+
+        Assert.True(f.ViewModel.MessageIsWarning);
+        Assert.False(f.ViewModel.MessageIsTransient);
+        Assert.Contains("두 창", f.ViewModel.Message);
+
+        // 정보성 안내를 지우는 타이머가 돌아도 남아 있어야 한다.
+        f.ViewModel.ExpireTransientMessage();
+        Assert.True(f.ViewModel.HasMessage);
+    }
+
+    [Fact]
+    public void AWindowThatCannotReceiveSignalsSaysSoAndStays()
+    {
+        using var f = new MainWindowFixture();
+
+        f.ViewModel.ReportNoSignal("모든 파이프 인스턴스가 사용 중입니다.");
+
+        Assert.True(f.ViewModel.MessageIsWarning);
+        Assert.False(f.ViewModel.MessageIsTransient);
+        Assert.Contains("모든 파이프 인스턴스가 사용 중입니다.", f.ViewModel.Message);
+    }
 }

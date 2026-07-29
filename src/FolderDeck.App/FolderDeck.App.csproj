@@ -14,6 +14,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+
+    <!-- DPI 인식을 프로세스 시작 시점에 확정한다 (§6.1 · Stage 2 §3.1). 이유는 파일 안 주석. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
 </Project>

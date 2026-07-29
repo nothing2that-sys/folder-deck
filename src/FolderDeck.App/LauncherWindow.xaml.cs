@@ -17,6 +17,16 @@ public partial class LauncherWindow : Window
 
     public LauncherViewModel ViewModel { get; }
 
+    /// <summary>
+    /// 창으로 돌아오면 "열려 있음" 배지를 다시 잰다 (§4.2 — 폴링하지 않는다).
+    /// §8 의 기존 결(수동 F5 + 창 활성화 시 재조회)과 같은 자리다.
+    /// </summary>
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        ViewModel.RefreshOpenState();
+    }
+
     /// <summary>폴더를 창에 끌어다 놓으면 "새로 만들기"에 담는다. 파일은 무시한다.</summary>
     private void OnWindowDragOver(object sender, DragEventArgs e)
     {

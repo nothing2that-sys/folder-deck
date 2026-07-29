@@ -108,8 +108,9 @@ public sealed class LauncherTests
 
     // ── 열기 ─────────────────────────────────────────────────────────────────
 
+    /// <summary>워크스페이스당 프로세스다 — 런처는 새 프로세스를 띄우고 자기는 남는다 (§2).</summary>
     [Fact]
-    public void OpenHandsTheWorkspaceToTheHost()
+    public void OpenStartsANewProcessForTheWorkspace()
     {
         using var f = new LauncherFixture();
         var seeded = f.Seed("열 것");
@@ -117,7 +118,7 @@ public sealed class LauncherTests
 
         f.ViewModel.Open(f.ViewModel.Cards[0]);
 
-        Assert.Equal(seeded.Id, Assert.Single(f.Opened).Id);
+        Assert.Equal(seeded.Id, Assert.Single(f.Opened));
     }
 
     // ── 제목/설명 인라인 편집 ────────────────────────────────────────────────

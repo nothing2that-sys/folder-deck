@@ -16,33 +16,46 @@ public sealed partial class LauncherViewModel : ObservableObject
     /// <summary>실제 폴더는 건드리지 않는다는 것을 확인창 문구에 못박는다 (§3.1).</summary>
     public const string DeleteNotice = "실제 폴더는 지워지지 않습니다. 작업 관리 항목만 삭제됩니다.";
 
+    /// <summary>런처가 두 벌 떴다 — 배지가 서로 달라질 수 있다는 것을 밝힌다 (§4.3).</summary>
+    public const string DuplicateLauncherWarning =
+        "이미 떠 있는 런처에 신호를 보내지 못해 이 창을 새로 열었다. " +
+        "런처가 두 개 떠 있으면 '열려 있음' 표시가 서로 다를 수 있다 — 한쪽을 닫는 편이 좋다.";
+
     private readonly IWorkspaceStore _store;
     private readonly IFolderPicker _picker;
     private readonly IUserPrompt _prompt;
     private readonly IShellLauncher _shell;
-    private readonly Action<Workspace> _openWorkspace;
+    private readonly IInstanceSignals _signals;
+    private readonly ISelfLauncher _selfLauncher;
     private readonly bool _settingsWritable;
 
     public LauncherViewModel(
         IWorkspaceStore store,
         AppSettings settings,
-        Action<Workspace> openWorkspace,
         IFolderPicker picker,
         IUserPrompt prompt,
         IShellLauncher shell,
+        IInstanceSignals signals,
+        ISelfLauncher selfLauncher,
         bool settingsWritable = true)
     {
         _store = store;
         _picker = picker;
         _prompt = prompt;
         _shell = shell;
-        _openWorkspace = openWorkspace;
+        _signals = signals;
+        _selfLauncher = selfLauncher;
         _settingsWritable = settingsWritable;
         Settings = settings;
         skipLauncher = settings.SkipLauncher;
 
         Refresh();
     }
+
+    /// <summary>이 런처가 신호를 못 받는 상태다 — 두 번째 실행이 기존 창을 못 찾는다.</summary>
+    public static string NoSignalWarning(string detail) =>
+        $"이 런처는 다른 실행이 보내는 신호를 받지 못한다 (파이프를 열지 못했다: {detail}). " +
+        "FolderDeck 을 또 실행하면 런처가 하나 더 뜬다.";
 
     public AppSettings Settings { get; }
 
@@ -123,7 +136,34 @@ public sealed partial class LauncherViewModel : ObservableObject
             _allCards.Add(new WorkspaceCardViewModel(failure));
         }
 
+        RefreshOpenState();
         ApplyFilter();
+    }
+
+    /// <summary>
+    /// "열려 있음" 배지를 다시 잰다 (§4.2). <b>폴링하지 않는다</b> — 목록을 다시 읽을 때와
+    /// 런처 창이 활성화될 때만 부른다(§8 의 "수동 F5 + 창 활성화 시 재조회"와 같은 결).
+    /// </summary>
+    /// <remarks>
+    /// 파이프 이름공간을 한 번 열거하는 비용이라 워크스페이스 개수에 거의 무관하다
+    /// (실측: 등록 50개 · 이름공간 1000여 개에서 3~4ms).
+    /// </remarks>
+    public void RefreshOpenState()
+    {
+        var ids = _allCards.Where(c => c.Workspace is not null).Select(c => c.Workspace!.Id).ToList();
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        var open = _signals.WhichAreOpen(ids);
+        foreach (var card in _allCards)
+        {
+            if (card.Workspace is { } workspace)
+            {
+                card.IsOpen = open.Contains(workspace.Id);
+            }
+        }
     }
 
     private void ApplyFilter()
@@ -170,6 +210,16 @@ public sealed partial class LauncherViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// "열기" / "창 보이기" — 버튼 글씨는 배지를 따르지만 <b>판정은 누를 때 한다</b> (§4.2).
+    /// 먼저 신호를 보내 보고, 받는 창이 있으면 그 창이 앞으로 온다. 없으면 새 프로세스를 띄운다.
+    /// </summary>
+    /// <remarks>
+    /// 이 순서라서 배지가 낡아도 맞는 동작이 나온다 — 배지가 "열려 있음"인데 실제로 닫혀
+    /// 있었으면 신호가 실패해 새로 열고, 배지가 비었는데 열려 있었으면 신호가 성공해 앞으로 온다.
+    /// 신호를 보내는 코드는 §3.4 의 공용 helper 하나뿐이다(런처는 프로세스를 띄워 곧 죽이는
+    /// 방식을 쓰지 않는다).
+    /// </remarks>
     [RelayCommand]
     public void Open(WorkspaceCardViewModel? card)
     {
@@ -178,7 +228,41 @@ public sealed partial class LauncherViewModel : ObservableObject
             return;
         }
 
-        _openWorkspace(card.Workspace);
+        var id = card.Workspace.Id;
+
+        if (_signals.TrySendActivate(id))
+        {
+            card.IsOpen = true;
+            Message = null;
+            return;
+        }
+
+        var error = _selfLauncher.OpenWorkspace(id);
+        if (error is not null)
+        {
+            card.IsOpen = false;
+            Message = $"열지 못했다: {error}";
+            return;
+        }
+
+        // 방금 띄운 프로세스가 자리를 잡기 전이라 아직 신호를 받을 수 없다. 배지는 힌트이므로
+        // 여기서 켜 둔다 — 다음 활성화 때 실제 상태로 다시 맞춰진다.
+        card.IsOpen = true;
+        Message = null;
+        RememberLastWorkspace(id);
+    }
+
+    /// <summary>
+    /// 다음 실행의 자동 열기 대상. 워크스페이스 프로세스도 자기 시작 때 같은 값을 쓰지만,
+    /// 여는 쪽에서 먼저 적어 둬야 런처가 나중에 설정을 저장할 때 낡은 값으로 덮지 않는다.
+    /// </summary>
+    private void RememberLastWorkspace(Guid id)
+    {
+        if (_settingsWritable && Settings.LastWorkspaceId != id)
+        {
+            Settings.LastWorkspaceId = id;
+            _store.SaveSettingsDebounced(Settings);
+        }
     }
 
     /// <summary>

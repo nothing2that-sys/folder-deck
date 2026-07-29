@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="FolderDeck.App"/>
+
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <!-- 승격하지 않는다. SDK 기본 매니페스트와 같은 값이다. -->
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <!--
+        시스템 DPI 인식(System-aware)을 프로세스 시작 시점에 못박는다 (Phase 4 Stage 2 §3.1).
+
+        값은 지금까지의 사실상 동작과 같다 — 매니페스트가 없으면 WPF 가 어셈블리를 로드할 때
+        스스로 SYSTEM 으로 올린다(Stage 0 §3). 문제는 "언제"다. 저장된 창 위치를 읽어 어디에
+        띄울지 정하는 코드는 성격상 창을 만들기 전에 도는데, 그 시점의 프로세스는 매니페스트가
+        없으면 아직 무인식(UNAWARE)이다. 배율이 100% 가 아닌 모니터가 있으면 그때 받은
+        모니터 좌표는 창이 생긴 뒤의 좌표와 다른 공간에 있게 된다.
+
+        실측(프로브): 매니페스트 없이 Main 진입 시점 awareness = 0(UNAWARE),
+        매니페스트를 넣으면 같은 지점에서 1(SYSTEM) 이고 SetProcessDpiAwarenessContext 로
+        바꿀 수도 없다(매니페스트가 이긴다).
+
+        PerMonitorV2 로 올리지 않는 이유는 Stage 0 §3 그대로다 — PMv2 는 DIP↔물리픽셀 계수가
+        모니터마다 갈려 §6.1 의 변환이 복잡해진다. 렌더링 선명도는 창 위치와 별개 주제다.
+      -->
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
+    </windowsSettings>
+  </application>
+</assembly>

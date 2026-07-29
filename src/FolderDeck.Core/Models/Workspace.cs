@@ -20,9 +20,13 @@ public sealed class Workspace
     /// v1/v2 파일을 거부하지 않는다 — <c>tiles</c> 가 비어 있으면 <c>pinned</c> 에서 유도한다.
     /// 4 — <see cref="OnConflict"/>·<see cref="AskOnConflict"/> 추가(§4.3). 둘 다 없으면
     /// "겹치면 물어보고, 안 정했으면 덮어쓴다"는 기본값이라 구파일 동작이 그대로다.
+    /// 5 — <see cref="Window"/> 를 실제로 쓰기 시작 + <c>window.maximized</c> 추가(§6.1).
+    /// <c>window</c> 슬롯 자체는 v1 부터 있던 예약 자리라 채우는 것만으로는 버전이 오르지
+    /// 않았고, 필드가 하나 는 것이 5 의 이유다. 없으면 <c>false</c>(최대화 아님) — v4 까지의
+    /// 실제 동작 그대로다.
     /// </para>
     /// </summary>
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     /// <summary>
     /// 스키마 버전은 저장소 소유다. 저장할 때 <see cref="CurrentSchemaVersion"/> 이 찍히고,
@@ -74,8 +78,9 @@ public sealed class Workspace
     /// </remarks>
     public bool? AskOnConflict { get; set; }
 
-    // ── 아래는 Phase 3+ 슬롯. 지금은 자리만 두고 건드리지 않는다(§7.1). ──
-
+    /// <summary>
+    /// 마지막 창 위치·크기·최대화 (schemaVersion 5 · §6.1). null 이면 기본 위치로 띄운다.
+    /// </summary>
     public WindowSpec? Window { get; set; }
 
     /// <summary>복사 대상함에 상주하는 폴더들 (§3.2). Phase 3.</summary>

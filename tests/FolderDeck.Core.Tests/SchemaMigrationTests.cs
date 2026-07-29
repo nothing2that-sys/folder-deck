@@ -65,10 +65,43 @@ public sealed class SchemaMigrationTests : IDisposable
         return id;
     }
 
-    [Fact]
-    public void CurrentSchemaVersionIsFour()
+    /// <summary>
+    /// Phase 3 이 남긴 것과 같은 모양의 v4 파일 — <c>window</c> 슬롯이 아예 없다.
+    /// </summary>
+    private Guid WriteV4File()
     {
-        Assert.Equal(4, Workspace.CurrentSchemaVersion);
+        var id = Guid.NewGuid();
+        var json = $$"""
+        {
+          "schemaVersion": 4,
+          "id": "{{id}}",
+          "title": "v4 워크스페이스",
+          "lastUsed": "2026-05-06T07:08:09+09:00",
+          "folders": [
+            {
+              "id": "{{Guid.NewGuid()}}",
+              "path": "D:\\work\\src",
+              "displayName": "src",
+              "viewMode": "details",
+              "sortBy": "name",
+              "sortDesc": false,
+              "pinned": true
+            }
+          ],
+          "grid": { "cols": 4, "rows": 4 },
+          "askOnConflict": false,
+          "onConflict": "skip"
+        }
+        """;
+
+        File.WriteAllText(_paths.WorkspaceFile(id), json);
+        return id;
+    }
+
+    [Fact]
+    public void CurrentSchemaVersionIsFive()
+    {
+        Assert.Equal(5, Workspace.CurrentSchemaVersion);
     }
 
     [Fact]
@@ -278,6 +311,93 @@ public sealed class SchemaMigrationTests : IDisposable
         var reloaded = _store.LoadWorkspace(workspace.Id).ValueOrThrow();
         Assert.Equal(ConflictPolicy.Skip, reloaded.OnConflict);
         Assert.False(reloaded.AskOnConflict);
+    }
+
+    // ── v4 → v5: window (§6.1) ───────────────────────────────────────────────
+
+    /// <summary>
+    /// <c>window</c> 슬롯이 없는 v4 파일은 오류 없이 열리고, 창 위치는 "저장된 것 없음"이 된다
+    /// — 호출부가 기본 위치를 쓴다.
+    /// </summary>
+    [Fact]
+    public void AV4FileWithoutTheWindowSlotStillLoads()
+    {
+        var id = WriteV4File();
+
+        var result = _store.LoadWorkspace(id);
+
+        Assert.True(result.IsSuccess, result.Failure?.Message);
+        Assert.Equal(4, result.Value!.SchemaVersion);
+        Assert.Null(result.Value.Window);
+        Assert.Equal(ConflictPolicy.Skip, result.Value.OnConflict);
+    }
+
+    /// <summary>창을 옮겨 저장하면 그 파일이 v5 로 승격된다 (§7.1 스키마 규칙).</summary>
+    [Fact]
+    public void SavingAV4FilePromotesItToFiveAndWritesTheWindowSlot()
+    {
+        var id = WriteV4File();
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        workspace.Window = new WindowSpec { X = -1340, Y = -171, Width = 1200, Height = 2000 };
+        Assert.Null(_store.SaveWorkspace(workspace));
+
+        var json = File.ReadAllText(_paths.WorkspaceFile(id));
+        Assert.Contains("\"schemaVersion\": 5", json);
+        Assert.Contains("\"window\"", json);
+        Assert.Contains("\"x\": -1340", json);
+        Assert.Contains("\"maximized\": false", json);
+
+        var reloaded = _store.LoadWorkspace(id).ValueOrThrow();
+        Assert.Equal(5, reloaded.SchemaVersion);
+        Assert.Equal(-1340, reloaded.Window!.X);
+        Assert.Equal(2000, reloaded.Window.Height);
+        Assert.False(reloaded.Window.Maximized);
+    }
+
+    [Fact]
+    public void TheWindowSlotRoundTripsIncludingMaximized()
+    {
+        var workspace = new Workspace
+        {
+            Title = "창 위치 저장",
+            Window = new WindowSpec { X = 300.5, Y = 200.25, Width = 1400, Height = 900, Maximized = true },
+        };
+
+        Assert.Null(_store.SaveWorkspace(workspace));
+        var reloaded = _store.LoadWorkspace(workspace.Id).ValueOrThrow();
+
+        Assert.Equal(300.5, reloaded.Window!.X);
+        Assert.Equal(200.25, reloaded.Window.Y);
+        Assert.True(reloaded.Window.Maximized);
+    }
+
+    /// <summary>
+    /// <c>monitorId</c> 는 쓰지 않기로 했다(Stage 0 §4). null 이면 파일에 남지 않는다 —
+    /// 판정에 안 쓰는 슬롯이 파일에 있으면 나중에 누군가 판정에 끌어들인다.
+    /// </summary>
+    [Fact]
+    public void MonitorIdIsNotWritten()
+    {
+        var workspace = new Workspace
+        {
+            Title = "모니터 식별자 없음",
+            Window = new WindowSpec { X = 0, Y = 0, Width = 1400, Height = 900 },
+        };
+
+        Assert.Null(_store.SaveWorkspace(workspace));
+
+        Assert.DoesNotContain("monitorId", File.ReadAllText(_paths.WorkspaceFile(workspace.Id)));
+    }
+
+    [Fact]
+    public void TheWindowSlotIsOmittedWhenThereIsNoSavedPosition()
+    {
+        var workspace = new Workspace { Title = "창 위치 없음" };
+
+        Assert.Null(_store.SaveWorkspace(workspace));
+
+        Assert.DoesNotContain("\"window\"", File.ReadAllText(_paths.WorkspaceFile(workspace.Id)));
     }
 
     // ── 매크로 슬롯 (§4.7) ───────────────────────────────────────────────────

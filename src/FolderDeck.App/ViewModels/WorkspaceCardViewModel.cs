@@ -60,9 +60,18 @@ public sealed partial class WorkspaceCardViewModel : ObservableObject
     private bool isEditing;
 
     /// <summary>
-    /// Phase 4(워크스페이스당 단일 인스턴스) 전까지는 자리만. 실제 상태를 계산하지 않는다.
+    /// 이 워크스페이스 창이 지금 떠 있는가 (§4.2). <b>힌트다</b> — 런처 활성화 때 다시 재고,
+    /// 실제 판정은 버튼을 누를 때 한다. 저장하지 않는 런타임 상태다.
     /// </summary>
-    public bool IsOpen => false;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OpenButtonText))]
+    private bool isOpen;
+
+    /// <summary>
+    /// 버튼 글씨가 곧 동작이다 (§4.1) — "열기를 눌렀는데 새 창이 안 떴다"를 없애려는 것이다.
+    /// 배지의 색만으로 구분하지 않는다는 결(§3.2)도 여기서 지켜진다.
+    /// </summary>
+    public string OpenButtonText => IsOpen ? "창 보이기" : "열기";
 
     /// <summary>
     /// 대표 경로 — 개발자는 경로로 워크스페이스를 알아본다. 첫 폴더가 있으면 그것,

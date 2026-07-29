@@ -152,8 +152,9 @@ internal sealed class MainWindowFixture : IDisposable
         Prompt = new FakeUserPrompt();
         MacroEditor = new FakeMacroEditor();
         Engine = new FileOperationEngine(RecycleBin);
+        SelfLauncher = new FakeSelfLauncher();
         ViewModel = new MainViewModel(
-            Workspace, Store, new FolderEnumerator(), Shell, Clipboard, Engine, Prompt, MacroEditor);
+            Workspace, Store, new FolderEnumerator(), Shell, Clipboard, Engine, Prompt, MacroEditor, SelfLauncher);
     }
 
     public string CodePath { get; }
@@ -182,6 +183,8 @@ internal sealed class MainWindowFixture : IDisposable
     public FakeMacroEditor MacroEditor { get; }
 
     public FileOperationEngine Engine { get; }
+
+    public FakeSelfLauncher SelfLauncher { get; }
 
     public MainViewModel ViewModel { get; }
 

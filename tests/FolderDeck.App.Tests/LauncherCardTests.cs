@@ -125,18 +125,147 @@ public sealed class LauncherCardTests
         Assert.Equal(f.Paths.WorkspaceFile(seeded.Id), Assert.Single(f.ViewModel.Cards).PrimaryPath);
     }
 
-    // ── "열려 있음" 배지는 Phase 4 자리 ──────────────────────────────────────
+    // ── "열려 있음" 배지 + "창 보이기" (§4.1 · §4.2) ─────────────────────────
 
     [Fact]
-    public void OpenBadgeIsAlwaysOffUntilPhase4()
+    public void ClosedWorkspacesShowNoBadgeAndAnOpenButton()
     {
         using var f = new LauncherFixture();
-        SeedMixed(f, "배지", pinned: 1, rotating: 0);
+        SeedMixed(f, "닫힘", pinned: 1, rotating: 0);
+
+        var card = Assert.Single(f.ViewModel.Cards);
+
+        Assert.False(card.IsOpen);
+        Assert.Equal("열기", card.OpenButtonText);
+    }
+
+    [Fact]
+    public void AnOpenWorkspaceGetsTheBadgeAndTheShowButton()
+    {
+        using var f = new LauncherFixture();
+        var seeded = SeedMixed(f, "열림", pinned: 1, rotating: 0);
+        f.Signals.Listening.Add(seeded.Id);
+
+        f.ViewModel.RefreshOpenState();
+
+        var card = Assert.Single(f.ViewModel.Cards);
+        Assert.True(card.IsOpen);
+        Assert.Equal("창 보이기", card.OpenButtonText);
+    }
+
+    /// <summary>닫히면 배지가 사라지고 버튼이 "열기" 로 돌아온다 — 재검사는 활성화 때 돈다.</summary>
+    [Fact]
+    public void ClosingAWorkspaceClearsTheBadgeOnTheNextCheck()
+    {
+        using var f = new LauncherFixture();
+        var seeded = SeedMixed(f, "닫는다", pinned: 1, rotating: 0);
+        f.Signals.Listening.Add(seeded.Id);
+        f.ViewModel.RefreshOpenState();
+        Assert.True(f.ViewModel.Cards[0].IsOpen);
+
+        f.Signals.Listening.Remove(seeded.Id);
+        f.ViewModel.RefreshOpenState();
+
+        Assert.False(f.ViewModel.Cards[0].IsOpen);
+        Assert.Equal("열기", f.ViewModel.Cards[0].OpenButtonText);
+    }
+
+    /// <summary>"창 보이기" 는 새 프로세스를 띄우지 않는다 — 신호만 보낸다 (§4.2).</summary>
+    [Fact]
+    public void ShowWindowSignalsInsteadOfStartingAProcess()
+    {
+        using var f = new LauncherFixture();
+        var seeded = SeedMixed(f, "앞으로", pinned: 1, rotating: 0);
+        f.Signals.Listening.Add(seeded.Id);
+        f.ViewModel.RefreshOpenState();
 
         f.ViewModel.Open(f.ViewModel.Cards[0]);
 
-        // 렌더 자리만 있고 실제 상태를 계산하지 않는다.
+        Assert.Equal(seeded.Id, Assert.Single(f.Signals.Sent));
+        Assert.Empty(f.Opened);
+        Assert.True(f.ViewModel.Cards[0].IsOpen);
+    }
+
+    /// <summary>
+    /// 배지가 낡아 "열려 있음" 인데 실제로 닫혀 있었다 → 누르면 그냥 새로 연다
+    /// (§4.2 "판정은 누를 때").
+    /// </summary>
+    [Fact]
+    public void AStaleOpenBadgeStillOpensANewWindow()
+    {
+        using var f = new LauncherFixture();
+        var seeded = SeedMixed(f, "낡은 배지", pinned: 1, rotating: 0);
+        f.Signals.Listening.Add(seeded.Id);
+        f.ViewModel.RefreshOpenState();
+        Assert.Equal("창 보이기", f.ViewModel.Cards[0].OpenButtonText);
+
+        // 재검사 없이 창이 닫혔다.
+        f.Signals.Listening.Remove(seeded.Id);
+
+        f.ViewModel.Open(f.ViewModel.Cards[0]);
+
+        Assert.Equal(seeded.Id, Assert.Single(f.Signals.Sent));   // 먼저 신호를 시도했고
+        Assert.Equal(seeded.Id, Assert.Single(f.Opened));         // 실패해서 새로 열었다
+    }
+
+    /// <summary>배지가 비었는데 실제로 열려 있었다 → 기존 창이 앞으로 온다 (§4.2).</summary>
+    [Fact]
+    public void AStaleEmptyBadgeStillActivatesTheExistingWindow()
+    {
+        using var f = new LauncherFixture();
+        var seeded = SeedMixed(f, "몰랐던 창", pinned: 1, rotating: 0);
         Assert.False(f.ViewModel.Cards[0].IsOpen);
+
+        // 재검사 없이 창이 떴다.
+        f.Signals.Listening.Add(seeded.Id);
+
+        f.ViewModel.Open(f.ViewModel.Cards[0]);
+
+        Assert.Empty(f.Opened);
+        Assert.True(f.ViewModel.Cards[0].IsOpen);
+    }
+
+    /// <summary>폴링하지 않는다 (§4.2) — 목록을 읽을 때와 재검사를 부를 때만 잰다.</summary>
+    [Fact]
+    public void TheBadgeIsNotPolled()
+    {
+        using var f = new LauncherFixture();
+        SeedMixed(f, "폴링 없음", pinned: 1, rotating: 0);
+
+        var afterRefresh = f.Signals.QueryCount;
+        f.ViewModel.FilterText = "폴";
+        f.ViewModel.FilterText = string.Empty;
+
+        Assert.Equal(afterRefresh, f.Signals.QueryCount);
+
+        f.ViewModel.RefreshOpenState();
+        Assert.Equal(afterRefresh + 1, f.Signals.QueryCount);
+    }
+
+    [Fact]
+    public void FailingToStartTheProcessIsSurfaced()
+    {
+        using var f = new LauncherFixture();
+        SeedMixed(f, "실패", pinned: 1, rotating: 0);
+        f.SelfLauncher.Error = "실행 파일을 찾을 수 없다";
+
+        f.ViewModel.Open(f.ViewModel.Cards[0]);
+
+        Assert.True(f.ViewModel.HasMessage);
+        Assert.Contains("실행 파일을 찾을 수 없다", f.ViewModel.Message);
+        Assert.False(f.ViewModel.Cards[0].IsOpen);
+    }
+
+    /// <summary>런처가 여는 워크스페이스는 다음 실행의 자동 열기 대상이 된다.</summary>
+    [Fact]
+    public void OpeningRemembersTheLastWorkspace()
+    {
+        using var f = new LauncherFixture();
+        var seeded = SeedMixed(f, "마지막", pinned: 1, rotating: 0);
+
+        f.ViewModel.Open(f.ViewModel.Cards[0]);
+
+        Assert.Equal(seeded.Id, f.Settings.LastWorkspaceId);
     }
 
     // ── 필터 ─────────────────────────────────────────────────────────────────

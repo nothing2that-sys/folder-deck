@@ -24,6 +24,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IFileOperationEngine _engine;
     private readonly IUserPrompt _prompt;
     private readonly IMacroEditor _macroEditor;
+    private readonly ISelfLauncher _selfLauncher;
 
     /// <summary>디바운스 저장 실패는 스레드 풀에서 올라온다 — UI 스레드로 되돌리기 위해 잡아 둔다.</summary>
     private readonly SynchronizationContext? _uiContext = SynchronizationContext.Current;
@@ -36,7 +37,8 @@ public sealed partial class MainViewModel : ObservableObject
         IClipboardService clipboard,
         IFileOperationEngine engine,
         IUserPrompt prompt,
-        IMacroEditor macroEditor)
+        IMacroEditor macroEditor,
+        ISelfLauncher selfLauncher)
     {
         Workspace = workspace;
         _store = store;
@@ -46,6 +48,7 @@ public sealed partial class MainViewModel : ObservableObject
         _engine = engine;
         _prompt = prompt;
         _macroEditor = macroEditor;
+        _selfLauncher = selfLauncher;
 
         Rows = [.. workspace.Folders.Select(f => new FolderRowViewModel(f))];
 
@@ -200,6 +203,92 @@ public sealed partial class MainViewModel : ObservableObject
 
         Warn($"이미 상시 칸에 있다: {row.DisplayName}", transient: true);
     }
+
+    // ── 인스턴스 관리 (§6.2 · Phase 4 Stage 1) ────────────────────────────────
+
+    /// <summary>
+    /// 이미 열려 있는 창에 신호를 보내지 못해(좀비) 이 창이 새로 떴다 (§3.2-3).
+    /// 같은 작업 관리가 두 창에 떠 있을 수 있다는 것을 밝히고, <b>사라지지 않는</b> 경고로 남긴다.
+    /// </summary>
+    public void ReportDuplicateWindow() => Warn(
+        "이미 열려 있는 창에 신호를 보내지 못해 이 창을 새로 열었다. " +
+        "같은 작업 관리가 두 창에 떠 있을 수 있다 — 한쪽을 닫는 편이 좋다.");
+
+    /// <summary>
+    /// 이 창이 "앞으로" 신호를 받을 수 없다. 다시 열면 새 창이 뜨므로 조용히 넘기지 않는다 (§5).
+    /// </summary>
+    public void ReportNoSignal(string detail) => Warn(
+        $"이 창은 '창 보이기' 신호를 받지 못한다 (파이프를 열지 못했다: {detail}). " +
+        "이 작업 관리를 다시 열면 창이 하나 더 뜬다.");
+
+    /// <summary>
+    /// 런처를 띄운다 (§5). 자동 열기(<c>skipLauncher</c>)가 켜져 있으면 인자 없는 실행이
+    /// 곧바로 워크스페이스로 가버리므로, 다른 작업 관리로 가는 길이 이 버튼이다.
+    /// </summary>
+    /// <remarks>
+    /// <c>--launcher</c> 로 자기 자신을 띄운다. 런처가 이미 떠 있으면 그 프로세스가 §4.3 대로
+    /// 기존 런처를 앞으로 보내고 스스로 사라진다 — 여기서 따로 판단하지 않는다.
+    /// </remarks>
+    [RelayCommand]
+    public void OpenLauncher()
+    {
+        var error = _selfLauncher.OpenLauncher();
+        if (error is not null)
+        {
+            Warn($"런처를 띄우지 못했다: {error}");
+            return;
+        }
+
+        Inform("런처를 띄웠다.");
+    }
+
+    // ── 창 위치 (§6.1 · Phase 4 Stage 2) ─────────────────────────────────────
+
+    /// <summary>
+    /// 창을 옮기거나 크기를 바꿀 때마다 뷰가 부른다. 값이 실제로 달라졌을 때만 §5 의
+    /// "변경 즉시 저장(디바운스)"에 태운다 — 이벤트는 끄는 동안 수십 번 온다.
+    /// </summary>
+    /// <param name="bounds">
+    /// <b>복원 크기</b> (DIP). 최대화 상태여도 최대화된 사각형이 아니라 풀었을 때 돌아갈
+    /// 자리를 넘긴다 — 최대화된 좌표를 저장하면 돌아갈 자리가 없어진다.
+    /// </param>
+    public void UpdateWindowPlacement(ScreenRect bounds, bool maximized)
+    {
+        if (!bounds.IsUsable)
+        {
+            // 최소화 중이거나 창이 아직 자리를 못 잡았다. 쓰레기 좌표를 저장하지 않는다.
+            return;
+        }
+
+        var window = Workspace.Window;
+        if (window is not null
+            && window.X == bounds.X && window.Y == bounds.Y
+            && window.Width == bounds.Width && window.Height == bounds.Height
+            && window.Maximized == maximized)
+        {
+            return;
+        }
+
+        window ??= Workspace.Window = new WindowSpec();
+        window.X = bounds.X;
+        window.Y = bounds.Y;
+        window.Width = bounds.Width;
+        window.Height = bounds.Height;
+        window.Maximized = maximized;
+
+        Save();
+    }
+
+    /// <summary>
+    /// 저장된 자리로 못 띄우고 기본 위치로 갔다 (§6.1 화면 밖 방어). 실패가 아니므로
+    /// <b>정보</b> 등급(§5.1)이다 — 다만 "내가 둔 자리가 아닌데" 하는 순간은 없앤다.
+    /// </summary>
+    public void ReportWindowMoved() =>
+        Inform("저장해 둔 창 자리를 지금 화면에서 되찾을 수 없어 기본 위치로 띄웠다.");
+
+    /// <summary>저장된 크기가 지금 작업영역보다 커서 줄였다 (§6.1). 역시 정보 등급.</summary>
+    public void ReportWindowResized() =>
+        Inform("저장해 둔 창 크기가 지금 화면보다 커서 화면에 맞춰 줄였다.");
 
     private TileViewModel? PrimaryRotatingTile => Tiles
         .Where(t => t.IsRotating)

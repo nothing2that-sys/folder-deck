@@ -1,4 +1,4 @@
-using FolderDeck.App.Services;
+﻿using FolderDeck.App.Services;
 using FolderDeck.App.ViewModels;
 using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Models;
@@ -66,7 +66,7 @@ public sealed class LeftLayoutTests
         var reloaded = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
         var reopened = new MainViewModel(
             reloaded, f.Store, new FolderEnumerator(), new FakeShellLauncher(), new FakeClipboardService(),
-            f.Engine, f.Prompt, f.MacroEditor);
+            f.Engine, f.Prompt, f.MacroEditor, f.SelfLauncher);
 
         Assert.True(reopened.FoldersCollapsed);
         Assert.True(reopened.LowerCollapsed);

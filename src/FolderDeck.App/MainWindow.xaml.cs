@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using FolderDeck.App.ViewModels;
 using FolderDeck.App.Views;
+using FolderDeck.Core.Layout;
 
 namespace FolderDeck.App;
 
@@ -19,6 +20,9 @@ public partial class MainWindow : Window
     private static readonly TimeSpan TransientMessageLife = TimeSpan.FromSeconds(4);
 
     private bool _firstActivationSeen;
+
+    /// <summary>저장된 마지막 상태가 최대화였는가 (§6.1). 창이 만들어진 뒤에 건다.</summary>
+    private bool _maximizeOnShow;
 
     /// <summary>폴더 행에서 마우스를 누른 자리 — 드래그로 볼지 클릭으로 볼지 여기서 갈린다.</summary>
     private Point? _rowDragOrigin;
@@ -50,6 +54,68 @@ public partial class MainWindow : Window
     }
 
     public MainViewModel ViewModel { get; }
+
+    // ── 창 위치 (§6.1 · Phase 4 Stage 2) ─────────────────────────────────────
+
+    /// <summary>
+    /// 띄우기 <b>전에</b> 자리를 잡아 준다. 화면 밖 방어까지 끝난 값이 들어온다
+    /// (<see cref="FolderDeck.Core.Layout.WindowPlacement"/>).
+    /// </summary>
+    /// <remarks>
+    /// 최대화는 여기서 걸지 않고 <see cref="OnSourceInitialized"/> 로 미룬다. 창을 만들기
+    /// 전에 <c>WindowState</c> 를 최대화로 두면 WPF 가 <c>Left/Top</c> 을 아직 반영하지 않은
+    /// 상태에서 <b>주 모니터</b>에 최대화해 버려, 다른 모니터에 저장해 둔 창이 주 모니터로
+    /// 끌려온다.
+    /// </remarks>
+    public void ApplyPlacement(WindowPlacementResult placement)
+    {
+        ArgumentNullException.ThrowIfNull(placement);
+
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Left = placement.Bounds.X;
+        Top = placement.Bounds.Y;
+        Width = placement.Bounds.Width;
+        Height = placement.Bounds.Height;
+
+        _maximizeOnShow = placement.Maximized;
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+
+        if (_maximizeOnShow)
+        {
+            WindowState = WindowState.Maximized;
+        }
+
+        // 자리를 다 잡은 뒤부터 저장한다 — 위에서 넣은 값이 그대로 되돌아 저장되는 것은
+        // 무해하지만(같은 값이면 뷰모델이 흘린다), 창이 자리를 잡기 전 좌표는 쓰레기다.
+        LocationChanged += OnPlacementChanged;
+        SizeChanged += OnPlacementChanged;
+        StateChanged += OnPlacementChanged;
+    }
+
+    private void OnPlacementChanged(object? sender, EventArgs e) => CapturePlacement();
+
+    /// <summary>
+    /// 지금 창 자리를 뷰모델에 넘긴다. 최대화·최소화 중이면 <c>RestoreBounds</c> 를 쓴다 —
+    /// 최대화된 사각형을 저장하면 최대화를 풀었을 때 돌아갈 자리가 없어진다.
+    /// </summary>
+    private void CapturePlacement()
+    {
+        if (WindowState == WindowState.Minimized)
+        {
+            // 최소화 중에는 최대화 여부도 좌표도 뜻이 없다. 마지막으로 저장한 값을 그대로 둔다.
+            return;
+        }
+
+        var bounds = WindowState == WindowState.Maximized
+            ? new ScreenRect(RestoreBounds.X, RestoreBounds.Y, RestoreBounds.Width, RestoreBounds.Height)
+            : new ScreenRect(Left, Top, ActualWidth, ActualHeight);
+
+        ViewModel.UpdateWindowPlacement(bounds, WindowState == WindowState.Maximized);
+    }
 
     protected override async void OnActivated(EventArgs e)
     {
@@ -292,11 +358,26 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// 종료 시에도 창 자리를 확실히 한 번 쓴다 (§3.2) — 마지막 이동이 디바운스 안에서
+    /// 죽지 않게. <see cref="OnClosed"/> 가 아니라 여기서 잡는 것은, 창이 이미 사라진 뒤엔
+    /// <c>RestoreBounds</c> 가 뜻을 잃기 때문이다.
+    /// </summary>
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        base.OnClosing(e);
+        CapturePlacement();
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         _messageTimer.Stop();
         _messageTimer.Tick -= OnMessageExpired;
         ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+
+        LocationChanged -= OnPlacementChanged;
+        SizeChanged -= OnPlacementChanged;
+        StateChanged -= OnPlacementChanged;
 
         // 밀린 디바운스 저장을 마무리한다 (§5).
         ViewModel.Shutdown();

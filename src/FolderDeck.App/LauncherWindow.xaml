@@ -138,7 +138,7 @@
                                                     Visibility="{Binding IsUsable,
                                                         Converter={StaticResource BoolToVisibility}}">
 
-                                            <!-- 제목 + "열려 있음" 배지(Phase 4 자리, 지금은 항상 숨김) -->
+                                            <!-- 제목 + "열려 있음" 배지 (§4.1 — 색만으로 구분하지 않으므로 글자가 있다) -->
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold"
                                                            TextTrimming="CharacterEllipsis"
@@ -262,10 +262,24 @@
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0"
                                                     Visibility="{Binding IsUsable,
                                                         Converter={StaticResource BoolToVisibility}}">
-                                            <Button Content="열기" Padding="20,5" FontWeight="SemiBold"
+                                            <!-- 글씨가 곧 동작이다 (§4.1): 떠 있으면 "창 보이기", 아니면 "열기". -->
+                                            <Button Content="{Binding OpenButtonText}" Padding="20,5" FontWeight="SemiBold"
+                                                    AutomationProperties.Name="{Binding OpenButtonText}"
                                                     Command="{Binding DataContext.OpenCommand,
                                                                       RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}" />
+                                                    CommandParameter="{Binding}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="ToolTip" Value="새 창으로 이 작업 관리를 연다." />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsOpen}" Value="True">
+                                                                <Setter Property="ToolTip"
+                                                                        Value="이미 떠 있는 창을 앞으로 가져온다 (닫혀 있었으면 새로 연다)." />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
                                             <Button Padding="20,3" Margin="0,6,0,0"
                                                     Command="{Binding DataContext.ToggleEditCommand,
                                                                       RelativeSource={RelativeSource AncestorType=Window}}"
