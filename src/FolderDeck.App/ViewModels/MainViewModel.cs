@@ -286,6 +286,13 @@ public sealed partial class MainViewModel : ObservableObject
     public void ReportWindowMoved() =>
         Inform("저장해 둔 창 자리를 지금 화면에서 되찾을 수 없어 기본 위치로 띄웠다.");
 
+    /// <summary>
+    /// 작업영역이 최소 크기보다 작아 더 줄이지 않았다 (§6.1). 창이 화면을 넘지만 제목줄은
+    /// 잡히므로 실패가 아니다 — 위 둘과 같은 <b>정보</b> 등급(§5.1).
+    /// </summary>
+    public void ReportWindowAtMinimum() =>
+        Inform("지금 화면이 좁아 창을 최소 크기로 띄웠다 — 화면 밖으로 조금 넘칠 수 있다.");
+
     /// <summary>저장된 크기가 지금 작업영역보다 커서 줄였다 (§6.1). 역시 정보 등급.</summary>
     public void ReportWindowResized() =>
         Inform("저장해 둔 창 크기가 지금 화면보다 커서 화면에 맞춰 줄였다.");

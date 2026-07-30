@@ -6,7 +6,10 @@
     <Application.Resources>
         <ResourceDictionary>
 
-            <!-- 색은 전부 여기서 온다. 나중에 이 딕셔너리 하나만 갈아끼우면 앱 전체가 다크가 된다. -->
+            <!-- 색은 전부 여기서 온다. 컨트롤에 #RRGGBB 를 직접 쓰지 않는다.
+                 테마 교체는 시작 시 딕셔너리를 골라 병합하는 방식이며 런타임 교체는 지원하지
+                 않는다 — 아래 참조가 전부 StaticResource 다(DynamicResource 0건).
+                 근거는 doc/FolderDeck_familylook_spec.md §7. 토큰 이름 규약은 같은 문서 §3·§4. -->
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/LightTheme.xaml" />
             </ResourceDictionary.MergedDictionaries>
@@ -65,8 +68,8 @@
                      "여기에 놓인다"가 같은 색으로 읽힌다. 순환 칸 강조보다 뒤에 둬서 이긴다 —
                      드래그 중에는 이쪽이 답이다. -->
                 <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
-                    <Setter Property="Background" Value="{StaticResource Brush.DropValidSurface}" />
-                    <Setter Property="BorderBrush" Value="{StaticResource Brush.DropValid}" />
+                    <Setter Property="Background" Value="{StaticResource Brush.AccentSurface}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource Brush.Accent}" />
                     <Setter Property="BorderThickness" Value="1.5" />
                 </DataTrigger>
             </Style.Triggers>
@@ -203,7 +206,7 @@
                                 <Setter TargetName="Back" Property="Background"
                                         Value="{StaticResource Brush.EditChrome}" />
                                 <Setter TargetName="Back" Property="BorderBrush"
-                                        Value="{StaticResource Brush.DropValid}" />
+                                        Value="{StaticResource Brush.Accent}" />
                                 <Setter Property="Foreground"
                                         Value="{StaticResource Brush.EditChromeText}" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
@@ -235,14 +238,14 @@
                                         Value="{StaticResource Brush.RowHover}" />
                                 <Setter TargetName="Line" Property="Width" Value="2" />
                                 <Setter TargetName="Line" Property="Fill"
-                                        Value="{StaticResource Brush.DropValid}" />
+                                        Value="{StaticResource Brush.Accent}" />
                             </Trigger>
                             <Trigger Property="IsDragging" Value="True">
                                 <Setter TargetName="Strip" Property="Background"
                                         Value="{StaticResource Brush.RowHover}" />
                                 <Setter TargetName="Line" Property="Width" Value="2" />
                                 <Setter TargetName="Line" Property="Fill"
-                                        Value="{StaticResource Brush.DropValid}" />
+                                        Value="{StaticResource Brush.Accent}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -266,14 +269,14 @@
                                         Value="{StaticResource Brush.RowHover}" />
                                 <Setter TargetName="Line" Property="Height" Value="2" />
                                 <Setter TargetName="Line" Property="Fill"
-                                        Value="{StaticResource Brush.DropValid}" />
+                                        Value="{StaticResource Brush.Accent}" />
                             </Trigger>
                             <Trigger Property="IsDragging" Value="True">
                                 <Setter TargetName="Strip" Property="Background"
                                         Value="{StaticResource Brush.RowHover}" />
                                 <Setter TargetName="Line" Property="Height" Value="2" />
                                 <Setter TargetName="Line" Property="Fill"
-                                        Value="{StaticResource Brush.DropValid}" />
+                                        Value="{StaticResource Brush.Accent}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

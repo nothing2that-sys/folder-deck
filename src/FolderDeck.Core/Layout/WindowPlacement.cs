@@ -37,6 +37,12 @@ public enum WindowPlacementDecision
 
     /// <summary>되찾을 수 없는 자리라 기본 위치(주 모니터 중앙)로 보냈다.</summary>
     Fallback,
+
+    /// <summary>
+    /// 작업영역이 최소 크기보다 작아 <b>더 줄이지 않았다</b> — 창이 작업영역을 넘는다.
+    /// 자리는 살아 있고 제목줄도 잡히지만, 사용자가 둔 크기 그대로는 아니다.
+    /// </summary>
+    MinimumEnforced,
 }
 
 /// <param name="Bounds">실제로 띄울 자리 (DIP).</param>
@@ -87,6 +93,38 @@ public static class WindowPlacement
     public const double DefaultHeight = 900;
 
     /// <summary>
+    /// 메인 창을 이보다 작게 만들지 않는다. <b>이 값이 작업영역 축소보다 우선한다</b> —
+    /// 작업영역이 더 작으면 창이 화면을 넘는 쪽을 고른다.
+    /// </summary>
+    /// <remarks>
+    /// <b>값의 출처는 <c>MainWindow.xaml</c> 의 컬럼 제약이다.</b> 왼쪽 <c>MinWidth 220</c> +
+    /// 스플리터 칸 <c>6</c> + 오른쪽 <c>MinWidth 380</c> = 606 이 클라이언트 영역의 하한이고,
+    /// 창 테두리(좌우 4 DIP 씩)를 더하면 614 다. 640 은 거기에 글꼴 렌더링·스크롤바 편차를
+    /// 흡수할 여유를 둔 값이다. 툴바(배치 편집 <c>MinWidth 130</c> + 버튼 둘 ≈ 340)는 이보다
+    /// 좁으므로 폭의 하한을 정하는 것은 컬럼 쪽이다.
+    /// <para>
+    /// 높이 480 의 근거: 툴바 ≈ 35 + 상태 바 ≈ 25 + 창 크롬(제목줄 23 + 테두리 8) = 91 이
+    /// 고정이고, 남는 389 를 4행 그리드가 나누면 한 칸이 ≈ 97 DIP 라 타일 헤더와 파일 몇 줄이
+    /// 함께 보인다(§3.2 "그리드 한 칸을 알아볼 수 있게").
+    /// </para>
+    /// <para>
+    /// <b>왜 최소 크기가 이기는가</b>: 이 아래로 줄이면 레이아웃이 깨져 못 쓰는 창이 되지만,
+    /// 작업영역을 넘는 창은 제목줄만 잡히면 옮길 수 있다. 그래서 <see cref="CanBeGrabbed"/> 의
+    /// 조건(겹침 <see cref="MinVisibleWidth"/>×<see cref="MinVisibleHeight"/> · 제목줄이
+    /// 작업영역 안)은 그대로 지키고 크기만 지킨다.
+    /// </para>
+    /// <para>
+    /// <b>클램프는 여기 한 곳뿐이다.</b> <c>MainWindow.xaml</c> 의 <c>MinWidth</c>/
+    /// <c>MinHeight</c> 도 <c>x:Static</c> 으로 이 상수를 가리킨다 — 두 군데에 숫자를 적으면
+    /// 조용히 어긋난다(§6.1 이 DIP 변환에서 같은 것을 경고한다).
+    /// </para>
+    /// </remarks>
+    public const double MinWindowWidth = 640;
+
+    /// <inheritdoc cref="MinWindowWidth"/>
+    public const double MinWindowHeight = 480;
+
+    /// <summary>
     /// 저장된 위치를 지금 화면 구성에 맞춰 실제로 띄울 자리로 바꾼다.
     /// </summary>
     /// <param name="saved">워크스페이스에 저장된 값. null 이면 기본 위치.</param>
@@ -119,10 +157,18 @@ public static class WindowPlacement
 
         // ② 작업영역보다 큰 창은 먼저 줄인다 — 큰 모니터에서 작은 모니터로 바뀐 경우.
         //    줄인 뒤에 되찾을 수 있는지를 보는 이유는, 실제로 띄울 사각형이 이쪽이기 때문이다.
-        var fitted = wanted with
+        var capped = wanted with
         {
             Width = Math.Min(wanted.Width, work.Width),
             Height = Math.Min(wanted.Height, work.Height),
+        };
+
+        //    다만 최소 크기 아래로는 줄이지 않는다. 작업영역이 그보다 작으면 창이 화면을
+        //    넘는 쪽을 고른다 — 못 쓰는 창보다 삐져나온 창이 낫다(MinWindowWidth 주석).
+        var fitted = capped with
+        {
+            Width = Math.Max(capped.Width, MinWindowWidth),
+            Height = Math.Max(capped.Height, MinWindowHeight),
         };
 
         // ③ 되찾을 수 있는가. 가장 많이 겹치는 모니터가 아니어도 되므로 전부 본다 —
@@ -132,10 +178,14 @@ public static class WindowPlacement
             return CenterOnPrimary(workAreas, primaryIndex, maximized);
         }
 
-        return new WindowPlacementResult(
-            fitted,
-            maximized,
-            fitted == wanted ? WindowPlacementDecision.Saved : WindowPlacementDecision.Resized);
+        // 최소 크기가 개입했으면 그 사실을 따로 알린다 — "화면에 맞춰 줄였다"와 뜻이 다르다.
+        var decision = fitted != capped
+            ? WindowPlacementDecision.MinimumEnforced
+            : fitted == wanted
+                ? WindowPlacementDecision.Saved
+                : WindowPlacementDecision.Resized;
+
+        return new WindowPlacementResult(fitted, maximized, decision);
     }
 
     /// <summary>
@@ -187,8 +237,9 @@ public static class WindowPlacement
             ? new ScreenRect(0, 0, DefaultWidth, DefaultHeight)
             : workAreas[primaryIndex >= 0 && primaryIndex < workAreas.Count ? primaryIndex : 0];
 
-        var width = Math.Min(DefaultWidth, work.Width);
-        var height = Math.Min(DefaultHeight, work.Height);
+        // 기본 크기도 작업영역에 맞춰 줄이되, 최소 크기 아래로는 가지 않는다(위와 같은 규칙).
+        var width = Math.Max(Math.Min(DefaultWidth, work.Width), MinWindowWidth);
+        var height = Math.Max(Math.Min(DefaultHeight, work.Height), MinWindowHeight);
 
         return new WindowPlacementResult(
             new ScreenRect(

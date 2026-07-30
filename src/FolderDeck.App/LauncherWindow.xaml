@@ -8,6 +8,7 @@
         d:DataContext="{d:DesignInstance Type=vm:LauncherViewModel}"
         Title="FolderDeck — 작업 관리 열기"
         Height="680" Width="880"
+        MinWidth="520" MinHeight="420"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource Brush.Chrome}"
         FontFamily="Segoe UI" FontSize="12"
@@ -16,6 +17,14 @@
         Drop="OnWindowDrop"
         DragOver="OnWindowDragOver">
 
+    <!--
+        MinWidth/MinHeight 의 하한은 카드 하나가 온전히 보이는 크기다: 창 여백 28 +
+        카드 테두리 2 + 패딩 24 + 버튼열 ≈ 94 + 버튼 여백 12 + 스크롤바 ≈ 17 = 177 이 고정이고,
+        제목·설명·경로가 읽히려면 왼쪽에 300 은 있어야 한다. 520 은 거기에 여유를 둔 값이다.
+        높이 420 = 머리(제목·설명·필터) ≈ 100 + 카드 하나 ≈ 104 + 새로 만들기 폼 ≈ 52 +
+        발(자동 열기 토글) ≈ 30 + 창 여백 28 + 창 크롬 31 ≈ 345 에 여유.
+        런처는 창 위치를 저장하지 않으므로(§6.1) 값을 여기 직접 둔다 — 클램프하는 코드가 없다.
+    -->
     <DockPanel Margin="14">
 
         <!-- ── 머리 + 필터 ── -->

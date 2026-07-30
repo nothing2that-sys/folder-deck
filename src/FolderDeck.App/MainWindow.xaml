@@ -3,12 +3,15 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:FolderDeck.App.Views"
         xmlns:vm="clr-namespace:FolderDeck.App.ViewModels"
+        xmlns:layout="clr-namespace:FolderDeck.Core.Layout;assembly=FolderDeck.Core"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="{Binding Title, StringFormat=FolderDeck — {0}}"
         Height="900" Width="1400"
+        MinWidth="{x:Static layout:WindowPlacement.MinWindowWidth}"
+        MinHeight="{x:Static layout:WindowPlacement.MinWindowHeight}"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource Brush.Chrome}"
         FontFamily="Segoe UI" FontSize="12"
@@ -103,7 +106,7 @@
                         ToolTip="지금 처리 중인 파일까지만 하고 멈춘다. 이동은 원본을 지우기 전이라 그대로 남는다." />
                 <ProgressBar DockPanel.Dock="Left" Width="180" Height="12" Minimum="0" Maximum="100"
                              Value="{Binding ProgressValue}"
-                             Foreground="{StaticResource Brush.DropValid}"
+                             Foreground="{StaticResource Brush.Accent}"
                              Background="{StaticResource Brush.GridCellSurface}"
                              BorderBrush="{StaticResource Brush.Border}" />
                 <TextBlock Text="{Binding ProgressText}" Margin="10,0,0,0" VerticalAlignment="Center"
@@ -282,14 +285,14 @@
 
                                                     <!-- 드롭 과녁 — 끌어온 파일이 이 행 위에 있다 (§4.2-2).
                                                          테두리만으로는 좁은 행에서 눈에 안 띄어 말로도 적는다. -->
-                                                    <Border Background="{StaticResource Brush.DropValidSurface}"
+                                                    <Border Background="{StaticResource Brush.AccentSurface}"
                                                             CornerRadius="2" Padding="4,0" Margin="6,0,0,0"
                                                             VerticalAlignment="Center"
                                                             Visibility="{Binding IsDropTarget,
                                                                 Converter={StaticResource BoolToVisibility}}">
                                                         <TextBlock Text="여기에 놓기" FontSize="10"
                                                                    FontWeight="SemiBold"
-                                                                   Foreground="{StaticResource Brush.DropValid}" />
+                                                                   Foreground="{StaticResource Brush.Accent}" />
                                                     </Border>
 
                                                     <!-- 순환 번호 태그. 순환 칸이 하나뿐이면 소음이라 숨긴다. -->
@@ -391,7 +394,7 @@
                                             <Button.Resources>
                                                 <Style TargetType="TextBlock">
                                                     <Setter Property="Foreground"
-                                                            Value="{StaticResource Brush.DropValid}" />
+                                                            Value="{StaticResource Brush.Accent}" />
                                                 </Style>
                                             </Button.Resources>
                                         </Button>
@@ -436,9 +439,9 @@
                                                                 <DataTrigger Binding="{Binding IsDropTarget}"
                                                                              Value="True">
                                                                     <Setter Property="Background"
-                                                                        Value="{StaticResource Brush.DropValidSurface}" />
+                                                                        Value="{StaticResource Brush.AccentSurface}" />
                                                                     <Setter Property="BorderBrush"
-                                                                        Value="{StaticResource Brush.DropValid}" />
+                                                                        Value="{StaticResource Brush.Accent}" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>

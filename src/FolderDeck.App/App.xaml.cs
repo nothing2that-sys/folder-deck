@@ -234,6 +234,9 @@ public partial class App : Application
             case WindowPlacementDecision.Resized:
                 viewModel.ReportWindowResized();
                 break;
+            case WindowPlacementDecision.MinimumEnforced:
+                viewModel.ReportWindowAtMinimum();
+                break;
             default:
                 break;
         }

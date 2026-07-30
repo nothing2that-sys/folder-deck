@@ -200,9 +200,9 @@ public partial class TileGridView : UserControl
         Grid.SetColumnSpan(PreviewBox, drag.TargetSpanX);
         Grid.SetRowSpan(PreviewBox, drag.TargetSpanY);
 
-        PreviewBox.BorderBrush = (Brush)FindResource(drag.IsValid ? "Brush.DropValid" : "Brush.Danger");
+        PreviewBox.BorderBrush = (Brush)FindResource(drag.IsValid ? "Brush.Accent" : "Brush.Danger");
         PreviewBox.Background = (Brush)FindResource(
-            drag.IsValid ? "Brush.DropValidSurface" : "Brush.DropInvalidSurface");
+            drag.IsValid ? "Brush.AccentSurface" : "Brush.DropInvalidSurface");
         PreviewText.Text = drag.IsValid
             ? $"{drag.TargetSpanX}×{drag.TargetSpanY}"
             : "겹침 — 놓을 수 없다";

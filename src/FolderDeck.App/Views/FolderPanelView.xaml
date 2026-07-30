@@ -263,7 +263,7 @@
                                                     Converter={StaticResource BoolToVisibility}}" />
                     <TextBlock Text="{Binding SelectionText}" FontSize="11" Margin="6,0,0,0"
                                VerticalAlignment="Center" FontWeight="SemiBold"
-                               Foreground="{StaticResource Brush.DropValid}"
+                               Foreground="{StaticResource Brush.Accent}"
                                Visibility="{Binding HasSelection,
                                                     Converter={StaticResource BoolToVisibility}}" />
                     <TextBlock Text="읽는 중…" Foreground="{StaticResource Brush.TextSecondary}"

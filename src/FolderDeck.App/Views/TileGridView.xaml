@@ -68,9 +68,9 @@
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
                                         <Setter Property="Background"
-                                                Value="{StaticResource Brush.DropValidSurface}" />
+                                                Value="{StaticResource Brush.AccentSurface}" />
                                         <Setter Property="BorderBrush"
-                                                Value="{StaticResource Brush.DropValid}" />
+                                                Value="{StaticResource Brush.Accent}" />
                                         <Setter Property="BorderThickness" Value="2" />
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -211,8 +211,8 @@
             </Grid.RowDefinitions>
 
             <Border x:Name="PreviewBox" Margin="4" CornerRadius="4" BorderThickness="2"
-                    BorderBrush="{StaticResource Brush.DropValid}"
-                    Background="{StaticResource Brush.DropValidSurface}">
+                    BorderBrush="{StaticResource Brush.Accent}"
+                    Background="{StaticResource Brush.AccentSurface}">
                 <TextBlock x:Name="PreviewText" HorizontalAlignment="Center" VerticalAlignment="Center"
                            FontWeight="SemiBold" Foreground="{StaticResource Brush.EditChromeText}" />
             </Border>
