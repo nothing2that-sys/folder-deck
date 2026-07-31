@@ -9,6 +9,11 @@
              Focusable="True"
              PreviewMouseDown="OnPreviewMouseDown"
              DataContextChanged="OnDataContextChanged"
+             AllowDrop="True"
+             DragEnter="OnShellDragOver"
+             DragOver="OnShellDragOver"
+             DragLeave="OnShellDragLeave"
+             Drop="OnShellDrop"
              Margin="4">
 
     <!-- 앵커 복귀 Alt+Home, 상위 Alt+↑, 뒤로/앞으로 Alt+←/→.
@@ -120,20 +125,45 @@
 
     <Grid>
         <!-- 상시 = 실선(호박), 순환 = 점선(보라). Border 는 점선을 못 그리므로 Rectangle 로 그린다. -->
-        <Rectangle RadiusX="4" RadiusY="4" StrokeThickness="2"
-                   Fill="{StaticResource Brush.Surface}">
+        <!-- Fill 은 스타일에서만 준다. 로컬 값을 주면 스타일 트리거를 영구히 이겨 과녁의
+             면 색이 켜지지 않는다 (MainWindow.xaml 대상함 항목과 같은 사고 — WPF 값 우선순위). -->
+        <Rectangle RadiusX="4" RadiusY="4" StrokeThickness="2">
             <Rectangle.Style>
                 <Style TargetType="Rectangle">
+                    <Setter Property="Fill" Value="{StaticResource Brush.Surface}" />
                     <Setter Property="Stroke" Value="{StaticResource Brush.Pinned}" />
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding IsRotating}" Value="True">
                             <Setter Property="Stroke" Value="{StaticResource Brush.Rotating}" />
                             <Setter Property="StrokeDashArray" Value="4 2.5" />
                         </DataTrigger>
+                        <!-- 셸에서 끌어온 것이 이 타일 위에 있다 (§4.9). 폴더 행·대상함과 같은
+                             파랑이라 "여기에 놓인다"가 같은 색으로 읽힌다. 상시/순환 강조보다
+                             뒤에 둬서 이긴다 — 드래그 중에는 이쪽이 답이다. -->
+                        <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                            <Setter Property="Stroke" Value="{StaticResource Brush.Accent}" />
+                            <Setter Property="Fill" Value="{StaticResource Brush.AccentSurface}" />
+                        </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </Rectangle.Style>
         </Rectangle>
+
+        <!-- 테두리만으로는 큰 타일에서 눈에 안 띄어 말로도 적는다 (§4.2-2 와 같은 글귀).
+             목록 위에 떠야 하므로 형제 중 마지막이 아니라 여기 두고 Panel.ZIndex 로 올린다.
+             IsHitTestVisible="False" — 이것이 없으면 깜빡인다. WPF 는 드래그 이벤트를 히트테스트로
+             찾은 <b>자손</b>에 올리고 그것이 이 컨트롤까지 버블한다. 그래서 커서가 이 글귀 위로
+             올라가면 아래 요소가 DragLeave 를 받고(→ IsDropTarget=false → 글귀가 사라짐) 다시
+             DragOver(→ true → 글귀가 뜸)가 되어 제자리에서 진동한다. 과녁은 보이기만 하면 된다. -->
+        <Border Panel.ZIndex="1" IsHitTestVisible="False"
+                Background="{StaticResource Brush.AccentSurface}"
+                BorderBrush="{StaticResource Brush.Accent}" BorderThickness="1.5"
+                CornerRadius="3" Padding="10,4"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Visibility="{Binding IsDropTarget, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="여기에 놓기" FontWeight="SemiBold"
+                       Foreground="{StaticResource Brush.Accent}" />
+        </Border>
 
         <!-- 아직 아무 폴더도 안 띄운 순환 칸. 순환 칸이 여럿이면 제목이 번호를 밝힌다
              (예: "순환2 — 폴더를 지정하세요"). -->

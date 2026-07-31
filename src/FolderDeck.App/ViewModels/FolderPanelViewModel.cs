@@ -220,6 +220,31 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// </remarks>
     public System.Windows.Input.ICommand? TrashSelectionCommand { get; set; }
 
+    /// <summary>
+    /// 셸에서 끌어온 것을 이 타일에 받는 통로 (§4.9). 패널은 엔진도, 다른 조작이 도는지도
+    /// 모른다 — <see cref="TrashSelectionCommand"/> 와 같이 타일을 만들 때 걸어 준다.
+    /// </summary>
+    public IShellDropHost? ShellDropHost { get; set; }
+
+    /// <summary>
+    /// 셸 드래그가 이 타일 위에 있는가 — 파란 과녁 강조 (§4.2-2 의 폴더 행·대상함과 같은 결).
+    /// </summary>
+    /// <remarks>
+    /// 런타임 전용이다. 저장하지 않는다.
+    /// </remarks>
+    [ObservableProperty]
+    private bool isDropTarget;
+
+    /// <summary>
+    /// 셸 드롭의 목적지 — <b>지금 보고 있는 경로</b>이고 앵커가 아니다(§4.9 · §4.7
+    /// <c>allVisible</c> 과 같은 기준: 화면에 보이는 그대로가 목적지다).
+    /// </summary>
+    /// <remarks>
+    /// 아직 폴더를 안 띄운 순환 칸(<see cref="CurrentPath"/> 가 null)과 <b>접근 불가 폴더를
+    /// 보고 있는 타일</b>은 받지 않는다 — 목록에서 지우지는 않되(§5) 놓을 자리도 아니다.
+    /// </remarks>
+    public string? ShellDropDestination => HasFailure ? null : CurrentPath;
+
         /// <summary>아직 아무 폴더도 안 띄운 순환 칸.</summary>
     public bool IsEmpty => Entry is null;
 

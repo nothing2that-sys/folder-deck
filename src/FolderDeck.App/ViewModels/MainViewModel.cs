@@ -15,7 +15,7 @@ using FolderDeck.Core.Storage;
 namespace FolderDeck.App.ViewModels;
 
 /// <summary>메인 창 (§3.2) — 좌우 2단.</summary>
-public sealed partial class MainViewModel : ObservableObject
+public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 {
     private readonly IWorkspaceStore _store;
     private readonly IFolderEnumerator _enumerator;
@@ -789,11 +789,16 @@ public sealed partial class MainViewModel : ObservableObject
     /// 겹치는 것이 없을 때 이동 확인창을 띄울지. 대상함 버튼은 띄우고 드래그는 띄우지 않는다
     /// (§4.2-2 — 손으로 과녁을 겨눈 한 번의 동작이다).
     /// </param>
+    /// <param name="sameFolderSkipped">
+    /// 엔진에 넘기기 전에 ①(온 곳과 같은 폴더)로 빠진 건수 (§4.9). 엔진의 보고에는 없으므로
+    /// 결과 문구까지 따로 들고 간다.
+    /// </param>
     private async Task StartOperationAsync(
         FileOperationKind op,
         IReadOnlyList<OperationItem> items,
         IReadOnlyList<string> destinations,
-        bool confirmMove)
+        bool confirmMove,
+        int sameFolderSkipped = 0)
     {
         var verb = op == FileOperationKind.Copy ? "복사" : "이동";
 
@@ -846,8 +851,10 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        await RunGuardedAsync(new FileOperationRequest(op, items, destinations, policy), verb)
-            .ConfigureAwait(true);
+        await RunGuardedAsync(
+            new FileOperationRequest(op, items, destinations, policy),
+            verb,
+            sameFolderSkipped: sameFolderSkipped).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -855,13 +862,17 @@ public sealed partial class MainViewModel : ObservableObject
     /// 결과 보고, 끝난 뒤 목록 갱신.
     /// </summary>
     private async Task RunGuardedAsync(
-        FileOperationRequest request, string verb, string? successMessage = null)
+        FileOperationRequest request,
+        string verb,
+        string? successMessage = null,
+        int sameFolderSkipped = 0)
     {
         IsOperationRunning = true;
 
         try
         {
-            await ExecuteRequestAsync(request, verb, successMessage).ConfigureAwait(true);
+            await ExecuteRequestAsync(request, verb, successMessage, sameFolderSkipped)
+                .ConfigureAwait(true);
         }
         finally
         {
@@ -872,7 +883,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     private async Task ExecuteRequestAsync(
-        FileOperationRequest request, string verb, string? successMessage)
+        FileOperationRequest request, string verb, string? successMessage, int sameFolderSkipped)
     {
         using var cts = new CancellationTokenSource();
         _operationCts = cts;
@@ -898,7 +909,7 @@ public sealed partial class MainViewModel : ObservableObject
             IsProgressVisible = false;
         }
 
-        ReportOperation(verb, report, successMessage);
+        ReportOperation(verb, report, successMessage, sameFolderSkipped);
     }
 
     // ── 매크로 (§4.7 · Phase 3 Stage 5) ──────────────────────────────────────
@@ -1394,23 +1405,67 @@ public sealed partial class MainViewModel : ObservableObject
     /// 이 자리에 놓을 수 있는가. 놓을 수 없으면 과녁을 켜지 않는다 — 끌고 가서 거절당하는
     /// 것보다 처음부터 받지 않는 편이 낫다(Phase 2 의 "겹침=거부"와 같은 결).
     /// </summary>
-    public bool CanDropOnto(FolderEntry? destination, FileDropPayload? payload)
+    public bool CanDropOnto(FolderEntry? destination, FileDropPayload? payload) =>
+        destination is not null && payload is not null
+        && CanDropOnto(destination.Path, payload.Items);
+
+    /// <summary>
+    /// 같은 판정을 <b>목적지 경로 + 항목 목록</b>으로만 한다 — 내부 드래그(§4.2-2)와 셸
+    /// 드롭(§4.9)이 이 함수 하나를 쓴다.
+    /// </summary>
+    /// <remarks>
+    /// 뷰모델 타입(<see cref="FolderEntry"/>·<see cref="FileDropPayload"/>)에 묶지 않는 이유:
+    /// 셸 드롭이 타일에 떨어지면 목적지는 타일의 <c>CurrentPath</c> 이고 그 자리에는
+    /// <see cref="FolderEntry"/> 가 없다(§4.9 — 앵커가 아니라 보고 있는 경로가 목적지다).
+    /// <para>
+    /// ③ 은 여기서 본다. <b>배치 편집 중</b>도 같이 막는다 — 편집 중에는 파일 목록이
+    /// 잠기므로(§3.2) 타일은 애초에 히트테스트에서 빠지지만, 왼쪽 폴더 행과 대상함은 편집
+    /// 중에도 살아 있어 셸 드롭이 들어올 수 있다. 세 자리를 같은 규칙으로 막는다.
+    /// </para>
+    /// </remarks>
+    public bool CanDropOnto(string? destinationPath, IReadOnlyList<OperationItem>? items) =>
+        destinationPath is not null && items is not null
+        && !IsOperationRunning && !IsEditingLayout
+        && AcceptedForDrop(destinationPath, items).Count > 0;
+
+    /// <summary>
+    /// 이 목적지가 실제로 받을 항목들 (§4.9).
+    /// </summary>
+    /// <remarks>
+    /// <b>①(온 곳과 같은 폴더)의 판정 단위는 뭉치가 아니라 항목이다.</b> 앱 안의 드래그는
+    /// 뭉치의 출처가 패널 하나여서(§4.8) 한 번만 보면 됐지만, 셸 드롭에는 그 전제가 없다
+    /// (탐색기 검색 결과처럼 서로 다른 폴더의 항목이 한 번에 온다). 그래서 온 곳이 목적지와
+    /// 같은 <b>그 항목만</b> 빼고 나머지는 받는다 — 뭉치째 거절하지 않는다. 남은 것이
+    /// 하나라도 있으면 받고, 0개면 받지 않는다(= 과녁을 켜지 않는다).
+    /// <para>
+    /// 내부 드래그의 답은 이 변경으로 달라지지 않는다: 모든 항목의 부모가 같으므로 전부
+    /// 빠져 0개가 되고, 예전의 뭉치 단위 거절과 같은 결론이 된다.
+    /// </para>
+    /// <para>
+    /// ②(폴더를 자기 자신이나 자기 하위로)는 <b>뭉치째 거절</b>이다 — 그대로 두었다. 목적지를
+    /// 삼키는 폴더가 하나라도 섞여 있으면 빈 목록이 된다.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<OperationItem> AcceptedForDrop(
+        string destinationPath, IReadOnlyList<OperationItem> items)
     {
-        if (destination is null || payload is null || payload.Items.Count == 0 || IsOperationRunning)
+        // ② 폴더를 자기 자신이나 자기 하위로 넣으면 무한히 자란다.
+        if (items.Any(i => i.IsDirectory
+                           && (SamePath(destinationPath, i.Path) || IsUnder(destinationPath, i.Path))))
         {
-            return false;
+            return [];
         }
 
-        // 같은 폴더 안으로 놓기 = 무동작. 원본을 건드리지 않는다.
-        if (SamePath(destination.Path, payload.SourceFolder))
-        {
-            return false;
-        }
-
-        // 폴더를 자기 자신이나 자기 하위로 넣으면 무한히 자란다.
-        return !payload.Items.Any(
-            i => i.IsDirectory && (SamePath(destination.Path, i.Path) || IsUnder(destination.Path, i.Path)));
+        // ① 항목이 온 곳이 목적지와 같으면 무동작이다 — 그 항목만 뺀다.
+        return [.. items.Where(i => !SamePath(destinationPath, ParentFolder(i.Path)))];
     }
+
+    /// <summary>
+    /// 항목이 온 폴더. 부모가 없는 루트면 자기 자신을 돌려준다 — 루트에 놓는 경우는
+    /// ② 가 먼저 잡으므로 ① 의 답이 뒤집히지 않는다.
+    /// </summary>
+    private static string ParentFolder(string path) =>
+        System.IO.Path.GetDirectoryName(path) is { Length: > 0 } parent ? parent : path;
 
     /// <summary>
     /// 끌어다 놓기 (§4.2-2). <b>기본은 이동, <c>Ctrl</c> 을 누르면 복사</b> — 탐색기 관용이다.
@@ -1425,18 +1480,31 @@ public sealed partial class MainViewModel : ObservableObject
     /// 있고, 안 겹치는 대부분의 드롭은 여전히 창 없이 지나간다.
     /// </para>
     /// </remarks>
-    public async Task DropOntoFolderAsync(FolderEntry destination, FileDropPayload payload, bool copy)
+    public Task DropOntoFolderAsync(FolderEntry destination, FileDropPayload payload, bool copy) =>
+        DropOntoPathAsync(destination.Path, payload.Items, copy);
+
+    /// <summary>
+    /// 경로 하나로 받는 진입점 — 내부 드래그(§4.2-2)와 셸 드롭(§4.9)이 여기서 만난다.
+    /// <paramref name="copy"/> 의 <b>기본값 규칙은 부르는 쪽이 정한다</b>: 내부는 기본 이동
+    /// (<c>Ctrl</c> 복사), 셸은 기본 복사(<c>Shift</c> 이동)로 <b>일부러 반대다</b>(§4.9).
+    /// </summary>
+    public async Task DropOntoPathAsync(
+        string destinationPath, IReadOnlyList<OperationItem> items, bool copy)
     {
-        if (!CanDropOnto(destination, payload))
+        if (!CanDropOnto(destinationPath, items))
         {
             return;
         }
 
+        // ① 로 빠진 것은 엔진까지 가지 않는다. 몇 개가 빠졌는지는 결과에 적어야 한다(§4.9).
+        var accepted = AcceptedForDrop(destinationPath, items);
+
         await StartOperationAsync(
             copy ? FileOperationKind.Copy : FileOperationKind.Move,
-            payload.Items,
-            [destination.Path],
-            confirmMove: false).ConfigureAwait(true);
+            accepted,
+            [destinationPath],
+            confirmMove: false,
+            sameFolderSkipped: items.Count - accepted.Count).ConfigureAwait(true);
     }
 
     // ── 휴지통 정리 (§4.4 · Phase 3 Stage 3) ─────────────────────────────────
@@ -1539,7 +1607,16 @@ public sealed partial class MainViewModel : ObservableObject
     /// "3개를 휴지통으로 보냈다"가 답인 경우에 쓴다. 실패가 하나라도 있으면 무시된다 —
     /// 그때는 무엇이 안 됐는지가 요약이어야 하기 때문이다.
     /// </param>
-    private void ReportOperation(string verb, FileOperationReport report, string? successMessage = null)
+    /// <param name="sameFolderSkipped">
+    /// ①(온 곳과 같은 폴더)로 엔진 앞에서 빠진 건수 (§4.9 — "건너뛴 건수는 결과에 적는다").
+    /// 사유가 전부 같고 요약 한 줄로 다 말할 수 있어 <b>사유 목록 창은 열지 않는다</b> —
+    /// 대신 부분 결과이므로 등급은 §5.1 의 <b>남는</b> 쪽이다.
+    /// </param>
+    private void ReportOperation(
+        string verb,
+        FileOperationReport report,
+        string? successMessage = null,
+        int sameFolderSkipped = 0)
     {
         var ok = report.Results.Count(r => r.Status == OperationItemStatus.Succeeded);
         var skipped = report.Results.Count(r => r.Status == OperationItemStatus.Skipped);
@@ -1547,6 +1624,11 @@ public sealed partial class MainViewModel : ObservableObject
         var overwritten = report.Results.Count(r => r.Overwritten);
 
         var summary = $"{verb} — 성공 {ok} · 건너뜀 {skipped} · 실패 {failed}";
+        if (sameFolderSkipped > 0)
+        {
+            summary += $" · 온 곳과 같은 폴더 {sameFolderSkipped}";
+        }
+
         if (overwritten > 0)
         {
             // 덮어쓰기는 차단하지 않되 일어났음을 반드시 알린다 (§4.3).
@@ -1558,7 +1640,7 @@ public sealed partial class MainViewModel : ObservableObject
             summary += " · 취소됨";
         }
 
-        if (failed == 0 && skipped == 0)
+        if (failed == 0 && skipped == 0 && sameFolderSkipped == 0)
         {
             Inform(report.Canceled || successMessage is null ? summary : successMessage);
             return;
@@ -1566,6 +1648,14 @@ public sealed partial class MainViewModel : ObservableObject
 
         // 성공하지 못한 것이 있으면 요약은 상태 바에 남기고, 사유는 한 줄씩 따로 보여준다.
         Warn(summary);
+
+        // ① 만으로 빠진 것은 사유 목록 창을 열지 않는다 — 엔진이 돌려준 사유가 없고, 빠진
+        // 이유는 요약에 이미 적혀 있다. 셸에서 파일 몇 개를 끌어올 때마다 창이 뜨면 확인창을
+        // 두지 않는다는 §4.9 의 결과 경로가 사실상 창 있는 경로가 된다.
+        if (failed == 0 && skipped == 0)
+        {
+            return;
+        }
 
         var lines = report.Results
             .Where(r => r.Status != OperationItemStatus.Succeeded)
@@ -1781,6 +1871,9 @@ public sealed partial class MainViewModel : ObservableObject
         {
             // 우클릭 "휴지통으로 삭제"가 닿을 통로. 패널은 엔진을 모른다 (§4.4).
             TrashSelectionCommand = TrashSelectionCommand,
+
+            // 셸 드롭을 받는 통로도 같은 이유로 여기서 걸어 준다 (§4.9).
+            ShellDropHost = this,
         };
 
         if (spec.Kind == TileKind.Pinned && spec.FolderId is { } id)

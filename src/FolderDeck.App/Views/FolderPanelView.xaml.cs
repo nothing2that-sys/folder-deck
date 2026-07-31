@@ -1,8 +1,10 @@
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using FolderDeck.App.ViewModels;
+using FolderDeck.Core.Operations;
 
 namespace FolderDeck.App.Views;
 
@@ -247,6 +249,96 @@ public partial class FolderPanelView : UserControl
 
         list.SelectedItems.Clear();
         container.IsSelected = true;
+    }
+
+    // ── 셸에서 끌어온 것 받기 (§4.9 · Phase 5 Stage 1) ────────────────────────
+    //
+    // 타일이 셸 드롭의 과녁이 된다. 내부 드래그(§4.2-2)는 타일에서 <b>시작</b>만 하고 타일로
+    // <b>놓지는</b> 않으므로, 이것은 기존 자리에 분기를 더하는 것이 아니라 새 과녁이다.
+
+    /// <summary>
+    /// 과녁 위에 있는 동안 계속 불린다 — 강조를 켜고 커서 모양(복사/이동)을 정한다.
+    /// <b><c>DragEnter</c> 도 이 핸들러를 쓴다.</b>
+    /// </summary>
+    /// <remarks>
+    /// WPF 는 드래그 이벤트를 히트테스트로 찾은 <b>자손</b>에 올리고 그것이 <c>AllowDrop</c> 을
+    /// 가진 이 컨트롤까지 버블한다. 그래서 커서가 이 컨트롤 안에서 자식 하나를 벗어나 옆
+    /// 자식으로 옮겨가기만 해도 — 포인터는 이 컨트롤 밖으로 나간 적이 없는데 —
+    /// <c>DragLeave</c> 가 올라와 강조가 한 번 꺼진다. 그 뒤 <c>DragEnter</c> 가 곧바로 따라오므로
+    /// 두 이벤트에 같은 판정을 물려 두면 꺼진 자리가 같은 호출 안에서 다시 켜져 눈에 보이지 않는다.
+    /// </remarks>
+    private void OnShellDragOver(object sender, DragEventArgs e)
+    {
+        // 받지 않으면 과녁을 켜지 않고 커서도 "안 됨"이다 (§4.2-2).
+        e.Effects = ResolveShellDrop(e) is null
+            ? DragDropEffects.None
+            : DropRouter.ShellEffect(e.KeyStates);
+
+        e.Handled = true;
+    }
+
+    private void OnShellDragLeave(object sender, DragEventArgs e)
+    {
+        if (ViewModel is { } panel)
+        {
+            panel.IsDropTarget = false;
+        }
+    }
+
+    private async void OnShellDrop(object sender, DragEventArgs e)
+    {
+        var drop = ResolveShellDrop(e);
+
+        if (ViewModel is { } panel)
+        {
+            panel.IsDropTarget = false;
+        }
+
+        // 어느 분기로 갔는지 남긴다 — 받지 않은 드롭도 이유가 로그에 보여야 한다.
+        DropRouter.TraceDrop(
+            "tile", DropRouter.Route(e.Data), drop?.Destination, drop?.Items.Count ?? 0);
+
+        if (drop is not { } accepted)
+        {
+            return;
+        }
+
+        e.Handled = true;
+
+        // 수정키는 <b>놓는 순간</b>으로 판정한다 — 기본 복사, Shift 면 이동 (§4.9).
+        // 조작 실패는 결과로 보고되므로 여기까지 예외로 올라오지 않는다 (§5).
+        await accepted.Host.DropOntoPathAsync(
+            accepted.Destination, accepted.Items, DropRouter.ShellDropCopies(e.KeyStates));
+    }
+
+    /// <summary>
+    /// 받을 수 있는 드롭이면 (통로, 목적지, 항목). 아니면 null. 과녁 강조도 여기서 켠다 —
+    /// 판정과 강조가 갈라지면 "파랗게 켜졌는데 안 받는" 자리가 생긴다.
+    /// </summary>
+    /// <remarks>
+    /// <c>DragOver</c> 와 <c>Drop</c> 이 <b>이 함수 하나</b>를 쓴다. 사설 포맷이 실린 드롭은
+    /// <see cref="DropRouter"/> 가 <see cref="DropRoute.Internal"/> 로 갈라 주고, 타일은 내부
+    /// 드래그를 받는 자리가 아니므로(받는 자리는 왼쪽 폴더 행과 대상함뿐이다 — §4.2-2) 여기서
+    /// 조용히 끝난다.
+    /// </remarks>
+    private (IShellDropHost Host, string Destination, IReadOnlyList<OperationItem> Items)?
+        ResolveShellDrop(DragEventArgs e)
+    {
+        if (DropRouter.Route(e.Data) != DropRoute.Shell
+            || ViewModel is not { ShellDropDestination: { } destination, ShellDropHost: { } host } panel)
+        {
+            return null;
+        }
+
+        var items = DropRouter.ShellItems(e.Data);
+
+        if (!host.CanDropOnto(destination, items))
+        {
+            return null;
+        }
+
+        panel.IsDropTarget = true;
+        return (host, destination, items);
     }
 
     /// <summary>

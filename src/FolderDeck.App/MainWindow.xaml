@@ -186,6 +186,7 @@
                                             PreviewMouseLeftButtonDown="OnFolderRowMouseDown"
                                             PreviewMouseMove="OnFolderRowMouseMove"
                                             AllowDrop="True"
+                                            DragEnter="OnFileDropOver"
                                             DragOver="OnFileDropOver"
                                             DragLeave="OnFileDropLeave"
                                             Drop="OnFileDrop"
@@ -284,10 +285,14 @@
                                                     </Border>
 
                                                     <!-- 드롭 과녁 — 끌어온 파일이 이 행 위에 있다 (§4.2-2).
-                                                         테두리만으로는 좁은 행에서 눈에 안 띄어 말로도 적는다. -->
+                                                         테두리만으로는 좁은 행에서 눈에 안 띄어 말로도 적는다.
+                                                         IsHitTestVisible="False" — 이것이 없으면 커서가 이 글귀
+                                                         위로 올라갔을 때 강조가 진동한다(자세한 이유는
+                                                         FolderPanelView.xaml 의 같은 자리 주석). -->
                                                     <Border Background="{StaticResource Brush.AccentSurface}"
                                                             CornerRadius="2" Padding="4,0" Margin="6,0,0,0"
                                                             VerticalAlignment="Center"
+                                                            IsHitTestVisible="False"
                                                             Visibility="{Binding IsDropTarget,
                                                                 Converter={StaticResource BoolToVisibility}}">
                                                         <TextBlock Text="여기에 놓기" FontSize="10"
@@ -425,6 +430,7 @@
                                                         BorderThickness="1"
                                                         ToolTip="{Binding PathText}"
                                                         AllowDrop="True"
+                                                        DragEnter="OnFileDropOver"
                                                         DragOver="OnFileDropOver"
                                                         DragLeave="OnFileDropLeave"
                                                         Drop="OnFileDrop">
