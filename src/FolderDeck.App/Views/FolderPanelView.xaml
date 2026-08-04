@@ -8,6 +8,9 @@
              d:DataContext="{d:DesignInstance Type=vm:FolderPanelViewModel}"
              Focusable="True"
              PreviewMouseDown="OnPreviewMouseDown"
+             PreviewMouseMove="OnPanelPreviewMouseMove"
+             PreviewMouseLeftButtonUp="OnPanelPreviewMouseLeftButtonUp"
+             LostMouseCapture="OnPanelLostMouseCapture"
              DataContextChanged="OnDataContextChanged"
              AllowDrop="True"
              DragEnter="OnTileDragOver"
@@ -352,7 +355,9 @@
                                                 Converter={StaticResource BoolToVisibility}}" />
             </StackPanel>
 
-            <Grid>
+            <!-- ListArea — 고무줄의 유일한 좌표계다 (§4.2-2 · Stage 3B). 사각형도 항목 사각형도
+                 이 요소 기준으로만 잰다. 두 좌표계를 섞으면 스크롤된 목록에서 어긋난다. -->
+            <Grid x:Name="ListArea">
                 <!-- "검색 안 함"(평소 빈 폴더)과 구분되는 "결과 없음" -->
                 <TextBlock Text="결과 없음" Foreground="{StaticResource Brush.TextSecondary}"
                            HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -365,6 +370,7 @@
                           BorderThickness="0" Background="Transparent"
                           SelectionMode="Extended"
                           SelectionChanged="OnSelectionChanged"
+                          PreviewMouseLeftButtonDown="OnListPreviewMouseLeftButtonDown"
                           VirtualizingPanel.IsVirtualizing="True"
                           VirtualizingPanel.VirtualizationMode="Recycling"
                           ScrollViewer.CanContentScroll="True">
@@ -394,6 +400,7 @@
                           BorderThickness="0" Background="Transparent"
                           SelectionMode="Extended"
                           SelectionChanged="OnSelectionChanged"
+                          PreviewMouseLeftButtonDown="OnListPreviewMouseLeftButtonDown"
                           VirtualizingPanel.IsVirtualizing="True"
                           VirtualizingPanel.VirtualizationMode="Recycling"
                           ScrollViewer.CanContentScroll="True"
@@ -412,6 +419,18 @@
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
+
+                <!-- 고무줄 사각형 (§4.2-2 · Stage 3B). 과녁 강조와 같은 토큰이라 "이 앱이 지금
+                     무엇을 집고 있다"가 같은 파랑으로 읽힌다.
+                     IsHitTestVisible="False" — 이것이 없으면 사각형이 자기 밑의 항목을 가려
+                     판정이 자기 그림에 걸린다(Stage 1 의 과녁 강조 진동과 같은 사고).
+                     ClipToBounds="True" — 캡처 중에는 커서가 목록 밖으로 나가므로 사각형이
+                     목록 영역을 넘어 그려지지 않게 잘라 준다. -->
+                <Canvas x:Name="BandLayer" IsHitTestVisible="False" ClipToBounds="True">
+                    <Rectangle x:Name="Band" Visibility="Collapsed"
+                               Stroke="{StaticResource Brush.Accent}" StrokeThickness="1"
+                               Fill="{StaticResource Brush.AccentSurface}" />
+                </Canvas>
             </Grid>
         </DockPanel>
     </Grid>

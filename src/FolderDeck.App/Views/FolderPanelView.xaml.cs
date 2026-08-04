@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -281,6 +283,259 @@ public partial class FolderPanelView : UserControl
         public bool Fired { get; private set; }
 
         public void Dispose() => _window?.RemoveHandler(DragDrop.PreviewDropEvent, _handler);
+    }
+
+    // ── 고무줄 선택 (§4.2-2 · Phase 5 Stage 3B) ───────────────────────────────
+    //
+    // 빈 곳에서 끌어 사각형으로 훑어 여러 개를 고른다. 판정과 기하는 <see cref="RubberBand"/> 에
+    // 있고(뷰 밖에서 시험할 수 있게) 여기 남는 것은 <b>붙잡고 있는 상태</b>뿐이다.
+    //
+    // 이 앱의 세 번째 드래그다 — OLE(DoDragDrop) · 배치 편집의 캡처(TileGridView) 다음이다.
+    // 섞이지 않는 근거: 아래 상태는 눌린 자리가 Empty 일 때만 세워지고, 항목 위 다운은
+    // 기존 컨테이너 핸들러가 그대로 가져간다(e.Handled 를 세우지 않는다).
+
+    /// <summary>고무줄 후보로 누른 자리 (<c>ListArea</c> 좌표). 임계를 넘기 전에는 이것만 있다.</summary>
+    private Point? _bandOrigin;
+
+    /// <summary>누른 자리가 든 목록. 항목 사각형을 이 목록에서만 뽑는다(뷰 방식이 둘이다).</summary>
+    private ListView? _bandList;
+
+    /// <summary>임계를 넘어 실제로 그리기 시작했나. <c>_bandOrigin</c> 만으로는 아직 클릭이다.</summary>
+    private bool _bandActive;
+
+    /// <summary>
+    /// <c>Ctrl</c> 로 시작했을 때 지켜야 할 기존 선택. 사각형이 줄어들어도 이것은 남는다.
+    /// </summary>
+    private readonly List<object> _bandKept = [];
+
+    /// <summary>
+    /// <c>Esc</c> 를 받으려고 드래그 한 번 동안만 창에 붙는 핸들러 (§4-5).
+    /// </summary>
+    /// <remarks>
+    /// 캡처는 <b>키보드를 옮겨 주지 않는다.</b> 빈 곳을 누르는 것으로 포커스가 이 패널에
+    /// 들어오지 않을 수 있어, 패널의 <c>PreviewKeyDown</c> 에만 걸면 <c>Esc</c> 를 놓친다.
+    /// 창에 붙였다 떼는 것은 Stage 2 의 <see cref="DropWatch"/> 와 같은 결이다.
+    /// </remarks>
+    private KeyEventHandler? _bandEscape;
+
+    /// <summary>
+    /// 목록에서 왼쪽 버튼을 눌렀다 — <b>여기서는 아무것도 바꾸지 않는다.</b> 누른 자리만 기억한다.
+    /// </summary>
+    /// <remarks>
+    /// <b>두 <see cref="ListView"/> 가 이 핸들러 하나를 쓴다</b>(§6.1 의 두 뷰 방식). 뷰 방식마다
+    /// 따로 쓰면 하나만 고쳐지는 사고가 난다.
+    /// <para>
+    /// 선택을 지우는 것도 캡처도 <b>임계를 넘은 뒤</b>다(<see cref="BeginBand"/>). 여기서 지우면
+    /// 빈 곳을 그냥 클릭한 것만으로 선택이 날아간다 — §2 가 "빈 곳 클릭은 앱 코드가 아무것도
+    /// 하지 않는다"고 확인했으므로 그 자리가 그대로 남아야 한다.
+    /// </para>
+    /// <para><c>e.Handled</c> 를 세우지 않는다 — 항목 위 다운은 컨테이너 핸들러 것이다.</para>
+    /// </remarks>
+    private void OnListPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var kind = RubberBand.Classify(RubberBand.AncestorTypes(e.OriginalSource, this));
+
+        // §4-1 실측용 한 줄. 눌린 자리가 무엇으로 오는지는 짐작할 것이 아니다.
+        if (kind != ListHitKind.Empty || sender is not ListView list)
+        {
+            return;
+        }
+
+        _bandOrigin = e.GetPosition(ListArea);
+        _bandList = list;
+    }
+
+    /// <summary>
+    /// 임계를 넘으면 고무줄을 시작하고, 시작한 뒤에는 사각형과 선택을 갱신한다.
+    /// </summary>
+    /// <remarks>
+    /// 임계는 기존 드래그와 <b>같은 <see cref="SystemParameters"/></b> 를 쓴다 — 새 숫자를 만들지
+    /// 않는다. 기준점도 같은 요소가 아니라 <c>ListArea</c> 지만, 두 값 다 같은 좌표계 안의
+    /// 거리이므로 비교가 성립한다.
+    /// </remarks>
+    private void OnPanelPreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_bandOrigin is not { } origin)
+        {
+            return;
+        }
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            // 버튼을 놓친 채로 상태가 남는 경로를 막는다(창 밖에서 놓은 경우 등).
+            EndBand();
+            return;
+        }
+
+        var now = e.GetPosition(ListArea);
+
+        if (!_bandActive)
+        {
+            if (!RubberBand.PastThreshold(origin, now))
+            {
+                // 아직 클릭이다 — 선택도 캡처도 건드리지 않는다.
+                return;
+            }
+
+            BeginBand();
+        }
+
+        var band = RubberBand.Between(origin, now);
+
+        Canvas.SetLeft(Band, band.X);
+        Canvas.SetTop(Band, band.Y);
+        Band.Width = band.Width;
+        Band.Height = band.Height;
+
+        ApplySelection(band);
+    }
+
+    private void OnPanelPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) => EndBand();
+
+    /// <summary>캡처를 빼앗겼다 — 상태가 남으면 마우스가 계속 먹히지 않는 것처럼 보인다.</summary>
+    private void OnPanelLostMouseCapture(object sender, MouseEventArgs e) => EndBand();
+
+    /// <summary>
+    /// 임계를 넘었다 — 여기서 선택을 정리하고 캡처와 <c>Esc</c> 를 건다.
+    /// </summary>
+    /// <remarks>
+    /// <b>수정키는 이 순간으로 판정한다</b>(§3) — 내부 드롭이 "놓는 순간"으로 보는 것과 다르다.
+    /// 기존 선택을 지울지가 시작할 때 정해지기 때문이다: 끌던 도중에 <c>Ctrl</c> 을 떼면 이미
+    /// 지운 것을 되살릴 수가 없다.
+    /// </remarks>
+    private void BeginBand()
+    {
+        _bandActive = true;
+
+        // 목록에 키보드 포커스를 준다 — <b>하이라이트가 이것에 달려 있다.</b>
+        //
+        // WPF 기본 ListViewItem 템플릿은 Selector.IsSelectionActive 가 거짓이면 "비활성 선택"
+        // 브러시로 그린다. 실측: 흰 목록에서 고른 행이 활성 #FFCCEFFE(파랑) 대신
+        // #FFECECEC 로 그려져 배경과 구분되지 않았다 — 고른 것이 안 골라진 것처럼 보인다.
+        // 캡처는 포커스를 옮겨 주지 않고, 빈 곳을 누르는 것으로는 포커스가 들어오지 않는다
+        // (항목을 직접 클릭할 때는 WPF 가 준다 — 그래서 그 경로만 멀쩡했다).
+        _bandList!.Focus();
+
+        var adds = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+
+        _bandKept.Clear();
+        _bandKept.AddRange(RubberBand.Kept(adds, [.. _bandList.SelectedItems.Cast<object>()]));
+
+        if (!adds)
+        {
+            _bandList.SelectedItems.Clear();
+        }
+
+        Band.Visibility = Visibility.Visible;
+        CaptureMouse();
+
+        // Esc 는 창에서 받는다 — 캡처가 키보드를 옮겨 주지 않는다.
+        _bandEscape = (_, args) =>
+        {
+            if (args.Key == Key.Escape)
+            {
+                EndBand();
+                args.Handled = true;
+            }
+        };
+
+        Window.GetWindow(this)?.AddHandler(Keyboard.PreviewKeyDownEvent, _bandEscape, handledEventsToo: true);
+    }
+
+    /// <summary>
+    /// 고무줄을 끝낸다. <b>골라진 선택은 그대로 둔다</b> — 그 상태에서 드래그·복사·삭제가 이어진다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="MouseUp"/> · <see cref="UIElement.LostMouseCapture"/> · <c>Esc</c> 세 경로가 전부
+    /// 이것을 부른다. <b>상태를 먼저 비운다</b> — <c>ReleaseMouseCapture</c> 가
+    /// <c>LostMouseCapture</c> 로 여기 다시 들어오기 때문이다(배치 편집의 <c>EndDrag</c> 와 같은 결).
+    /// 임계를 못 넘고 끝난 경우도 이 함수가 받는다 — 그때는 걸어 둔 것이 없어 비우기만 한다.
+    /// </remarks>
+    private void EndBand()
+    {
+        var escape = _bandEscape;
+        var wasActive = _bandActive;
+
+        _bandOrigin = null;
+        _bandList = null;
+        _bandActive = false;
+        _bandEscape = null;
+        _bandKept.Clear();
+
+        if (escape is not null)
+        {
+            Window.GetWindow(this)?.RemoveHandler(Keyboard.PreviewKeyDownEvent, escape);
+        }
+
+        if (!wasActive)
+        {
+            return;
+        }
+
+        Band.Visibility = Visibility.Collapsed;
+
+        if (IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
+    }
+
+    /// <summary>
+    /// 사각형과 겹치는 항목을 고른다 — <b>선택은 WPF 것을 그대로 쓴다.</b>
+    /// </summary>
+    /// <remarks>
+    /// <c>SelectedItems</c> 만 갱신하고 뷰모델에는 기존 <c>OnSelectionChanged</c> 통로가 옮겨
+    /// 적는다 — 새 선택 통로를 만들지 않고 <c>SelectionMode</c> 도 건드리지 않는다.
+    /// <para>
+    /// <b>실현된 컨테이너만 본다.</b> 가상화가 켜져 있어(<c>Recycling</c>) 화면 밖 항목에는
+    /// 사각형이 없다 — 없는 것을 억지로 만들지 않는다(자동 스크롤이 v1 제외라 이것이 일관된다).
+    /// </para>
+    /// <para>
+    /// 달라진 것만 넣고 뺀다. 매번 비우고 다시 채우면 <c>SelectionChanged</c> 가 폭주하고
+    /// 목록이 깜빡인다.
+    /// </para>
+    /// </remarks>
+    private void ApplySelection(Rect band)
+    {
+        if (_bandList is not { } list)
+        {
+            return;
+        }
+
+        var wanted = RubberBand.Wanted(_bandKept, RealizedRows(list), band);
+
+        foreach (var stale in list.SelectedItems.Cast<object>().Where(o => !wanted.Contains(o)).ToList())
+        {
+            list.SelectedItems.Remove(stale);
+        }
+
+        foreach (var fresh in wanted.Where(o => !list.SelectedItems.Contains(o)))
+        {
+            list.SelectedItems.Add(fresh);
+        }
+    }
+
+    /// <summary>
+    /// 지금 <b>화면에 있는</b> 행과 그 사각형 (<c>ListArea</c> 좌표).
+    /// </summary>
+    /// <remarks>
+    /// 가상화 때문에 <see cref="ItemContainerGenerator.ContainerFromIndex"/> 는 화면 밖 항목에
+    /// null 을 준다. 좌표계는 <c>ListArea</c> 하나로만 잰다 — 사각형과 같은 기준이어야 스크롤된
+    /// 목록에서 어긋나지 않는다.
+    /// </remarks>
+    private IEnumerable<(object Item, Rect Bounds)> RealizedRows(ListView list)
+    {
+        for (var i = 0; i < list.Items.Count; i++)
+        {
+            if (list.ItemContainerGenerator.ContainerFromIndex(i) is not ListViewItem { IsVisible: true } row)
+            {
+                continue;
+            }
+
+            yield return (
+                list.Items[i],
+                row.TransformToAncestor(ListArea).TransformBounds(new Rect(default, row.RenderSize)));
+        }
     }
 
     /// <summary>
