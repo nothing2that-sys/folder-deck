@@ -10,10 +10,10 @@
              PreviewMouseDown="OnPreviewMouseDown"
              DataContextChanged="OnDataContextChanged"
              AllowDrop="True"
-             DragEnter="OnShellDragOver"
-             DragOver="OnShellDragOver"
-             DragLeave="OnShellDragLeave"
-             Drop="OnShellDrop"
+             DragEnter="OnTileDragOver"
+             DragOver="OnTileDragOver"
+             DragLeave="OnTileDragLeave"
+             Drop="OnTileDrop"
              Margin="4">
 
     <!-- 앵커 복귀 Alt+Home, 상위 Alt+↑, 뒤로/앞으로 Alt+←/→.

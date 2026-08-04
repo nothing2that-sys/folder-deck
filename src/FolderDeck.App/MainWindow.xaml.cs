@@ -286,7 +286,7 @@ public partial class MainWindow : Window
     private void OnFileDropOver(object sender, DragEventArgs e)
     {
         e.Effects = ResolveDrop(sender, e) is { } drop
-            ? drop.Copy ? DragDropEffects.Copy : DragDropEffects.Move
+            ? DropRouter.Effect(drop.Copy)
             : DragDropEffects.None;
 
         e.Handled = true;
@@ -334,7 +334,8 @@ public partial class MainWindow : Window
     /// </summary>
     /// <remarks>
     /// <c>DragOver</c> 와 <c>Drop</c> 이 <b>이 함수 하나</b>를 쓴다. 포맷 순서와 수정키 규칙은
-    /// <see cref="DropRouter"/> 에 있어 타일까지 세 자리가 같은 것을 본다.
+    /// <see cref="DropRouter.Resolve"/> 에 있어 타일까지 세 자리가 같은 것을 본다 — 여기서
+    /// 더하는 것은 <b>목적지</b>뿐이다.
     /// <para>
     /// 목적지는 <b>그 자리의 앵커 경로</b>다(<c>Entry.Path</c>). 타일의 <c>CurrentPath</c> 는
     /// 타일에만 있는 개념이다 — 대상함에 놓으면 <b>그 항목 하나</b>로만 가고 체크된 목적지
@@ -343,50 +344,16 @@ public partial class MainWindow : Window
     /// </remarks>
     private ResolvedDrop? ResolveDrop(object sender, DragEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: IFileDropTarget target })
-        {
-            return null;
-        }
-
-        IReadOnlyList<OperationItem>? items;
-        bool copy;
-
-        switch (DropRouter.Route(e.Data))
-        {
-            case DropRoute.Internal:
-                // 앱 안에서 시작한 드래그 — 기본 이동, Ctrl 복사 (§4.2-2).
-                items = e.Data.GetData(FolderPanelView.FileDragFormat) is FileDropPayload payload
-                    ? payload.Items
-                    : null;
-                copy = IsCopyRequested(e);
-                break;
-
-            case DropRoute.Shell:
-                // 밖에서 온 드래그 — 기본 복사, Shift 이동 (§4.9). 일부러 반대다.
-                items = DropRouter.ShellItems(e.Data);
-                copy = DropRouter.ShellDropCopies(e.KeyStates);
-                break;
-
-            default:
-                return null;
-        }
-
-        if (items is null || !ViewModel.CanDropOnto(target.Entry.Path, items))
+        if (sender is not FrameworkElement { DataContext: IFileDropTarget target }
+            || DropRouter.Resolve(e.Data, e.KeyStates) is not { } incoming
+            || !ViewModel.CanDropOnto(target.Entry.Path, incoming.Items))
         {
             return null;
         }
 
         target.IsDropTarget = true;
-        return new ResolvedDrop(target.Entry.Path, items, copy);
+        return new ResolvedDrop(target.Entry.Path, incoming.Items, incoming.Copy);
     }
-
-    /// <summary>
-    /// 탐색기 관용 — 기본은 이동, <c>Ctrl</c> 을 누르고 있으면 복사. <b>앱 안의 드래그에만</b>
-    /// 쓴다(셸 드롭은 <see cref="DropRouter.ShellDropCopies"/> — 일부러 반대다).
-    /// <para>판정은 <b>놓는 순간</b>의 수정키로 한다 — 끌기 시작할 때가 아니다.</para>
-    /// </summary>
-    private static bool IsCopyRequested(DragEventArgs e) =>
-        (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
 
     /// <summary>진단 로그에서 어느 과녁이었는지 가려내려면 이름이 필요하다.</summary>
     private static string SiteOf(object sender) =>

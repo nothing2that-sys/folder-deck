@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Windows;
+using FolderDeck.App.ViewModels;
 using FolderDeck.Core.Operations;
 using IoDirectory = System.IO.Directory;
 
@@ -87,11 +88,59 @@ public static class DropRouter
         (keys & DragDropKeyStates.ShiftKey) != DragDropKeyStates.ShiftKey;
 
     /// <summary>
+    /// 앱 안에서 시작한 드래그의 수정키 — <b>기본 이동, <c>Ctrl</c> 을 누르면 복사</b> (§4.2-2).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ShellDropCopies"/> 와 <b>일부러 반대다.</b> 앱 안의 드래그는 이미 이
+    /// 워크스페이스에 속한 파일을 옮기는 것이라 이동이 기본이지만, 밖에서 들어오는 것은 남의
+    /// 폴더에 있는 원본이다.
+    /// <para>판정은 <b>놓는 순간</b>의 <c>KeyStates</c> 로 한다 — 끌기 시작할 때가 아니다.</para>
+    /// </remarks>
+    public static bool InternalDropCopies(DragDropKeyStates keys) =>
+        (keys & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
+
+    /// <summary>
+    /// 한 드롭을 <b>항목 목록 + 복사여부</b>로 푼다 — 받을 포맷이 없으면 null (§4.9 · §4.2-2).
+    /// </summary>
+    /// <remarks>
+    /// <b>여기가 두 규칙이 갈리는 유일한 자리다.</b> <see cref="Route"/> 가 정한 순서 위에
+    /// 포맷 꺼내기와 수정키 규칙을 얹는다 — 내부는 기본 이동(<c>Ctrl</c> 복사), 셸은 기본
+    /// 복사(<c>Shift</c> 이동)로 일부러 반대다.
+    /// <para>
+    /// <b>목적지는 여기서 정하지 않는다.</b> 자리마다 다르기 때문이다 — 왼쪽 폴더 행과 대상함은
+    /// 앵커 경로(<c>Entry.Path</c>)이고 타일은 지금 보고 있는 경로(<c>CurrentPath</c>)다(§4.9).
+    /// 목적지가 정해진 뒤의 ①②③ 판정은 <c>MainViewModel.CanDropOnto</c> 한 곳이 한다.
+    /// </para>
+    /// </remarks>
+    public static (IReadOnlyList<OperationItem> Items, bool Copy)? Resolve(
+        IDataObject? data, DragDropKeyStates keys)
+    {
+        switch (Route(data))
+        {
+            case DropRoute.Internal:
+                // 앱 안에서 시작한 드래그 — 사설 포맷에 항목이 이미 실려 있어 변환이 없다.
+                return data!.GetData(FolderPanelView.FileDragFormat) is FileDropPayload payload
+                    ? (payload.Items, InternalDropCopies(keys))
+                    : null;
+
+            case DropRoute.Shell:
+                return (ShellItems(data!), ShellDropCopies(keys));
+
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
     /// 커서에 돌려줄 효과 — <b>우리가 정한 하나로 좁힌다.</b> 셸은 <c>Copy, Move, Link</c> 를
     /// 다 허용하지만(Stage 0 실측) <b><c>Link</c> 는 쓰지 않는다</b>(§4.9).
     /// </summary>
+    public static DragDropEffects Effect(bool copy) =>
+        copy ? DragDropEffects.Copy : DragDropEffects.Move;
+
+    /// <summary>셸 드롭의 규칙과 효과를 이어 붙인 것 — 기본 복사, <c>Shift</c> 면 이동.</summary>
     public static DragDropEffects ShellEffect(DragDropKeyStates keys) =>
-        ShellDropCopies(keys) ? DragDropEffects.Copy : DragDropEffects.Move;
+        Effect(ShellDropCopies(keys));
 
     /// <summary>
     /// 어느 분기로 갔는지 남긴다 — <c>early return</c> 을 조용히 하지 않는다. 두 포맷이 함께

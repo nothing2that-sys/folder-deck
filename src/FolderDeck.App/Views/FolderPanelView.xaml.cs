@@ -299,10 +299,11 @@ public partial class FolderPanelView : UserControl
         container.IsSelected = true;
     }
 
-    // ── 셸에서 끌어온 것 받기 (§4.9 · Phase 5 Stage 1) ────────────────────────
+    // ── 끌어온 것 받기 (§4.9 Phase 5 Stage 1 · §4.2-2 Phase 5 Stage 3) ────────
     //
-    // 타일이 셸 드롭의 과녁이 된다. 내부 드래그(§4.2-2)는 타일에서 <b>시작</b>만 하고 타일로
-    // <b>놓지는</b> 않으므로, 이것은 기존 자리에 분기를 더하는 것이 아니라 새 과녁이다.
+    // Stage 1 이 타일을 셸 드롭의 과녁으로 만들었고, Stage 3 이 여기에 <b>분기 하나</b>를 더했다 —
+    // 앱 안에서 시작한 드래그(§4.2-2)도 타일로 놓을 수 있다. 타일에서 타일로 파일을 끌어 옮기는
+    // 것이 이 경로다. 목적지는 셸 드롭과 같게 타일의 <c>CurrentPath</c> 이고 앵커가 아니다.
 
     /// <summary>
     /// 과녁 위에 있는 동안 계속 불린다 — 강조를 켜고 커서 모양(복사/이동)을 정한다.
@@ -315,17 +316,17 @@ public partial class FolderPanelView : UserControl
     /// <c>DragLeave</c> 가 올라와 강조가 한 번 꺼진다. 그 뒤 <c>DragEnter</c> 가 곧바로 따라오므로
     /// 두 이벤트에 같은 판정을 물려 두면 꺼진 자리가 같은 호출 안에서 다시 켜져 눈에 보이지 않는다.
     /// </remarks>
-    private void OnShellDragOver(object sender, DragEventArgs e)
+    private void OnTileDragOver(object sender, DragEventArgs e)
     {
         // 받지 않으면 과녁을 켜지 않고 커서도 "안 됨"이다 (§4.2-2).
-        e.Effects = ResolveShellDrop(e) is null
-            ? DragDropEffects.None
-            : DropRouter.ShellEffect(e.KeyStates);
+        e.Effects = ResolveDrop(e) is { } drop
+            ? DropRouter.Effect(drop.Copy)
+            : DragDropEffects.None;
 
         e.Handled = true;
     }
 
-    private void OnShellDragLeave(object sender, DragEventArgs e)
+    private void OnTileDragLeave(object sender, DragEventArgs e)
     {
         if (ViewModel is { } panel)
         {
@@ -333,9 +334,9 @@ public partial class FolderPanelView : UserControl
         }
     }
 
-    private async void OnShellDrop(object sender, DragEventArgs e)
+    private async void OnTileDrop(object sender, DragEventArgs e)
     {
-        var drop = ResolveShellDrop(e);
+        var drop = ResolveDrop(e);
 
         if (ViewModel is { } panel)
         {
@@ -353,40 +354,38 @@ public partial class FolderPanelView : UserControl
 
         e.Handled = true;
 
-        // 수정키는 <b>놓는 순간</b>으로 판정한다 — 기본 복사, Shift 면 이동 (§4.9).
         // 조작 실패는 결과로 보고되므로 여기까지 예외로 올라오지 않는다 (§5).
         await accepted.Host.DropOntoPathAsync(
-            accepted.Destination, accepted.Items, DropRouter.ShellDropCopies(e.KeyStates));
+            accepted.Destination, accepted.Items, accepted.Copy);
     }
 
     /// <summary>
-    /// 받을 수 있는 드롭이면 (통로, 목적지, 항목). 아니면 null. 과녁 강조도 여기서 켠다 —
-    /// 판정과 강조가 갈라지면 "파랗게 켜졌는데 안 받는" 자리가 생긴다.
+    /// 받을 수 있는 드롭이면 (통로, 목적지, 항목, 복사여부). 아니면 null. 과녁 강조도 여기서
+    /// 켠다 — 판정과 강조가 갈라지면 "파랗게 켜졌는데 안 받는" 자리가 생긴다.
     /// </summary>
     /// <remarks>
-    /// <c>DragOver</c> 와 <c>Drop</c> 이 <b>이 함수 하나</b>를 쓴다. 사설 포맷이 실린 드롭은
-    /// <see cref="DropRouter"/> 가 <see cref="DropRoute.Internal"/> 로 갈라 주고, 타일은 내부
-    /// 드래그를 받는 자리가 아니므로(받는 자리는 왼쪽 폴더 행과 대상함뿐이다 — §4.2-2) 여기서
-    /// 조용히 끝난다.
+    /// <c>DragOver</c> 와 <c>Drop</c> 이 <b>이 함수 하나</b>를 쓴다. 포맷 순서와 수정키 규칙은
+    /// <see cref="DropRouter.Resolve"/> 에 있어 왼쪽 폴더 행·대상함과 같은 것을 본다 — 여기서
+    /// 더하는 것은 <b>목적지</b>뿐이고, 타일의 목적지는 앵커가 아니라 지금 보고 있는 경로다(§4.9).
+    /// <para>
+    /// 같은 타일 안에 놓거나 두 타일이 같은 폴더를 볼 때는 <b>막을 것이 없다</b> — 항목의 부모가
+    /// 목적지와 같아 ①(<c>AcceptedForDrop</c>)에 전부 걸려 0개가 되고, 그래서 과녁이 켜지지
+    /// 않는다. 반대로 <b>재귀 검색 결과를 자기 타일에 놓으면 받는다</b> — 하위 폴더 항목의 부모는
+    /// 목적지와 다르다. §4.2-2 가 적어 둔 동작이라 막지 않는다.
+    /// </para>
     /// </remarks>
-    private (IShellDropHost Host, string Destination, IReadOnlyList<OperationItem> Items)?
-        ResolveShellDrop(DragEventArgs e)
+    private (IShellDropHost Host, string Destination, IReadOnlyList<OperationItem> Items, bool Copy)?
+        ResolveDrop(DragEventArgs e)
     {
-        if (DropRouter.Route(e.Data) != DropRoute.Shell
-            || ViewModel is not { ShellDropDestination: { } destination, ShellDropHost: { } host } panel)
-        {
-            return null;
-        }
-
-        var items = DropRouter.ShellItems(e.Data);
-
-        if (!host.CanDropOnto(destination, items))
+        if (ViewModel is not { ShellDropDestination: { } destination, ShellDropHost: { } host } panel
+            || DropRouter.Resolve(e.Data, e.KeyStates) is not { } incoming
+            || !host.CanDropOnto(destination, incoming.Items))
         {
             return null;
         }
 
         panel.IsDropTarget = true;
-        return (host, destination, items);
+        return (host, destination, incoming.Items, incoming.Copy);
     }
 
     /// <summary>
