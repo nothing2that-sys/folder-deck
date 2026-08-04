@@ -227,6 +227,20 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public IShellDropHost? ShellDropHost { get; set; }
 
     /// <summary>
+    /// 밖으로 넘긴 뒤 알리는 통로 (§4.9 · Stage 2). 인자는 넘긴 항목 수다.
+    /// </summary>
+    /// <remarks>
+    /// <b>"복사했다"가 아니라 "넘겼다"까지만 말할 수 있다.</b> 복사를 셸이 하므로 성패도,
+    /// 복사인지 이동인지도(<c>Shift</c> 를 누르면 셸이 이동을 고른다) 앱이 알 수 없다 —
+    /// §4.2-2 의 "결과를 상태 바에 반드시 적는다"가 적용되지 않는 예외 자리다.
+    /// <para>
+    /// <see cref="TrashSelectionCommand"/> 와 같은 결로 타일을 만들 때 걸어 준다. 패널은
+    /// 상태 바가 어디 있는지 모른다.
+    /// </para>
+    /// </remarks>
+    public Action<int>? ReportExported { get; set; }
+
+    /// <summary>
     /// 셸 드래그가 이 타일 위에 있는가 — 파란 과녁 강조 (§4.2-2 의 폴더 행·대상함과 같은 결).
     /// </summary>
     /// <remarks>

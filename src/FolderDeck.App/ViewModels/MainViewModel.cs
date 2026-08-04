@@ -1507,6 +1507,18 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             sameFolderSkipped: items.Count - accepted.Count).ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// 밖으로 넘겼다 (§4.9 · Phase 5 Stage 2). <b>여기만 "결과"를 적지 못한다.</b>
+    /// </summary>
+    /// <remarks>
+    /// §4.2-2 의 "결과를 상태 바에 반드시 적는다"가 적용되지 않는 <b>예외 자리</b>다. 복사를
+    /// 셸이 하므로 성패를 앱이 알 수 없고, <c>Shift</c> 를 누르면 셸이 이동을 고르므로 복사인지
+    /// 이동인지도 모른다. <b>"복사했다"고 적지 않는다</b> — 넘겼다는 사실까지만이 아는 전부다.
+    /// <para>§5.1 의 <b>정보</b> 등급이다: 보조색, 몇 초 뒤 사라진다.</para>
+    /// </remarks>
+    private void ReportExported(int itemCount) =>
+        Inform($"{itemCount}개를 앱 밖으로 넘겼다 — 그 뒤는 셸이 한다.");
+
     // ── 휴지통 정리 (§4.4 · Phase 3 Stage 3) ─────────────────────────────────
 
     public bool CanTrashSelection => HasSelection && !IsOperationRunning;
@@ -1874,6 +1886,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
             // 셸 드롭을 받는 통로도 같은 이유로 여기서 걸어 준다 (§4.9).
             ShellDropHost = this,
+
+            // 밖으로 넘겼다고 알리는 통로 (§4.9 · Stage 2).
+            ReportExported = ReportExported,
         };
 
         if (spec.Kind == TileKind.Pinned && spec.FolderId is { } id)

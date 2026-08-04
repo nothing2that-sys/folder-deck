@@ -231,8 +231,56 @@ public partial class FolderPanelView : UserControl
         var data = new DataObject();
         data.SetData(FileDragFormat, payload);
 
+        // 같은 드래그를 앱 밖에서도 읽을 수 있게 셸 포맷을 더 싣는다 (§4.9 · Stage 2).
+        // 시작은 하나이고 갈림은 받는 쪽에서 일어난다 — 앱 안에서는 사설 포맷이 먼저 읽힌다.
+        ShellExport.Attach(data, payload.Items);
+
         // 기본 이동 · Ctrl 복사는 놓는 쪽이 정한다 — 여기서는 둘 다 허용만 한다.
-        DragDrop.DoDragDrop(this, data, DragDropEffects.Copy | DragDropEffects.Move);
+        var landedInside = ObserveDropsInThisWindow();
+        var effect = DragDrop.DoDragDrop(this, data, ShellExport.AllowedEffects);
+        landedInside.Dispose();
+
+        // 밖으로 나갔을 때만 알린다. 앱 안에 놓였으면 그쪽 경로가 자기 결과를 적는다(§4.2-2) —
+        // 여기서 한 줄 더 쓰면 그 결과를 덮는다.
+        if (!landedInside.Fired && effect != DragDropEffects.None)
+        {
+            panel.ReportExported?.Invoke(payload.Items.Count);
+        }
+    }
+
+    /// <summary>
+    /// 이 드래그가 <b>이 창 안</b>에 놓였는지만 본다 (§4.9 — 결과 보고의 갈림).
+    /// </summary>
+    /// <remarks>
+    /// <c>DoDragDrop</c> 의 반환값은 받아졌는가만 말하고 <b>어디에 놓였는지는 말하지 않는다.</b>
+    /// 앱 안의 폴더 행·대상함에 놓아도 <c>Copy</c>/<c>Move</c> 가 돌아오므로, 반환값만 보고
+    /// "밖으로 넘겼다"를 적으면 내부 드롭에도 그 문구가 뜬다. 내부 드롭의 결과 보고는
+    /// <c>MainWindow.OnFileDrop</c> 이 <c>async void</c> 라 조금 뒤에 오고, 그 사이 이 문구가
+    /// 상태 바를 차지한다.
+    /// <para>
+    /// <c>PreviewDrop</c> 은 창(루트)에서 과녁으로 <b>내려가는</b> 이벤트라 어느 자리에 놓이든
+    /// 창이 먼저 본다. <b>받는 쪽 코드는 건드리지 않는다</b> — 여기서 붙였다 떼는 것이 전부다.
+    /// </para>
+    /// </remarks>
+    private DropWatch ObserveDropsInThisWindow() => new(Window.GetWindow(this));
+
+    /// <summary>드래그 한 번 동안만 창에 붙어 있는 관찰자.</summary>
+    private sealed class DropWatch : IDisposable
+    {
+        private readonly Window? _window;
+        private readonly DragEventHandler _handler;
+
+        public DropWatch(Window? window)
+        {
+            _window = window;
+            _handler = (_, _) => Fired = true;
+            _window?.AddHandler(DragDrop.PreviewDropEvent, _handler, handledEventsToo: true);
+        }
+
+        /// <summary>이 창 안에서 드롭이 일어났는가.</summary>
+        public bool Fired { get; private set; }
+
+        public void Dispose() => _window?.RemoveHandler(DragDrop.PreviewDropEvent, _handler);
     }
 
     /// <summary>
