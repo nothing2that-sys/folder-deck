@@ -13,7 +13,7 @@
 |---|---|---|
 | 스택 | .NET 10 WPF (`net10.0-windows`) | Electron 43.2.0 / Chromium DOM |
 | 저장소 | 별개 | 별개 |
-| 토큰 | 22개 (`Themes/LightTheme.xaml`), 색 리터럴 **0** | **0개**, 색 리터럴 **162**(+JS 5) |
+| 토큰 | 23개 (`Themes/LightTheme.xaml`), 색 리터럴 **0** | **0개**, 색 리터럴 **162**(+JS 5) |
 | 명도 | 라이트 전용 `#FCFCFC` | 다크 전용 `#111418` (`color-scheme: dark` 고정) |
 | 테마 교체 | 없음 (`DynamicResource` **0건**) | 없음 (`prefers-color-scheme` 0건) |
 | 본문 글꼴 | `Segoe UI` | `Segoe UI` — **이미 같다** |
@@ -40,7 +40,7 @@
 
 - MSM 을 라이트로 끌면 **앱의 성격을 부순다.** 터미널 다중 세션 앱이고 `xterm` 테마까지
   다크로 묶여 있다(`renderer.js:1123~1126`).
-- FolderDeck 을 다크로 끌면 22개 값을 전부 다시 정해야 하는데, `DynamicResource` 가 0이라
+- FolderDeck 을 다크로 끌면 23개 값을 전부 다시 정해야 하는데, `DynamicResource` 가 0이라
   그 작업이 지금 구조에서는 화면에 반영되지 않는다(§7).
 - **이름이 맞아 있으면 FolderDeck 다크가 나오는 날 값까지 자연히 정합된다.** 그때 채울 열이
   §4 의 "다크" 열이고, 그 열의 상당 부분은 MSM 이 이미 실물로 쓰고 있는 값이다.
@@ -155,6 +155,7 @@ Brush.RowHover        ↔   --row-hover
 | FolderDeck | `EditOverlay` / `EditChrome` / `EditChromeText` | `#B8FFFFFF` / `#DCE7F5` / `#274264` | 배치 편집 모드 |
 | FolderDeck | `DropInvalidSurface` | `#55E9A8A8` | **배치 편집 중 타일 겹침 미리보기**(§4.3) |
 | FolderDeck | `GridLine` / `GridCellSurface` | `#C4C4C4` / `#F0F0F0` | 격자 |
+| FolderDeck | `SelectionSurface` | `#FFCCEFFE` | **파일 목록에서 고른 항목**(§4.3) |
 | MSM | `StateRunning` | `#7ee787` | 세션 실행중 |
 | MSM | `StateComplete` | `#e3b341` | 세션 완료 |
 | MSM | `Attention` | `#d29922` | 주의·주목 |
@@ -176,6 +177,10 @@ Brush.RowHover        ↔   --row-hover
   - 코드에 왜 남겼는지 주석이 붙어 있다. 그 주석을 지우지 않는다.
 - **`RotatingSurface` 와 `RowActive` 는 값이 같지만(`#EDE7F6`) 키 둘을 유지한다.** 뜻이 둘이다
   (타일 면 / 행 활성). 다크에서 갈릴 수 있고, "색은 뜻 하나씩"은 값이 아니라 뜻의 규칙이다.
+- **`SelectionSurface` 와 `RowActive` 는 자리가 다르다.** 앞은 **파일 목록 항목**(타일 안), 뒤는
+  **왼쪽 폴더 리스트 행**이다. 값도 다르다(`#FFCCEFFE` ↔ `#EDE7F6`) — `RotatingSurface` 처럼 값이
+  같아 헷갈리는 경우가 아니라, 구별할 것이 **뜻과 자리**다. 공유 코어로 올리지 않는 근거는 MSM
+  세션 목록이 한 번에 하나만 고른다는 것이다(2026-08-05 실측 · `focusedSessionId` 단일 스칼라).
 - **MSM `StateIdle` 은 전용 색이 아니다** — `#8b949e` 로 `TextSecondary` 와 같다. 새 토큰을
   만들지 말고 `TextSecondary` 를 쓴다(유휴 = 강조하지 않음이라는 뜻과도 맞는다).
 
