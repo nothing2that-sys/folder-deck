@@ -57,6 +57,23 @@
         </ContextMenu>
 
         <Style x:Key="FileItemContainer" TargetType="ListViewItem">
+            <!-- 행의 히트 영역을 내용 폭까지로 좁힌다 (§4.2-2 · Stage 3C).
+
+                 WPF 는 행을 패널 가로 폭 전체로 늘린다. 컬럼 합은 480px 뿐인데 그 오른쪽 눈에
+                 보이는 빈 면적까지 히트테스트가 이 컨테이너를 주므로, 목록이 세로로 꽉 차면
+                 고무줄을 시작할 빈 곳이 하나도 남지 않았다.
+
+                 실측(뷰포트 444 · 컬럼 합 180 · 같은 좌표 x=220):
+                   늘어난 채 → Item  | Border ← ListViewItem ← VirtualizingStackPanel ← …
+                   좁힌 뒤   → Empty | ScrollViewer ← ListBoxChrome ← ListView
+                 좁히면 그 오른쪽은 §4.2-2 의 "빈 곳"이 되어 고무줄이 시작된다.
+
+                 Template 을 다시 쓰지 않는 이유: 상세 뷰의 컬럼은 GridView 가 테마 스타일로
+                 공급하는 GridViewRowPresenter 가 그린다. 여기에 Template 을 박으면 컬럼이 죽고
+                 두 뷰 방식에 스타일을 갈라 써야 한다 — 그것이 이 스타일 하나로 둘을 덮는 이유다.
+                 폭을 숫자로 박지도 않는다: 컬럼이 바뀌면 내용 폭이 따라와야 한다. -->
+            <Setter Property="HorizontalAlignment" Value="Left" />
+
             <EventSetter Event="MouseDoubleClick" Handler="OnItemDoubleClick" />
             <!-- 끌어내기 (§4.2-2): 누른 자리를 기억했다가 임계값을 넘으면 드래그로 본다. -->
             <EventSetter Event="PreviewMouseLeftButtonDown" Handler="OnItemPreviewMouseDown" />
@@ -67,6 +84,22 @@
             <!-- 우클릭 메뉴가 패널 커맨드에 닿게 하는 통로. -->
             <Setter Property="Tag"
                     Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+
+            <Style.Triggers>
+                <!-- 고른 항목은 포커스가 있든 없든 같은 색이다 (§4.2-1 · Stage 3C).
+
+                     기본 템플릿은 Selector.IsSelectionActive 로 갈라, 목록에 키보드 포커스가
+                     없으면 #ECECEC 로 그린다 — 흰 배경과 구분되지 않아 고른 것이 안 골라진 것처럼
+                     보였다(실측: 비활성 #FFECECEC / 활성 #FFCCEFFE). 타일 여럿이 동시에 보이는
+                     덱이라 다른 타일을 눌러 포커스가 떠나도 선택은 보여야 한다.
+
+                     Template 을 다시 쓰지 않고 Style 트리거로 준다 — WPF 값 우선순위에서 Style
+                     트리거가 테마 템플릿의 트리거를 이긴다(실측으로 확인했다). 그래서 컬럼을
+                     그리는 GridViewRowPresenter 도, 기본 마우스 오버도 그대로 살아 있다. -->
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource Brush.SelectionSurface}" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <!-- 평소 details 뷰. GridView 는 여러 ListView 가 나눠 쓸 수 없어(런타임 InvalidOperationException)

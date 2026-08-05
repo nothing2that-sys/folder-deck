@@ -45,6 +45,18 @@
     <SolidColorBrush x:Key="Brush.RowHover" Color="#EAF1FB" />
     <SolidColorBrush x:Key="Brush.RowActive" Color="#EDE7F6" />
 
+    <!-- 파일 목록에서 고른 항목 (§4.2-1 · Phase 5 Stage 3C).
+         RowActive("행 활성·선택")와 뜻이 겹쳐 보이지만 그것은 왼쪽 폴더 리스트 행의 값이고
+         이 앱에서 값이 다르므로 별개 키다.
+
+         값은 WPF 기본 활성 선택색 그대로다(실측 #FFCCEFFE). 포커스가 있든 없든 이 하나를 쓴다 —
+         타일 여럿이 동시에 보이는 덱이라 포커스 없는 목록의 선택도 보여야 한다. 기본 템플릿은
+         Selector.IsSelectionActive 로 갈라 포커스가 없으면 #ECECEC 로 그려 흰 배경에 묻혔다.
+
+         AccentSurface(고무줄 사각형 면 · 드롭 과녁)와 <b>일부러 다른 색이다</b> — 끌고 있는 중에
+         이미 골라진 행과 사각형이 구분돼야 한다. -->
+    <SolidColorBrush x:Key="Brush.SelectionSurface" Color="#FFCCEFFE" />
+
     <!-- ── 배치 편집 모드 (Phase 2) ──
              편집 중임이 한눈에 보여야 한다: 격자 경계가 드러나고 타일 위에 손잡이 층이 덮인다.
              파랑 = "지금 놓을 수 있는 자리", 빨강(Danger) = "겹쳐서 못 놓음". -->
