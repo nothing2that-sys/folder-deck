@@ -321,7 +321,25 @@
 
                 <!-- 메타 + 앵커를 벗어난 상태. 좁은 타일에서 넘치지 않게 잘라 낸다. -->
                 <StackPanel Orientation="Horizontal" Margin="3,2,0,4" ClipToBounds="True">
-                    <TextBlock Text="{Binding MetaText}" Foreground="{StaticResource Brush.TextSecondary}"
+                    <!-- 메타는 MetaText 한 덩이가 아니라 세 조각으로 그린다 (§3.2 · Stage 3D):
+                         가운데 뷰 방식 글자가 눌러서 뒤집는 자리다. 상태를 보여 주는 곳과 바꾸는
+                         곳을 같게 둔다 — 뷰 모드에는 타일 우클릭 메뉴가 없고(§3.2 의 우클릭
+                         토글은 배치 편집 모드 안이다) 새 메뉴·툴바를 만들지 않기 위해서다.
+                         MetaText 는 이 세 조각을 이어 붙인 것이라 화면과 어긋날 수 없다.
+                         새 색은 만들지 않는다: LinkButton(breadcrumb 조각과 같은 것)이 손 커서와
+                         Brush.RowHover 만으로 "눌린다"를 말한다. -->
+                    <TextBlock Text="{Binding MetaCountText}"
+                               Foreground="{StaticResource Brush.TextSecondary}"
+                               FontSize="11" VerticalAlignment="Center" />
+                    <Button Style="{StaticResource LinkButton}"
+                            Command="{Binding ToggleViewModeCommand}"
+                            Content="{Binding ViewModeText}"
+                            Foreground="{StaticResource Brush.TextSecondary}"
+                            FontSize="11" Padding="2,0" VerticalAlignment="Center"
+                            AutomationProperties.Name="뷰 방식 전환"
+                            ToolTip="눌러서 뷰 방식 전환 (list ↔ details)" />
+                    <TextBlock Text="{Binding MetaSortText}"
+                               Foreground="{StaticResource Brush.TextSecondary}"
                                FontSize="11" VerticalAlignment="Center" />
                     <TextBlock Text="· 앵커 밖" Foreground="{StaticResource Brush.Rotating}"
                                FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"

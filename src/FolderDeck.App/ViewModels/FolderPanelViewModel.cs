@@ -87,6 +87,9 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
     [NotifyPropertyChangedFor(nameof(AnchorName))]
     [NotifyPropertyChangedFor(nameof(MetaText))]
+    [NotifyPropertyChangedFor(nameof(MetaCountText))]
+    [NotifyPropertyChangedFor(nameof(ViewModeText))]
+    [NotifyPropertyChangedFor(nameof(MetaSortText))]
     [NotifyPropertyChangedFor(nameof(IsDetailsView))]
     [NotifyPropertyChangedFor(nameof(IsListView))]
     private FolderEntry? entry;
@@ -116,6 +119,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MetaText))]
+    [NotifyPropertyChangedFor(nameof(MetaCountText))]
     [NotifyPropertyChangedFor(nameof(ShowNoResults))]
     private IReadOnlyList<FileItemViewModel> displayItems = [];
 
@@ -241,6 +245,16 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public Action<int>? ReportExported { get; set; }
 
     /// <summary>
+    /// 폴더 속성(§3.1)을 바꿨으니 워크스페이스를 저장해 달라고 알리는 통로 (§7.1 <c>folders[]</c>).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="TrashSelectionCommand"/> 와 같은 결로 타일을 만들 때 걸어 준다 — 패널은
+    /// 저장소가 어디 있는지 모른다. <b>새 저장 경로가 아니다</b>: <c>folders[].pinned</c> 와
+    /// 배치가 이미 지나는 디바운스 저장에 얹는다.
+    /// </remarks>
+    public Action? SaveFolderEntry { get; set; }
+
+    /// <summary>
     /// 셸 드래그가 이 타일 위에 있는가 — 파란 과녁 강조 (§4.2-2 의 폴더 행·대상함과 같은 결).
     /// </summary>
     /// <remarks>
@@ -300,18 +314,30 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
     public bool CanGoForward => _forward.Count > 0;
 
-    /// <summary>헤더 메타 — 개수 · 뷰 방식 · 정렬 (§3.2).</summary>
-    public string? MetaText
+    /// <summary>
+    /// 헤더 메타 — 개수 · 뷰 방식 · 정렬 (§3.2). <b>뷰는 이것을 통째로 그리지 않는다</b>:
+    /// 가운데 뷰 방식 글자가 <see cref="ToggleViewModeCommand"/> 를 실행하는 버튼이라
+    /// 세 조각(<see cref="MetaCountText"/> · <see cref="ViewModeText"/> ·
+    /// <see cref="MetaSortText"/>)으로 나눠 그린다. 여기서 그 셋을 그대로 이어 붙이므로
+    /// 이 문구와 화면에 그려지는 줄은 어긋날 수 없다.
+    /// </summary>
+    public string? MetaText =>
+        Entry is null ? null : $"{MetaCountText}{ViewModeText}{MetaSortText}";
+
+    /// <summary>메타의 앞 조각 — 개수와 구분점("7개 · ").</summary>
+    public string MetaCountText => $"{DisplayItems.Count}개 · ";
+
+    /// <summary>
+    /// 메타의 가운데 조각 — 뷰 방식. <b>눌러서 뒤집는 글자</b>다(§3.2 · Stage 3D).
+    /// </summary>
+    public string ViewModeText => Entry?.ViewMode == FolderViewMode.Details ? "details" : "list";
+
+    /// <summary>메타의 뒤 조각 — 구분점과 정렬(" · 이름 ↑"). 정렬을 바꾸는 길은 아직 없다.</summary>
+    public string MetaSortText
     {
         get
         {
-            if (Entry is null)
-            {
-                return null;
-            }
-
-            var view = Entry.ViewMode == FolderViewMode.Details ? "details" : "list";
-            var sort = Entry.SortBy switch
+            var sort = Entry?.SortBy switch
             {
                 SortBy.Modified => "수정",
                 SortBy.Size => "크기",
@@ -319,8 +345,46 @@ public sealed partial class FolderPanelViewModel : ObservableObject
                 _ => "이름",
             };
 
-            return $"{DisplayItems.Count}개 · {view} · {sort}{(Entry.SortDesc ? " ↓" : " ↑")}";
+            return $" · {sort}{(Entry?.SortDesc == true ? " ↓" : " ↑")}";
         }
+    }
+
+    /// <summary>
+    /// 뷰 방식을 뒤집는다 — <c>list</c> ↔ <c>details</c> (§3.2 · §7.1 <c>folders[].viewMode</c>).
+    /// </summary>
+    /// <remarks>
+    /// <b>표시 셋이 함께 움직여야 한다</b>: 두 <c>ListView</c> 의 <c>Visibility</c> 를 가르는
+    /// <see cref="IsDetailsView"/>·<see cref="IsListView"/> 와 헤더 메타 문구다. 하나만
+    /// 갱신하면 목록과 문구가 어긋난다.
+    /// <para>
+    /// <b>선택은 비운다.</b> 두 <c>ListView</c> 가 각자 선택을 들고 있어서, 그대로 두면 보이게
+    /// 된 목록에는 아무것도 안 골라져 있는데 헤더는 "N개 선택"을 말하고 <c>Del</c> 이 그것을
+    /// 지운다. v1 은 전환을 넘어 선택을 잇지 않는다. 뷰 방식을 먼저 뒤집고 나서 비우므로,
+    /// 떠나는 목록은 이미 <c>Collapsed</c> 다 — 그 목록이 내는 <c>SelectionChanged</c> 는
+    /// 뷰의 <c>!list.IsVisible</c> 문턱에서 걸러지고, 새로 보이게 된 목록은 선택이 비어 있어
+    /// 아무 이벤트도 내지 않는다.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    public void ToggleViewMode()
+    {
+        if (Entry is null)
+        {
+            return;
+        }
+
+        Entry.ViewMode = Entry.ViewMode == FolderViewMode.Details
+            ? FolderViewMode.List
+            : FolderViewMode.Details;
+
+        OnPropertyChanged(nameof(IsDetailsView));
+        OnPropertyChanged(nameof(IsListView));
+        OnPropertyChanged(nameof(ViewModeText));
+        OnPropertyChanged(nameof(MetaText));
+
+        ClearSelection();
+
+        SaveFolderEntry?.Invoke();
     }
 
     /// <summary>앵커를 벗어나 있는가. 왼쪽 리스트 행에도 이 상태를 표시한다(§3.2).</summary>
@@ -610,6 +674,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
             buffer.Clear();
             clock.Restart();
             OnPropertyChanged(nameof(MetaText));
+            OnPropertyChanged(nameof(MetaCountText));
             OnPropertyChanged(nameof(SearchStatusText));
         }
 

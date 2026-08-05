@@ -1889,6 +1889,10 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
             // 밖으로 넘겼다고 알리는 통로 (§4.9 · Stage 2).
             ReportExported = ReportExported,
+
+            // 헤더에서 뷰 방식을 뒤집으면 folders[].viewMode 가 바뀐다 — pinned·배치가 이미
+            // 쓰는 디바운스 저장에 얹는다(§7.1). 패널은 저장소를 모른다.
+            SaveFolderEntry = Save,
         };
 
         if (spec.Kind == TileKind.Pinned && spec.FolderId is { } id)
