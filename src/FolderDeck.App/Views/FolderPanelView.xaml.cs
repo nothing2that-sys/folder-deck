@@ -538,6 +538,77 @@ public partial class FolderPanelView : UserControl
         }
     }
 
+    // ── 컬럼 자동 폭 (§3.2 · Phase 5 Stage 3D-2) ──────────────────────────────
+    //
+    // 계산은 <see cref="ColumnLayout"/> 에 있고(뷰 밖에서 시험할 수 있게) 여기 남는 것은
+    // <b>언제 다시 쓰는가</b>뿐이다. 문턱이 둘이고 둘 다 필요하다 — 아래 주석 참고.
+
+    /// <summary>마지막으로 폭을 써 준 컬럼. 뷰를 갈아타면 다른 인스턴스가 온다.</summary>
+    private GridViewColumn? _flexColumn;
+
+    /// <summary>그때 써 준 값. 같은 값을 다시 쓰지 않는다(재진입 차단).</summary>
+    private double _flexWidth = double.NaN;
+
+    /// <summary>
+    /// 목록의 스크롤 정보가 바뀌었다 — 늘리는 컬럼의 폭을 다시 잡는다.
+    /// </summary>
+    /// <remarks>
+    /// <b>기준은 <c>ActualWidth</c> 가 아니라 <c>ScrollViewer.ViewportWidth</c> 다</b>(실측: 폭 444
+    /// 목록에서 세로 스크롤바가 있으면 427, 없으면 444). <c>ActualWidth</c> 를 쓰면 스크롤바가 뜬
+    /// 만큼 컬럼이 넘쳐 가로 스크롤이 생기고, 그 가로바가 세로 공간을 먹어 세로바 유무를 다시
+    /// 흔든다 — 그것이 진동 고리다. <c>ScrollChanged</c> 는 <b>레이아웃 뒤</b>에 오므로 이 값이
+    /// 이미 스크롤바를 반영한 폭이다.
+    /// <para>
+    /// <b>문턱 ①: 뷰포트 폭이 안 바뀌었으면 손대지 않는다.</b> 그래야 사용자가 머리글을 끌어
+    /// 조절한 폭을 그 자리에서 덮어쓰지 않는다(끄는 것은 <c>ExtentWidth</c> 만 바꾼다). v1 은
+    /// 자동 폭만이므로 <b>다음 크기 변화에는 덮인다</b> — 막지도 저장하지도 않는다(§3-4).
+    /// </para>
+    /// <para>
+    /// <b>문턱 ②: 계산값이 지금 값과 같으면 쓰지 않는다.</b> 쓰면 레이아웃이 다시 돌고 그것이
+    /// 다시 이 핸들러를 부른다 — 재진입이 여기서 끊긴다. 실측(스파이크): 폭을 1px 씩 61단계
+    /// 옮기며 단계당 쓰기 최대 1회, 폭을 고정하면 추가 0회.
+    /// </para>
+    /// <para>
+    /// 뷰를 갈아타면(평소 ↔ 재귀 검색) <b>컬럼 인스턴스가 새것</b>이라 뷰포트가 그대로여도 한 번
+    /// 다시 쓴다 — 그러지 않으면 검색 뷰가 XAML 출발값(위치 180)으로 남는다.
+    /// </para>
+    /// </remarks>
+    private void OnDetailsScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (sender is not ListView { View: GridView grid }
+            || ColumnLayout.FlexColumn(grid) is not { } column)
+        {
+            return;
+        }
+
+        var swapped = !ReferenceEquals(column, _flexColumn);
+
+        if (!swapped && e.ViewportWidthChange == 0)
+        {
+            return;
+        }
+
+        // 아직 폭이 잡히지 않았다 — 최소 폭으로 눌러 놓으면 첫 그림에서 한 번 튄다.
+        if (e.ViewportWidth <= 0)
+        {
+            return;
+        }
+
+        var others = grid.Columns.Where(c => !ReferenceEquals(c, column)).Sum(c => c.Width);
+        var wanted = ColumnLayout.FlexWidth(
+            e.ViewportWidth, others, ColumnLayout.RightMargin, ColumnLayout.MinFlexWidth);
+
+        _flexColumn = column;
+
+        if (Math.Abs(wanted - _flexWidth) < 0.5 && Math.Abs(wanted - column.Width) < 0.5)
+        {
+            return;
+        }
+
+        _flexWidth = wanted;
+        column.Width = wanted;
+    }
+
     /// <summary>
     /// 우클릭한 항목이 선택 밖이면 그것만 고른다 (탐색기 동등). 메뉴의 "휴지통으로 삭제"가
     /// 선택 전체에 작용하므로, 무엇이 지워질지가 눌린 순간 목록에 보여야 한다.
