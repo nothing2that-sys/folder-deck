@@ -715,7 +715,7 @@ Phase 4 착수 논의에서 추가했다. §4.2-2 의 드래그는 앱 안에서
 - **.NET 10 (`net10.0-windows`) · WPF.** 트리/리스트+상세 뷰, 데이터 바인딩에 적합.
 - **MVVM = CommunityToolkit.Mvvm**(`ObservableObject`, `[RelayCommand]`). App 쪽에만 참조.
 - 폴더 리스트: `ItemsControl`. 파일 목록: `ListView`의 `View`를 폴더 뷰 방식대로 전환
-  (`GridView` 상세 / 아이콘 스타일 리스트).
+  (`GridView` 상세 / `SimpleList` 목록 — **아이콘 격자가 아니라 세로 한 줄 리스트**다).
 - 폴더 열거는 **async**, 목록은 **가상화 켬**(로그 수천 개 폴더에서 UI 멈춤 방지).
 - 갱신은 **수동(F5) + 창 활성화 시 재조회**로 시작. `FileSystemWatcher` 자동 갱신은
   **교체 가능한 seam으로 설계**해 두고 뒤에 붙인다(네트워크 경로·이벤트 폭주 동작 검증 필요, → §11).
@@ -733,6 +733,30 @@ Phase 4 착수 논의에서 추가했다. §4.2-2 의 드래그는 앱 안에서
   갈아끼워도 반영되지 않는다 — 239곳을 `DynamicResource` 로 바꾸지 않는다. 얻는 것이
   "재시작 없이 바뀐다" 하나인데, 워크스페이스를 여는 것 자체가 창을 새로 띄우는 동작이다
   (§6.2 — 워크스페이스당 프로세스 하나). 근거는 `doc/FolderDeck_familylook_spec.md` §7.
+- **컬럼 폭을 계산할 때 뷰포트 폭은 `ScrollViewer.ViewportWidth` 에서 가져온다**(부채 23) —
+  `ActualWidth` 는 세로 스크롤바를 포함하므로(실측 17px 차) 그 값으로 계산하면 컬럼이 넘쳐
+  가로 스크롤이 생긴다. 컬럼 폭을 만지는 코드가 또 생기면 같은 자리를 밟는다.
+- **`ListViewItem` 의 `Template` 을 다시 쓰면 컬럼이 사라진다** — `GridViewRowPresenter` 가
+  함께 죽기 때문이다(실측). 항목 모양을 바꿀 일이 생기면 `Template` 교체가 아니라 색 토큰과
+  트리거로 처리한다.
+- **항목 Style 의 트리거가 테마 트리거를 이긴다**(실측). 선택 강조 색을 테마 딕셔너리 쪽에서
+  덮으려 해도 항목 Style 쪽이 먼저 적용된다.
+- **`Brush.SelectionSurface` 는 선언값과 실제 렌더가 다르다** — 선언 `#FFCCEFFE` · 화면 실측
+  `#D9F3FE`(묶음 2 실측). 토큰 값의 주인은 색 사양 문서이고, 이 차이는 여기에만 적는다.
+- **테스트 어셈블리가 MTA 라서 못 하는 것은 WPF 컨트롤 인스턴스화뿐이다**(부채 9·24 · 범위
+  정정). `DependencyProperty.RegisterAttached` 는 MTA 에서도 된다 — 첨부 속성 자체를 검증하는
+  테스트는 짤 수 있다. 뷰를 단위 테스트로 덮으려면 스레드 모델부터 바꿔야 한다.
+- **`MetaText` 를 뷰가 더는 읽지 않는다**(테스트만 읽는다 · 부채 19). `MetaCountText` ·
+  `ViewModeText` · `MetaSortText` 세 조각의 합으로 정의해 두어 드리프트는 막았다.
+- **`ClearSelection` 은 목록을 뒤집은 뒤에 불러야 한다**(부채 20). 이 순서 의존성을 지키는
+  테스트가 없다 — 위의 MTA 제약 때문이다. 코드 주석 한 줄이 최소 방어다.
+- **같은 `FolderEntry` 가 두 패널에 동시에 뜨면 한쪽의 전환이 다른 쪽에 즉시 보이지 않는다**
+  (부채 18). 코웍은 "코드로는 그 상태가 만들어지지 않는다"고 했고 **손 재현은 하지 않았다** —
+  **추론이며 관측이 아니다.**
+- **알려진 플레이크 둘**(부채 8) — `ConflictPolicyTests.RememberingStopsTheAskingAndPersists` ·
+  `AnchorNavigationTests.CurrentPathIsNeverPersisted`. `DebouncedSaveScheduler` ↔
+  `WorkspaceStore.Flush` 경합이다. 기준선 12회 중 2회 · 단계 D-2 에서 26회 중 1회 · 격리
+  8회는 전부 통과. **한 번의 전체 통과를 근거로 쓰지 마라.**
 
 ---
 
