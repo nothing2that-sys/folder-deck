@@ -16,6 +16,7 @@
 
             <conv:CollapsibleRowHeightConverter x:Key="RowHeight" />
             <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+            <conv:InverseBooleanConverter x:Key="InverseBool" />
             <conv:WiderThanConverter x:Key="WiderThan" />
 
             <BooleanToVisibilityConverter x:Key="BoolToVisibility" />

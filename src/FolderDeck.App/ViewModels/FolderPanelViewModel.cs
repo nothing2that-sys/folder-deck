@@ -387,6 +387,54 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         SaveFolderEntry?.Invoke();
     }
 
+    /// <summary>
+    /// 정렬 기준을 고른다 — 헤더 메타의 정렬 글자 메뉴 (§3.2 · §7.1 <c>folders[].sortBy</c>).
+    /// </summary>
+    /// <remarks>
+    /// <b>같은 기준을 다시 고르면 방향을 뒤집는다.</b> 다른 기준으로 옮기면 오름차순으로
+    /// 되돌린다 — 크기 내림차순을 보다가 이름으로 옮겼는데 이름이 거꾸로 서 있으면 놀란다.
+    /// <para>
+    /// <b>선택을 비우지 않는다.</b> 뷰 방식 토글(<see cref="ToggleViewMode"/>)과 달리 여기서는
+    /// 두 <c>ListView</c> 의 <c>Visibility</c> 가 갈리지 않는다. 목록은 <see cref="RefreshAsync"/>
+    /// 가 다시 읽고 그 안에서 고른 것을 <b>경로로</b> 다시 잡아 준다(§4.8) — 정렬을 바꿨다고
+    /// 고른 파일이 날아가면 매크로를 만들려던 손이 헛돈다.
+    /// </para>
+    /// <para>
+    /// 통지를 손으로 부른다. <c>[NotifyPropertyChangedFor]</c> 는 <c>entry</c> <b>필드</b>에
+    /// 붙어 있어서 같은 <see cref="Entry"/> 안의 값만 바꾸면 아무 통지도 나가지 않는다 —
+    /// 그대로 두면 목록만 바뀌고 헤더 문구가 옛 값으로 남는다.
+    /// </para>
+    /// <para>
+    /// <b>저장은 <c>await</c> 앞이다.</b> 고른 정렬은 열거가 취소되거나 폴더를 못 읽어도
+    /// 남아야 한다. 저장 자체는 <c>pinned</c>·배치가 이미 쓰는 디바운스 통로에 얹는다(§7.1).
+    /// </para>
+    /// </remarks>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    public async Task SetSortAsync(SortBy sort)
+    {
+        if (Entry is null)
+        {
+            return;
+        }
+
+        if (Entry.SortBy == sort)
+        {
+            Entry.SortDesc = !Entry.SortDesc;
+        }
+        else
+        {
+            Entry.SortBy = sort;
+            Entry.SortDesc = false;
+        }
+
+        OnPropertyChanged(nameof(MetaSortText));
+        OnPropertyChanged(nameof(MetaText));
+
+        SaveFolderEntry?.Invoke();
+
+        await RefreshAsync().ConfigureAwait(true);
+    }
+
     /// <summary>앵커를 벗어나 있는가. 왼쪽 리스트 행에도 이 상태를 표시한다(§3.2).</summary>
     public bool IsAwayFromAnchor =>
         Entry is not null && CurrentPath is not null && !PathEquals(CurrentPath, Normalize(Entry.Path));

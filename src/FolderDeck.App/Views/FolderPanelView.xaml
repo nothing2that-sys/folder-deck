@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:FolderDeck.App.ViewModels"
              xmlns:v="clr-namespace:FolderDeck.App.Views"
+             xmlns:models="clr-namespace:FolderDeck.Core.Models;assembly=FolderDeck.Core"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -345,9 +346,49 @@
                             FontSize="11" Padding="2,0" VerticalAlignment="Center"
                             AutomationProperties.Name="뷰 방식 전환"
                             ToolTip="눌러서 뷰 방식 전환 (list ↔ details)" />
-                    <TextBlock Text="{Binding MetaSortText}"
-                               Foreground="{StaticResource Brush.TextSecondary}"
-                               FontSize="11" VerticalAlignment="Center" />
+                    <!-- 정렬 글자도 눌러서 바꾸는 자리다 (부채 17). 뷰 글자와 같은 껍데기를 쓴다.
+                         뷰 방식은 2값이라 커맨드 하나로 뒤집히지만 정렬은 4값 + 방향이라 메뉴가
+                         뜬다 — 순환시키면 8단계가 된다. WPF ContextMenu 는 우클릭에만 저절로
+                         열리므로 Click 이 IsOpen 을 세운다(코드 비하인드는 그 일만 한다).
+                         값을 정하는 것은 전부 SetSortCommand 안이다.
+                         ContextMenu 는 시각 트리 밖이라 DataContext 가 안 내려온다 — 위의
+                         ItemMenu 와 같이 컨테이너 Tag 로 패널 VM 을 잡는다.
+                         재귀 검색 중에는 잠근다: 그 결과는 찾은 순서대로 흘러들고 정렬하지
+                         않으므로(§4.10) 기준을 바꿔도 순서가 안 바뀐다 — 문구만 바뀌면 거짓말이 된다.
+                         잠긴 모양은 LinkButton 이 이미 갖고 있다(IsEnabled=False → Opacity 0.35). -->
+                    <Button Style="{StaticResource LinkButton}"
+                            Click="OnSortTextClick"
+                            Content="{Binding MetaSortText}"
+                            Foreground="{StaticResource Brush.TextSecondary}"
+                            FontSize="11" Padding="2,0" VerticalAlignment="Center"
+                            IsEnabled="{Binding IsRecursiveSearch, Converter={StaticResource InverseBool}}"
+                            ToolTipService.ShowOnDisabled="True"
+                            AutomationProperties.Name="정렬 기준 변경"
+                            ToolTip="눌러서 정렬 기준 변경 — 재귀 검색 중에는 잠긴다(결과가 찾은 순서대로 나온다)"
+                            Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                        <Button.ContextMenu>
+                            <!-- 라벨은 MetaSortText 가 쓰는 네 단어 그대로다. 화살표(↑/↓)는
+                                 헤더 문구가 이미 말하므로 메뉴에 다시 적지 않는다. -->
+                            <ContextMenu>
+                                <MenuItem Header="이름"
+                                          Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{x:Static models:SortBy.Name}" />
+                                <MenuItem Header="수정"
+                                          Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{x:Static models:SortBy.Modified}" />
+                                <MenuItem Header="크기"
+                                          Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{x:Static models:SortBy.Size}" />
+                                <MenuItem Header="종류"
+                                          Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{x:Static models:SortBy.Type}" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                     <TextBlock Text="· 앵커 밖" Foreground="{StaticResource Brush.Rotating}"
                                FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
                                Visibility="{Binding IsAwayFromAnchor,

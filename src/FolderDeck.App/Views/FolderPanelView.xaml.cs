@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Threading;
 using FolderDeck.App.ViewModels;
@@ -48,6 +49,31 @@ public partial class FolderPanelView : UserControl
         }
 
         panel.SelectedItems = [.. list.SelectedItems.OfType<FileItemViewModel>()];
+    }
+
+    /// <summary>
+    /// 헤더 메타의 정렬 글자를 눌렀다 — <b>메뉴를 여는 것이 전부다</b> (부채 17).
+    /// </summary>
+    /// <remarks>
+    /// WPF <c>ContextMenu</c> 는 우클릭에만 저절로 열리므로 좌클릭으로 열려면 누군가
+    /// <c>IsOpen</c> 을 세워야 하는데, 그것은 뷰가 가진 속성이라 VM 커맨드가 할 수 없다.
+    /// <para>
+    /// <b>정렬을 정하는 일은 여기에 없다.</b> 이 핸들러는 <c>SortBy</c> 를 읽지도 쓰지도
+    /// 않는다 — 값을 바꾸는 것은 <c>MenuItem</c> 이 부르는 <c>SetSortCommand</c> 다.
+    /// </para>
+    /// </remarks>
+    private void OnSortTextClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement target || target.ContextMenu is not { } menu)
+        {
+            return;
+        }
+
+        // PlacementTarget 을 먼저 세운다 — 메뉴가 그 글자 아래에 뜨고, 메뉴 안의 바인딩이
+        // 이 버튼의 Tag(=패널 VM)를 타고 커맨드에 닿는다.
+        menu.PlacementTarget = target;
+        menu.Placement = PlacementMode.Bottom;
+        menu.IsOpen = true;
     }
 
     /// <summary>다른 타일이 선택을 가져갔다 — 목록에서도 실제로 풀어 준다.</summary>
