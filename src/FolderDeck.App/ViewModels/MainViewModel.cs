@@ -3,9 +3,11 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FolderDeck.App.Services;
+using FolderDeck.App.Watching;
 using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Layout;
 using FolderDeck.Core.Models;
@@ -28,6 +30,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
     /// <summary>디바운스 저장 실패는 스레드 풀에서 올라온다 — UI 스레드로 되돌리기 위해 잡아 둔다.</summary>
     private readonly SynchronizationContext? _uiContext = SynchronizationContext.Current;
+
+    /// <summary>타일마다 감시자 하나 (§8 · Phase 5). 타일이 빠지거나 창이 닫힐 때 푼다.</summary>
+    private readonly Dictionary<TileViewModel, FolderWatcher> _watchers = [];
 
     public MainViewModel(
         Workspace workspace,
@@ -409,6 +414,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         Workspace.Tiles!.Remove(tile.Spec);
         Tiles.Remove(tile);
         tile.Panel.Clear();
+        DetachWatcher(tile);
 
         var orphans = removedIndex is null ? 0 : DemoteFoldersTo(removedIndex.Value, 1);
 
@@ -1800,7 +1806,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
                ?? rotating.OrderBy(t => t.RotationIndex ?? int.MaxValue).FirstOrDefault();
     }
 
-    /// <summary>수동 갱신 <c>F5</c> + 창 활성화 시 재조회 (§8). watcher 는 뒤 Phase.</summary>
+    /// <summary>수동 갱신 <c>F5</c> + 창 활성화 시 재조회 (§8). 감시자는 타일마다 따로 붙는다.</summary>
     [RelayCommand(AllowConcurrentExecutions = true)]
     public async Task RefreshAllAsync()
     {
@@ -1813,9 +1819,16 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         UpdateRowStates();
     }
 
-    /// <summary>종료 직전 — 밀린 디바운스 저장을 마무리한다.</summary>
+    /// <summary>종료 직전 — 감시자를 풀고 밀린 디바운스 저장을 마무리한다.</summary>
     public void Shutdown()
     {
+        foreach (var watcher in _watchers.Values)
+        {
+            watcher.Dispose();
+        }
+
+        _watchers.Clear();
+
         _store.SaveFailed -= OnSaveFailed;
         _store.Flush();
     }
@@ -1900,7 +1913,38 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             panel.Entry = Rows.FirstOrDefault(r => r.Entry.Id == id)?.Entry;
         }
 
-        return new TileViewModel(spec, panel) { IsEditing = IsEditingLayout };
+        var tile = new TileViewModel(spec, panel) { IsEditing = IsEditingLayout };
+        AttachWatcher(tile);
+        return tile;
+    }
+
+    /// <summary>
+    /// 이 타일이 보는 폴더를 감시한다 (§8 · Phase 5). 감시자는 <see cref="IFolderEnumerator"/>
+    /// 에 얹지 않는다 — 그것은 "어떻게 읽는가"의 seam 이고 이것은 "언제 읽는가"다.
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="Application"/> 이 안 떠 있으면 안 매단다.</b> 시험은 창도 Dispatcher 도
+    /// 없이 뷰모델만 세우므로 마샬할 UI 스레드가 없다 — <see cref="IUserPrompt"/> 가 소유 창을
+    /// 찾을 때 쓰는 판정과 같은 결이다.
+    /// </remarks>
+    private void AttachWatcher(TileViewModel tile)
+    {
+        if (Application.Current?.Dispatcher is not { } dispatcher)
+        {
+            return;
+        }
+
+        // 조작 중 억제는 <see cref="IsOperationRunning"/> 을 그대로 읽는다 — 같은 뜻의
+        // 플래그를 새로 만들면 진실이 두 곳이 되어 하나만 켜지는 사고가 난다.
+        _watchers[tile] = new FolderWatcher(tile.Panel, dispatcher, () => IsOperationRunning);
+    }
+
+    private void DetachWatcher(TileViewModel tile)
+    {
+        if (_watchers.Remove(tile, out var watcher))
+        {
+            watcher.Dispose();
+        }
     }
 
     private TileViewModel AddTile(TileSpec spec)

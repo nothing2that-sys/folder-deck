@@ -17,7 +17,10 @@
         FontFamily="Segoe UI" FontSize="12"
         Foreground="{StaticResource Brush.TextPrimary}">
 
-    <!-- 갱신은 수동(F5) + 창 활성화. FileSystemWatcher 는 뒤 Phase (§8). -->
+    <!-- 갱신 자리 넷 중 하나 — 수동(F5). 나머지는 창 활성화 · 조작 후 · 타일마다 붙는
+         FileSystemWatcher(§8) 다. 감시자가 붙었다고 이 셋을 지우지 않는다: 감시가
+         죽어도(연결 상실 거동은 미확인) 목록이 영영 낡지 않게 남겨 둔 안전망이다. -->
+
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding RefreshAllCommand}" />
         <!-- Del = 휴지통 (§4.4). 검색창처럼 Delete 를 스스로 처리하는 컨트롤 안에서는
