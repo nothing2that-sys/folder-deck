@@ -2182,6 +2182,170 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         return true;
     }
 
+    /// <summary>
+    /// 우클릭(또는 <c>F2</c>)한 항목의 <b>디스크 이름</b>을 바꾼다 (§4.6 309행 · A군 ② D12~D15).
+    /// 반환값은 <b>새 경로</b>이고, 거절·취소·실패면 <c>null</c> 이다.
+    /// </summary>
+    /// <remarks>
+    /// <b>이 묶음에서 처음으로 실제 파일 시스템을 바꾼다</b> — 열기·속성은 읽기였고 등록·앵커
+    /// 지정은 JSON 만 고쳤다. 되돌릴 수 없으므로 <b>거절을 전부 앞에 세우고</b> <c>Move</c> 를
+    /// 맨 뒤에 둔다: 이름을 판정하고, 겹치는지 보고, 그러고 나서 옮긴다.
+    /// <para>
+    /// <b>거절은 여기(UI 층)에서만이다</b> — 워크스페이스를 여는 시점의 검증에는 넣지 않는다
+    /// (§4.11-1 D3 · §4.11 534~536행과 같은 규칙).
+    /// </para>
+    /// <para>
+    /// <b>이름 규칙을 여기서 다시 적지 않는다</b>(D4) —
+    /// <see cref="FolderPathRules.RejectLeafName"/> 한 곳이 본다.
+    /// </para>
+    /// </remarks>
+    private string? RenameFromItem(FileItemViewModel item)
+    {
+        var oldPath = FolderPathRules.Normalize(item.FullPath);
+        var oldLeaf = FolderPathRules.LeafName(oldPath);
+
+        // 드라이브 루트("D:\")는 부모가 없다 — 이름을 붙일 자리가 없다.
+        if (System.IO.Path.GetDirectoryName(oldPath) is not { Length: > 0 } parent)
+        {
+            Warn($"이름을 바꿀 수 없다 — 드라이브 루트다: {oldPath}", transient: true);
+            return null;
+        }
+
+        var typed = _prompt.AskName(
+            "이름 바꾸기",
+            $"'{oldLeaf}' 의 새 이름을 적어라. {(item.IsDirectory ? "폴더" : "파일")}가 실제로 바뀐다.",
+            oldLeaf);
+
+        // 취소 — 아무 일도 없었다. 상태 바에도 적지 않는다(사용자가 스스로 그만둔 것이다).
+        if (typed is null)
+        {
+            return null;
+        }
+
+        // 끝 공백은 Windows 가 말없이 깎으므로 먼저 깎아 판정에 올린다 — 공백만 적은 것은
+        // 그 결과 "빈 이름"으로 거절된다.
+        var leaf = typed.Trim();
+
+        if (FolderPathRules.RejectLeafName(leaf) is { } reason)
+        {
+            Warn($"이름을 바꾸지 못했다 — {reason}", transient: true);
+            return null;
+        }
+
+        // 제자리 이름은 할 일이 없다. 대소문자만 바꾸는 것(a → A)은 여기를 지나 Move 로 간다 —
+        // 같은 파일이므로 아래 "이미 있다" 검사도 PathsEqual 로 비켜 준다.
+        if (string.Equals(leaf, oldLeaf, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var newPath = System.IO.Path.Combine(parent, leaf);
+
+        if (!PathsEqual(oldPath, newPath)
+            && (System.IO.Directory.Exists(newPath) || System.IO.File.Exists(newPath)))
+        {
+            Warn($"이름을 바꾸지 못했다 — 같은 이름이 이미 있다: {leaf}", transient: true);
+            return null;
+        }
+
+        try
+        {
+            if (item.IsDirectory)
+            {
+                System.IO.Directory.Move(oldPath, newPath);
+            }
+            else
+            {
+                System.IO.File.Move(oldPath, newPath);
+            }
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException
+                                     or System.IO.IOException
+                                     or ArgumentException)
+        {
+            // 삼키지 않는다. 실패는 <b>남는</b> 경고다 — 화면이 스스로 답을 보여 주지 않는다.
+            Warn($"이름을 바꾸지 못했다: {oldLeaf} — {ex.Message}");
+            return null;
+        }
+
+        UpdateAnchorAfterRename(oldPath, newPath, leaf, oldLeaf);
+        return newPath;
+    }
+
+    /// <summary>
+    /// 이름 바꾼 것이 <b>어느 등록의 앵커 자신</b>이면 <c>folders[]</c> 의 <c>path</c> 를 따라
+    /// 옮긴다 (§4.6 309행 · A군 ② D12~D15).
+    /// </summary>
+    /// <remarks>
+    /// <b>안 고치면 등록이 그 자리에서 고아가 된다</b>(D12) — 방금 사람이 바꾼 이름 때문에
+    /// 앵커가 없는 경로를 가리키게 되므로, 이것은 선택이 아니라 이름 바꾸기의 일부다.
+    /// <para>
+    /// <b>어느 등록인지 판정하는 방법</b>: 바꾸기 <b>전</b> 경로를 <c>Rows</c> 의 앵커 경로와
+    /// <see cref="PathsEqual"/>(끝 구분자·대소문자 무시)로 맞춘다. 우클릭한 타일이 무엇인지는
+    /// 보지 않는다 — 다른 타일의 앵커를 옆에서 바꿔도 그 등록이 따라가야 하기 때문이다.
+    /// <c>Rows[].Entry</c> 와 <c>Workspace.Folders[]</c> 는 <b>같은 객체</b>라(§5-7 ·
+    /// <see cref="EditFolder"/>·<see cref="SetAnchorFromItem"/> 이 쓰는 짝맞춤과 같다) 필드를
+    /// 한 번 고치면 저장되는 쪽은 그것으로 끝이고 <b>남는 일은 알림</b>이다.
+    /// </para>
+    /// <para>
+    /// <b>D14 — 확인창의 「취소」는 <c>displayName</c> 갱신만 거절한다.</b> 이름 바꾸기 자체와
+    /// <c>path</c> 갱신은 어느 단추를 눌러도 이미 일어났다. 그래서 <c>path</c> 를 <b>묻기 전에</b>
+    /// 넣는다 — 물음의 답이 무엇이든 바뀌지 않는 값을 답 뒤로 미룰 이유가 없다.
+    /// </para>
+    /// <para>
+    /// <b>D15 — 앵커가 아니면 <c>folders[]</c> 를 건드리지 않고 확인창도 안 띄운다.</b>
+    /// 파일이거나, 폴더라도 어느 등록의 앵커가 아닌 흔한 경우가 전부 여기다.
+    /// </para>
+    /// </remarks>
+    private void UpdateAnchorAfterRename(string oldPath, string newPath, string leaf, string oldLeaf)
+    {
+        // 파일은 앵커가 될 수 없다 — 경로 비교조차 하지 않는다.
+        var row = Rows.FirstOrDefault(r => PathsEqual(r.Entry.Path, oldPath));
+
+        if (row is null)
+        {
+            // D15 — 대부분이 여기다.
+            Inform($"이름을 바꿨다: {oldLeaf} → {leaf}");
+            return;
+        }
+
+        // 확인창 본문에 쓸 이름은 <b>고치기 전</b>에 잡는다 — DisplayName 이 비어 있으면
+        // Path 의 잎으로 떨어지므로, path 를 먼저 넣으면 본문이 새 이름을 옛 이름인 양 말한다.
+        var label = row.DisplayName;
+
+        row.Entry.Path = newPath;
+
+        // D13 — displayName 갱신 여부는 묻는다. ①이 만든 D10 경로를 그대로 재사용한다
+        // (새 대화상자를 만들지 않는다). 단추 글자가 "확인 / 취소"인 것은 IUserPrompt.Confirm
+        // 이 OKCancel 이기 때문이고, 예/아니오로 바꾸면 「폴더 제거」창까지 같이 바뀐다.
+        if (_prompt.Confirm(
+                "이름 바꾸기",
+                $"'{label}' 등록의 앵커 폴더 이름이 바뀌었다:\n{newPath}\n\n" +
+                $"표시 이름도 '{leaf}' 로 바꿀까?"))
+        {
+            row.Entry.DisplayName = leaf;
+        }
+
+        // 이름·경로는 FolderEntry 에서 계산되는 값이라 알림이 저절로 걸리지 않는다 — 같은 폴더를
+        // 보여 주는 세 곳(왼쪽 리스트·대상함·타일 헤더)에 손으로 알린다(SetAnchorFromItem 과 같은 결).
+        row.NotifyEdited();
+
+        foreach (var trayEntry in Tray.Where(t => ReferenceEquals(t.Entry, row.Entry)))
+        {
+            trayEntry.NotifyEdited();
+        }
+
+        foreach (var panel in Panels.Where(p => ReferenceEquals(p.Entry, row.Entry)))
+        {
+            panel.NotifyAnchorName();
+        }
+
+        // 공용 저장 경로다 — 디바운스가 그대로 걸린다(§7.1). currentPath 는 저장 대상이 아니다.
+        Save();
+
+        Inform($"이름을 바꿨다: {oldLeaf} → {leaf} (등록 '{row.DisplayName}' 의 앵커도 따라갔다)");
+    }
+
     /// <summary>등록 경로 비교 — 끝 구분자와 대소문자를 무시한다 (§4.11-1 D3).</summary>
     private static bool PathsEqual(string a, string b) =>
         string.Equals(
@@ -2213,6 +2377,10 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             // 항목 우클릭 "이 폴더를 앵커로 지정"이 닿을 통로 (§4.6 · D8). 커맨드가 아니라
             // 델리게이트다 — 어느 타일의 앵커인지는 부르는 패널만 안다.
             SetAnchorFolder = SetAnchorFromItem,
+
+            // 항목 우클릭 「이름 바꾸기」와 F2 가 닿을 통로 (§4.6 309행 · D12~D15). 확인창과
+            // folders[] 를 아는 쪽이 여기다 — 패널은 둘 다 모른다.
+            RenameOnDisk = RenameFromItem,
         };
 
         if (spec.Kind == TileKind.Pinned && spec.FolderId is { } id)

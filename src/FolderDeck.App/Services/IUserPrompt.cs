@@ -31,6 +31,17 @@ public interface IUserPrompt
     /// 즉흥적인 복사·드래그가 매번 막힌다. 물어볼지 말지는 부르는 쪽이 정한다.
     /// </remarks>
     ConflictDecision? AskConflict(string title, string message, ConflictPolicy suggested);
+
+    /// <summary>
+    /// 새 이름을 묻는다 (§4.6 309행 · A군 ②). <b>취소면 null</b>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Confirm"/> 로는 안 된다 — 글자를 받아야 한다. <b>여기서 판정하지 않는다</b>:
+    /// 빈 이름·금칙 문자·예약 이름·중복은 부르는 쪽이 <c>FolderPathRules</c> 로 보고 상태 바에
+    /// 이유를 적는다(D4). 창은 사람이 적은 것을 <b>다듬지 않고</b> 그대로 돌려준다.
+    /// </remarks>
+    /// <param name="current">미리 채워 둘 지금 이름.</param>
+    string? AskName(string title, string message, string current);
 }
 
 /// <inheritdoc/>
@@ -62,5 +73,21 @@ public sealed class UserPrompt : IUserPrompt
         }
 
         return dialog.ShowDialog() == true ? dialog.Decision : null;
+    }
+
+    /// <inheritdoc/>
+    public string? AskName(string title, string message, string current)
+    {
+        var dialog = new RenameDialog(title, message, current)
+        {
+            Owner = Application.Current?.MainWindow is { IsLoaded: true } owner ? owner : null,
+        };
+
+        if (dialog.Owner is null)
+        {
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
+
+        return dialog.ShowDialog() == true ? dialog.Result : null;
     }
 }

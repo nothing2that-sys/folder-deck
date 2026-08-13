@@ -28,6 +28,11 @@
         <KeyBinding Modifiers="Alt" Key="Up" Command="{Binding GoUpCommand}" />
         <KeyBinding Modifiers="Alt" Key="Left" Command="{Binding GoBackCommand}" />
         <KeyBinding Modifiers="Alt" Key="Right" Command="{Binding GoForwardCommand}" />
+        <!-- 이름 바꾸기 F2 (§4.6 309행 · A군 ② D16). 창(MainWindow) 층이 아니라 여기다:
+             대상은 "이 패널에서 고른 항목"이라 창에 물리면 어느 패널의 선택인지 가릴 수 없다.
+             인자를 안 받는 RenameSelectionCommand 가 선택에서 대상을 뽑아 메뉴와 같은 경로로
+             들어간다 — KeyBinding 에는 넘길 항목이 없다. -->
+        <KeyBinding Key="F2" Command="{Binding RenameSelectionCommand}" />
         <!-- Ctrl+F 는 펴는 것으로 끝이 아니라 포커스까지 줘야 하고, 갓 보이게 된 TextBox 는
              레이아웃 뒤에야 포커스를 받는다. 그래서 MainWindow 코드 비하인드가 처리한다. -->
     </UserControl.InputBindings>
@@ -83,6 +88,16 @@
             <!-- 셸 속성 대화상자. 읽기라 폴더·파일 어느 쪽에도 뜻이 있어 감추지 않는다. -->
             <MenuItem Header="속성"
                       Command="{Binding PlacementTarget.Tag.ShowItemPropertiesCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <!-- 이름 바꾸기 (§4.6 309행 · A군 ②) — 폴더도 파일도 대상이라 등록·앵커 지정과 달리
+                 감추지 않는다. 여기가 "쓰기"의 첫 항목이라 읽기 여섯 아래, 삭제 위에 둔다.
+                 라벨의 F2 는 실물이다 — UserControl.InputBindings 가 그 키를 물고 있다(D16).
+                 F2 는 고른 항목을, 이 메뉴는 우클릭한 항목을 대상으로 삼고 경로는 하나다. -->
+            <MenuItem Header="이름 바꾸기"
+                      InputGestureText="F2"
+                      Command="{Binding PlacementTarget.Tag.RenameItemCommand,
                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}" />

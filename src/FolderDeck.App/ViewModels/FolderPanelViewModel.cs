@@ -280,6 +280,24 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public Func<FolderPanelViewModel, FileItemViewModel, bool>? SetAnchorFolder { get; set; }
 
     /// <summary>
+    /// 우클릭 메뉴 「이름 바꾸기」와 <c>F2</c> 가 닿을 통로 (§4.6 309행 · A군 ②). 패널은 확인창도
+    /// <c>Workspace</c> 도 모른다 — <see cref="SetAnchorFolder"/> 와 같은 결로 타일을 만들 때 걸어 준다.
+    /// </summary>
+    /// <remarks>
+    /// <b>커맨드가 아니라 델리게이트다</b> — 반환값이 필요하다. 값은 <b>새 경로</b>이고
+    /// 거절·취소·실패면 <c>null</c> 이라 그때는 이 패널이 움직이지 않는다. <c>bool</c> 로는
+    /// 모자란 이유: 목록을 다시 읽은 뒤 <b>새 이름을 다시 골라</b> 줘야 하는데 그 경로는 이
+    /// 통로 너머에서 만들어진다.
+    /// <para>
+    /// <b><see cref="SetAnchorFolder"/> 와 달리 패널 자신을 넘기지 않는다.</b> 앵커 지정은
+    /// "어느 타일의 앵커를 옮기는가"라 타일이 인자였지만, 이름 바꾸기는 <b>바뀐 경로가 어느
+    /// 등록의 앵커인가</b>(D12)를 <c>folders[]</c> 전체에서 찾는 일이라 타일이 답에 관여하지
+    /// 않는다. 안 쓰는 인자를 모양 맞추기로 남기지 않는다.
+    /// </para>
+    /// </remarks>
+    public Func<FileItemViewModel, string?>? RenameOnDisk { get; set; }
+
+    /// <summary>
     /// 셸 드래그가 이 타일 위에 있는가 — 파란 과녁 강조 (§4.2-2 의 폴더 행·대상함과 같은 결).
     /// </summary>
     /// <remarks>
@@ -678,6 +696,66 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         }
 
         await GoToAnchorAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 우클릭한 항목의 <b>디스크 이름</b>을 바꾼다 (§4.6 309행 · A군 ② B-1).
+    /// </summary>
+    /// <remarks>
+    /// <b>폴더도 파일도 대상이다</b> — 등록·앵커 지정과 달리 파일에도 뜻이 있으므로 메뉴가
+    /// 감추지 않고 여기서도 막지 않는다.
+    /// <para>
+    /// 이름을 묻는 것부터 실제 <c>Move</c> 까지 전부 <see cref="RenameOnDisk"/> 통로 너머
+    /// (<see cref="MainViewModel"/>)에서 일어나고, 여기서는 <b>바뀐 뒤 목록을 다시 읽어 새 이름을
+    /// 다시 고르는 것</b>만 한다. 옛 경로는 사라졌으므로 <see cref="LoadAsync"/> 의 "경로로 다시
+    /// 잡기"(§4.8)가 이 항목을 되찾지 못한다 — 그것만이 이 자리에 남는 일이다.
+    /// </para>
+    /// </remarks>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    public async Task RenameItemAsync(FileItemViewModel? item)
+    {
+        if (item is null || Entry is null || RenameOnDisk is null)
+        {
+            return;
+        }
+
+        if (RenameOnDisk(item) is not { } renamed)
+        {
+            return;
+        }
+
+        await RefreshAsync().ConfigureAwait(true);
+
+        // 재귀 검색 결과를 보고 있으면 새 이름이 그 결과에 없을 수 있다 — 그때는 고르지 않는다.
+        if (DisplayItems.FirstOrDefault(i => PathEquals(i.FullPath, renamed)) is { } moved)
+        {
+            SelectedItems = [moved];
+            SelectionRestored?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// <c>F2</c> — 지금 고른 것 하나의 이름을 바꾼다. <b>메뉴와 같은 경로를 부른다</b>
+    /// (진입점만 둘이고 동작은 하나다).
+    /// </summary>
+    /// <remarks>
+    /// 여럿 고른 상태는 거절한다 — 어느 것을 말하는지 정할 근거가 없다. 아무것도 안 고른
+    /// <c>F2</c> 는 조용히 지난다(누를 대상이 없는 것은 거절이 아니다).
+    /// </remarks>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    public Task RenameSelectionAsync()
+    {
+        if (SelectedItems.Count == 1)
+        {
+            return RenameItemAsync(SelectedItems[0]);
+        }
+
+        if (SelectedItems.Count > 1)
+        {
+            _reportError?.Invoke($"이름 바꾸기는 하나만 고른 뒤에 — 지금 {SelectedItems.Count}개다");
+        }
+
+        return Task.CompletedTask;
     }
 
     // ── 검색 ─────────────────────────────────────────────────────────────────

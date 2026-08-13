@@ -1,0 +1,33 @@
+<Window x:Class="FolderDeck.App.Views.RenameDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="420" SizeToContent="Height"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource Brush.Chrome}"
+        FontFamily="Segoe UI" FontSize="12"
+        Foreground="{StaticResource Brush.TextPrimary}">
+
+    <!--
+        이름 바꾸기 (§4.6 309행 · A군 ②). 칸이 하나뿐인 것이 사양이다 — 여기서 바뀌는 것은
+        디스크의 잎 이름 하나이고, 등록의 표시 이름을 따라 바꿀지는 별도 확인창이 묻는다(D13).
+
+        MessageBox 로는 안 된다: 글자를 받아야 한다. ConflictDialog 가 "선택지가 셋이라"
+        전용 창을 쓴 것과 같은 이유의 작은 창이다.
+
+        판정을 여기에 넣지 않는다 — 금칙 문자·예약 이름·중복은 FolderPathRules 와 뷰모델이
+        본다(D4). 창이 자기 규칙을 갖게 되면 F2 와 메뉴가 서로 다른 것을 거절하게 된다.
+    -->
+    <StackPanel Margin="18,14">
+        <TextBlock x:Name="MessageText" TextWrapping="Wrap"
+                   Foreground="{StaticResource Brush.TextSecondary}" />
+
+        <TextBox x:Name="NameBox" Padding="5,4" Margin="0,10,0,0" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="바꾸기" Padding="16,5" Margin="0,0,8,0" IsDefault="True"
+                    Click="OnAccept" />
+            <Button Content="취소" Padding="16,5" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -55,6 +55,23 @@ internal sealed class FakeUserPrompt : IUserPrompt
         SuggestedPolicy = suggested;
         return ConflictAnswer;
     }
+
+    // ── 이름 바꾸기 입력창 (§4.6 309행 · A군 ②) ──────────────────────────────
+
+    /// <summary>
+    /// 창이 돌려줄 새 이름. <b>null 이면 사용자가 취소한 것</b> — 기본은 취소다.
+    /// 그래야 이 창을 모르는 기존 테스트가 이름을 실수로 바꾸지 않는다.
+    /// </summary>
+    public string? NameAnswer { get; set; }
+
+    /// <summary>창이 뜬 횟수와 그때 미리 채워져 있던 이름 — 무엇을 바꾸려 했는지 확인용.</summary>
+    public List<string> NamesAsked { get; } = [];
+
+    public string? AskName(string title, string message, string current)
+    {
+        NamesAsked.Add(current);
+        return NameAnswer;
+    }
 }
 
 /// <summary>폴더 수정 창 대신 답만 돌려준다 (§4.11-3).</summary>
