@@ -265,6 +265,21 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public System.Windows.Input.ICommand? RegisterFolderCommand { get; set; }
 
     /// <summary>
+    /// 우클릭 메뉴 "이 폴더를 앵커로 지정"이 닿을 통로 (§4.6 · A군 ① D8). 패널은 <c>Workspace</c> 도
+    /// 다른 등록도 모른다 — <see cref="TrashSelectionCommand"/> 와 같은 결로 타일을 만들 때 걸어 준다.
+    /// </summary>
+    /// <remarks>
+    /// <b>커맨드가 아니라 델리게이트다</b> — <c>Workspace</c> 쪽은 <b>어느 타일의 앵커인지</b>를
+    /// 알아야 하는데 우클릭이 넘겨 주는 것은 항목 하나뿐이라, 자기 자신(<c>this</c>)을 같이 넘긴다.
+    /// <c>SaveFolderEntry</c> 와 같은 모양의 칸이다.
+    /// <para>
+    /// 반환값은 <b>앵커가 실제로 바뀌었는가</b>다. 거절(D9)이나 빈 칸이면 <c>false</c> 이고,
+    /// 그때는 이 패널이 움직이지 않는다.
+    /// </para>
+    /// </remarks>
+    public Func<FolderPanelViewModel, FileItemViewModel, bool>? SetAnchorFolder { get; set; }
+
+    /// <summary>
     /// 셸 드래그가 이 타일 위에 있는가 — 파란 과녁 강조 (§4.2-2 의 폴더 행·대상함과 같은 결).
     /// </summary>
     /// <remarks>
@@ -588,7 +603,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         return Task.CompletedTask;
     }
 
-    // ── 우클릭 메뉴 (이번엔 두 항목만) ───────────────────────────────────────
+    // ── 우클릭 메뉴 (경로 하나로 끝나는 읽기들) ──────────────────────────────
 
     /// <summary>항목의 전체 절대 경로를 클립보드로.</summary>
     [RelayCommand]
@@ -620,6 +635,49 @@ public sealed partial class FolderPanelViewModel : ObservableObject
                 _shell.RevealInExplorer(item.FullPath, item.IsDirectory),
                 $"탐색기에서 열지 못했다: {item.Name}");
         }
+    }
+
+    /// <summary>
+    /// 셸 속성 대화상자를 띄운다 — <b>읽기다</b>. 앱 상태도 <c>folders[]</c> 도 바뀌지 않는다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="CopyItemPath"/>·<see cref="RevealItem"/> 과 같은 층이다 — 경로 하나면 되는 일이라
+    /// <see cref="MainViewModel"/> 을 거치지 않는다. 창을 그리는 것은 셸이고 앱은 넘기기만 한다.
+    /// </remarks>
+    [RelayCommand]
+    public void ShowItemProperties(FileItemViewModel? item)
+    {
+        if (item is not null)
+        {
+            Report(_shell.ShowProperties(item.FullPath), $"속성을 열지 못했다: {item.Name}");
+        }
+    }
+
+    /// <summary>
+    /// 우클릭한 하위 폴더를 <b>이 타일의 앵커</b>로 지정한다 (§4.6 305행 · A군 ① D8).
+    /// </summary>
+    /// <remarks>
+    /// <b>쓰기다</b> — 위의 셋과 달리 <c>folders[]</c> 가 바뀌고 저장 경로를 탄다. 그 일은 전부
+    /// <see cref="SetAnchorFolder"/> 통로 너머(<see cref="MainViewModel"/>)에서 일어나고, 여기서는
+    /// <b>바뀐 뒤 새 앵커로 옮겨 오는 것</b>만 한다 — <c>currentPath</c> 가 옛 위치에 남아 있으면
+    /// 방금 앵커로 삼은 폴더가 "앵커 밖"으로 보인다.
+    /// </remarks>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    public async Task SetAnchorToItemAsync(FileItemViewModel? item)
+    {
+        // 파일에는 뜻이 없다. 메뉴가 이미 감추지만 여기서도 막는다 — 통로가 하나 더 생기면
+        // 메뉴의 판정만으로는 못 막는다(RegisterFolder 와 같은 결).
+        if (item is null || !item.IsDirectory || SetAnchorFolder is null)
+        {
+            return;
+        }
+
+        if (!SetAnchorFolder(this, item))
+        {
+            return;
+        }
+
+        await GoToAnchorAsync().ConfigureAwait(true);
     }
 
     // ── 검색 ─────────────────────────────────────────────────────────────────

@@ -2097,6 +2097,91 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         Inform($"폴더를 고쳤다: {row.DisplayName}");
     }
 
+    /// <summary>
+    /// 우클릭한 하위 폴더를 그 타일의 앵커로 지정한다 (§4.6 305행 · A군 ① D8~D11).
+    /// 반환값은 <b>앵커가 실제로 바뀌었는가</b>다.
+    /// </summary>
+    /// <remarks>
+    /// <b><c>folderId</c> 는 그대로 두고 <c>path</c> 만 간다.</b> 새 id 를 만들면 대상함
+    /// (<c>copyTray[]</c>)·매크로(<c>macros[].dest.folderIds</c>)·상시 타일
+    /// (<c>tiles[].folderId</c>)이 들고 있는 참조가 전부 고아가 된다.
+    /// <para>
+    /// <b>어느 항목의 <c>path</c> 를 가는가</b> — 우클릭이 일어난 <b>그 패널의 앵커</b>다.
+    /// 패널은 <see cref="FolderPanelViewModel.Entry"/> 로 <c>FolderEntry</c> 를 <b>객체 참조</b>로
+    /// 들고 있고, <see cref="Rows"/> 와 <c>Workspace.Folders</c> 도 같은 객체를 가리킨다
+    /// (<see cref="EditFolder"/> 가 쓰는 짝맞춤과 같다). 그래서 필드를 한 번 고치면 저장되는
+    /// <c>folders[]</c> 쪽은 그것으로 끝이고, <b>남는 일은 알림</b>이다 — 화면 쪽 값들이 전부
+    /// <c>Entry</c> 에서 계산되는데 통지가 저절로 걸리지 않는다.
+    /// </para>
+    /// <para>
+    /// <b>거절은 여기(UI 층)에서만이다</b> — 파일을 여는 시점의 검증에는 넣지 않는다
+    /// (§4.11-1 D3 과 같은 규칙).
+    /// </para>
+    /// </remarks>
+    private bool SetAnchorFromItem(FolderPanelViewModel panel, FileItemViewModel item)
+    {
+        if (!item.IsDirectory || panel.Entry is not { } entry)
+        {
+            return false;
+        }
+
+        // 빈 순환 칸이 아닌데 등록 목록에 없는 앵커는 있을 수 없다 — 있으면 손댈 곳이 없다.
+        var row = Rows.FirstOrDefault(r => ReferenceEquals(r.Entry, entry));
+        if (row is null)
+        {
+            return false;
+        }
+
+        var normalized = FolderPathRules.Normalize(item.FullPath);
+
+        // 앵커 위로 올라가 있으면 목록에 앵커 자신이 보인다 — 제자리 지정은 할 일이 없다.
+        if (PathsEqual(entry.Path, normalized))
+        {
+            Warn($"이미 앵커다: {normalized}", transient: true);
+            return false;
+        }
+
+        // D9 — 다른 등록이 이미 이 경로를 갖고 있으면 거절하고 이유를 말한다.
+        if (Workspace.Folders.Any(f => !ReferenceEquals(f, entry) && PathsEqual(f.Path, normalized)))
+        {
+            Warn($"이미 등록된 폴더다: {normalized}", transient: true);
+            return false;
+        }
+
+        // D10 — 표시 이름을 따라 바꿀지만 묻는다. description 은 편집 대상이 아니다.
+        // 잎 이름은 D4 의 한 곳에서 뽑는다 — 여기서 문자열을 자르지 않는다.
+        var leaf = FolderPathRules.LeafName(normalized);
+        if (_prompt.Confirm(
+                "앵커 지정",
+                $"'{row.DisplayName}' 의 앵커를 다음으로 옮긴다:\n{normalized}\n\n" +
+                $"표시 이름도 '{leaf}' 로 바꿀까?"))
+        {
+            entry.DisplayName = leaf;
+        }
+
+        entry.Path = normalized;
+
+        // 이름·경로는 FolderEntry 에서 계산되는 값이라 알림이 저절로 걸리지 않는다 — 같은 폴더를
+        // 보여 주는 세 곳(왼쪽 리스트·대상함·타일 헤더)에 손으로 알린다(EditFolder 와 같은 결).
+        row.NotifyEdited();
+
+        foreach (var trayEntry in Tray.Where(t => ReferenceEquals(t.Entry, entry)))
+        {
+            trayEntry.NotifyEdited();
+        }
+
+        foreach (var p in Panels.Where(p => ReferenceEquals(p.Entry, entry)))
+        {
+            p.NotifyAnchorName();
+        }
+
+        // 공용 저장 경로다 — 디바운스가 그대로 걸린다(§7.1). currentPath 는 저장 대상이 아니다.
+        Save();
+
+        Inform($"앵커를 옮겼다: {row.DisplayName} → {normalized}");
+        return true;
+    }
+
     /// <summary>등록 경로 비교 — 끝 구분자와 대소문자를 무시한다 (§4.11-1 D3).</summary>
     private static bool PathsEqual(string a, string b) =>
         string.Equals(
@@ -2124,6 +2209,10 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
             // 항목 우클릭 "새 폴더로 등록"이 닿을 통로 (§4.11-1). 패널은 Workspace 를 모른다.
             RegisterFolderCommand = RegisterFolderCommand,
+
+            // 항목 우클릭 "이 폴더를 앵커로 지정"이 닿을 통로 (§4.6 · D8). 커맨드가 아니라
+            // 델리게이트다 — 어느 타일의 앵커인지는 부르는 패널만 안다.
+            SetAnchorFolder = SetAnchorFromItem,
         };
 
         if (spec.Kind == TileKind.Pinned && spec.FolderId is { } id)

@@ -15,6 +15,9 @@ internal sealed class FakeShellLauncher : IShellLauncher
     /// <summary>탐색기에 넘긴 (경로, 폴더여부).</summary>
     public List<(string Path, bool IsDirectory)> Revealed { get; } = [];
 
+    /// <summary>셸 속성 대화상자를 띄우려 한 경로.</summary>
+    public List<string> Properties { get; } = [];
+
     public string? Error { get; set; }
 
     public string? Open(string path)
@@ -26,6 +29,12 @@ internal sealed class FakeShellLauncher : IShellLauncher
     public string? RevealInExplorer(string path, bool isDirectory)
     {
         Revealed.Add((path, isDirectory));
+        return Error;
+    }
+
+    public string? ShowProperties(string path)
+    {
+        Properties.Add(path);
         return Error;
     }
 }

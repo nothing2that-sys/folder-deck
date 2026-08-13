@@ -90,13 +90,20 @@ public sealed partial class FolderRowViewModel(FolderEntry entry) : ObservableOb
     }
 
     /// <summary>
-    /// 표시 이름·설명을 고쳤다 (§4.11-3). 셋 다 <see cref="Entry"/> 에서 계산되므로
-    /// 알림이 저절로 걸리지 않는다 — <see cref="NotifyRotationSlot"/> 과 같은 결로 손으로 알린다.
+    /// 표시 이름·설명·경로를 고쳤다 (§4.11-3 · §4.6 앵커 지정). 넷 다 <see cref="Entry"/> 에서
+    /// 계산되므로 알림이 저절로 걸리지 않는다 — <see cref="NotifyRotationSlot"/> 과 같은 결로
+    /// 손으로 알린다.
     /// </summary>
+    /// <remarks>
+    /// <see cref="PathText"/> 도 같이 알린다. 앵커 지정은 <c>path</c> 를 갈아치우는데 그것만
+    /// 빠지면 왼쪽 리스트가 <b>없어진 옛 경로를 계속 적어 둔다</b>. 표시 이름만 고치는 경로
+    /// (§4.11-3)에서는 값이 안 바뀌었으므로 이 알림이 아무 일도 하지 않는다.
+    /// </remarks>
     public void NotifyEdited()
     {
         OnPropertyChanged(nameof(DisplayName));
         OnPropertyChanged(nameof(Description));
         OnPropertyChanged(nameof(HasDescription));
+        OnPropertyChanged(nameof(PathText));
     }
 }

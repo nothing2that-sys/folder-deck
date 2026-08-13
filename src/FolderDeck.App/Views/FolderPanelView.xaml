@@ -39,6 +39,16 @@
              메뉴의 DataContext 가 마지막으로 가져간 항목을 가리킨다. 대상은 PlacementTarget
              에서 직접 읽어 그 위험을 아예 없앤다. -->
         <ContextMenu x:Key="ItemMenu" x:Shared="False">
+            <!-- 더블클릭과 같은 동작이다 (§4.6) — 폴더면 타일 안에서 하위 진입, 파일이면 셸 기본
+                 연결로 실행. 탐색기 별창은 아래 "탐색기에서 열기"의 일이고 겹치지 않는다.
+                 커맨드를 복제하지 않고 더블클릭이 부르는 OpenCommand 를 그대로 부른다.
+                 단축키 라벨은 달지 않는다 — 이 항목에 물린 키가 없고, 라벨만 달면 눌러도
+                 안 되는 표시가 생긴다(아래 "Del" 은 창이 실제로 키를 물고 있는 경우다). -->
+            <MenuItem Header="열기"
+                      Command="{Binding PlacementTarget.Tag.OpenCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
             <MenuItem Header="경로 복사"
                       Command="{Binding PlacementTarget.Tag.CopyItemPathCommand,
                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"
@@ -57,6 +67,22 @@
                                            RelativeSource={RelativeSource AncestorType=ContextMenu},
                                            Converter={StaticResource BoolToVisibility}}"
                       Command="{Binding PlacementTarget.Tag.RegisterFolderCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <!-- 등록과 나란한 자리다 (§4.6 305행 · D8) — 새 등록을 만드는 대신 이 타일의 앵커
+                 path 를 갈아치운다. 폴더에만 뜻이 있으므로 등록과 같은 조건으로 감춘다. -->
+            <MenuItem Header="이 폴더를 앵커로 지정"
+                      Visibility="{Binding PlacementTarget.DataContext.IsDirectory,
+                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                           Converter={StaticResource BoolToVisibility}}"
+                      Command="{Binding PlacementTarget.Tag.SetAnchorToItemCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <!-- 셸 속성 대화상자. 읽기라 폴더·파일 어느 쪽에도 뜻이 있어 감추지 않는다. -->
+            <MenuItem Header="속성"
+                      Command="{Binding PlacementTarget.Tag.ShowItemPropertiesCommand,
                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
