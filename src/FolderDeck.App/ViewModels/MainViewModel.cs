@@ -100,7 +100,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
     public string Title => string.IsNullOrWhiteSpace(Workspace.Title) ? "(제목 없음)" : Workspace.Title;
 
-    public IReadOnlyList<FolderRowViewModel> Rows { get; }
+    public ObservableCollection<FolderRowViewModel> Rows { get; }
 
     public int GridCols { get; }
 
