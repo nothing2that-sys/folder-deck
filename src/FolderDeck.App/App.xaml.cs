@@ -211,6 +211,7 @@ public partial class App : Application
             new FileOperationEngine(new RecycleBin()),
             new UserPrompt(),
             new MacroEditor(),
+            new FolderEditor(),
             new SelfLauncher());
 
         var window = new MainWindow(viewModel);

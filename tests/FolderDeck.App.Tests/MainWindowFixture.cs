@@ -84,7 +84,11 @@ internal sealed class MainWindowFixture : IDisposable
 
     private readonly string _root;
 
-    public MainWindowFixture()
+    /// <param name="seedFolderReferences">
+    /// 타일·대상함·매크로가 <b>한 폴더를 동시에</b> 가리키는 상태로 세운다 (§4.11-2 E3 검증용).
+    /// <b>기본은 끔</b> — 기존 테스트들이 이 픽스처의 개수를 그대로 단언하므로 켜면 깨진다.
+    /// </param>
+    public MainWindowFixture(bool seedFolderReferences = false)
     {
         _root = Path.Combine(Path.GetTempPath(), "FolderDeck.AppTests", Guid.NewGuid().ToString("N"));
 
@@ -143,6 +147,26 @@ internal sealed class MainWindowFixture : IDisposable
             ],
         };
 
+        if (seedFolderReferences)
+        {
+            // "code" 는 Pinned 라 상시 타일이 유도된다 — 셋(타일·대상함·매크로)이 이 폴더 하나를
+            // 동시에 가리키게 만든다. 나머지 넷은 건드리지 않는다.
+            var code = Workspace.Folders[0];
+
+            Workspace.CopyTray = [code.Id];
+            Workspace.Macros =
+            [
+                new MacroDefinition
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "code 로 복사",
+                    Op = FileOperationKind.Copy,
+                    Source = new MacroSource { Kind = MacroSourceKind.Selection },
+                    Dest = new MacroDest { Kind = MacroDestKind.FolderIds, FolderIds = [code.Id] },
+                },
+            ];
+        }
+
         Paths = new FolderDeckPaths(Path.Combine(_root, "appdata"));
         Paths.EnsureCreated();
         Store = new WorkspaceStore(Paths, new DebouncedSaveScheduler(TimeSpan.FromMilliseconds(20)));
@@ -151,10 +175,12 @@ internal sealed class MainWindowFixture : IDisposable
         RecycleBin = new FakeRecycleBin();
         Prompt = new FakeUserPrompt();
         MacroEditor = new FakeMacroEditor();
+        FolderEditor = new FakeFolderEditor();
         Engine = new FileOperationEngine(RecycleBin);
         SelfLauncher = new FakeSelfLauncher();
         ViewModel = new MainViewModel(
-            Workspace, Store, new FolderEnumerator(), Shell, Clipboard, Engine, Prompt, MacroEditor, SelfLauncher);
+            Workspace, Store, new FolderEnumerator(), Shell, Clipboard, Engine, Prompt, MacroEditor,
+            FolderEditor, SelfLauncher);
     }
 
     public string CodePath { get; }
@@ -181,6 +207,8 @@ internal sealed class MainWindowFixture : IDisposable
     public FakeUserPrompt Prompt { get; }
 
     public FakeMacroEditor MacroEditor { get; }
+
+    public FakeFolderEditor FolderEditor { get; }
 
     public FileOperationEngine Engine { get; }
 

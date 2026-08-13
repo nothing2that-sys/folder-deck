@@ -76,7 +76,7 @@ public sealed class CopyTrayTests
         var reopened = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
         var restarted = new MainViewModel(
             reopened, f.Store, new FolderEnumerator(), f.Shell, f.Clipboard, f.Engine, f.Prompt, f.MacroEditor,
-            f.SelfLauncher);
+            f.FolderEditor, f.SelfLauncher);
 
         Assert.Equal("문서", Assert.Single(restarted.Tray).DisplayName);
         Assert.True(restarted.Tray[0].IsChecked);

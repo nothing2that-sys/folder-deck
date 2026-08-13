@@ -108,7 +108,7 @@ public sealed class MacroTests
         var reopened = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
         var restarted = new MainViewModel(
             reopened, f.Store, new FolderEnumerator(), f.Shell, f.Clipboard, f.Engine, f.Prompt,
-            f.MacroEditor, f.SelfLauncher);
+            f.MacroEditor, f.FolderEditor, f.SelfLauncher);
 
         var reloaded = Assert.Single(restarted.Macros);
         Assert.Equal("문서로 복사", reloaded.Name);

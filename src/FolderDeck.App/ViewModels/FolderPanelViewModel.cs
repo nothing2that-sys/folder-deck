@@ -255,6 +255,16 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public Action? SaveFolderEntry { get; set; }
 
     /// <summary>
+    /// 우클릭 메뉴 "새 폴더로 등록"이 닿을 통로 (§4.11-1). 패널은 <c>Workspace</c> 를 모른다 —
+    /// <see cref="TrashSelectionCommand"/> 와 같은 결로 타일을 만들 때 걸어 준다.
+    /// </summary>
+    /// <remarks>
+    /// 인자는 우클릭한 항목(<see cref="FileItemViewModel"/>)이다. 하위 폴더까지 포함해 검색한
+    /// 결과의 항목에도 그대로 걸린다(§4.10) — 그 목록이야말로 등록하고 싶은 폴더를 만나기 쉽다.
+    /// </remarks>
+    public System.Windows.Input.ICommand? RegisterFolderCommand { get; set; }
+
+    /// <summary>
     /// 셸 드래그가 이 타일 위에 있는가 — 파란 과녁 강조 (§4.2-2 의 폴더 행·대상함과 같은 결).
     /// </summary>
     /// <remarks>
@@ -279,6 +289,20 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public string AnchorName => Entry is null
         ? string.Empty
         : (string.IsNullOrWhiteSpace(Entry.DisplayName) ? LastSegment(Entry.Path) : Entry.DisplayName!);
+
+    /// <summary>
+    /// 앵커 폴더의 표시 이름을 고쳤다 (§4.11-3). 헤더의 <see cref="AnchorName"/> 도 빵부스러기
+    /// 첫 조각도 <c>Entry</c> 에서 계산되므로, 다시 열기 전에는 옛 이름이 남는다.
+    /// </summary>
+    public void NotifyAnchorName()
+    {
+        OnPropertyChanged(nameof(AnchorName));
+
+        if (Entry is not null && CurrentPath is not null)
+        {
+            Breadcrumbs = BuildBreadcrumbs(Entry, CurrentPath);
+        }
+    }
 
     public bool HasFailure => Failure is not null;
 

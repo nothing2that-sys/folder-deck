@@ -57,6 +57,26 @@ internal sealed class FakeUserPrompt : IUserPrompt
     }
 }
 
+/// <summary>폴더 수정 창 대신 답만 돌려준다 (§4.11-3).</summary>
+internal sealed class FakeFolderEditor : IFolderEditor
+{
+    /// <summary>창이 돌려줄 값. <b>null 이면 사용자가 취소한 것</b> — 기본은 취소다.</summary>
+    public FolderEditDraft? Answer { get; set; }
+
+    /// <summary>창이 뜬 횟수와 그때 미리 채워져 있던 값.</summary>
+    public List<FolderEditDraft> Opened { get; } = [];
+
+    /// <summary>창에 넘어온 경로 — 어느 폴더를 고치려 했는지 확인용.</summary>
+    public string? OpenedPath { get; private set; }
+
+    public FolderEditDraft? Edit(FolderEditDraft draft, string path)
+    {
+        Opened.Add(draft);
+        OpenedPath = path;
+        return Answer;
+    }
+}
+
 /// <summary>매크로 편집 창 대신 답만 돌려준다 (§4.7).</summary>
 internal sealed class FakeMacroEditor : IMacroEditor
 {

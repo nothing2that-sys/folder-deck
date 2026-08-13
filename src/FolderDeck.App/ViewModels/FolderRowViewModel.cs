@@ -88,4 +88,15 @@ public sealed partial class FolderRowViewModel(FolderEntry entry) : ObservableOb
         OnPropertyChanged(nameof(RotationSlot));
         OnPropertyChanged(nameof(RotationSlotText));
     }
+
+    /// <summary>
+    /// 표시 이름·설명을 고쳤다 (§4.11-3). 셋 다 <see cref="Entry"/> 에서 계산되므로
+    /// 알림이 저절로 걸리지 않는다 — <see cref="NotifyRotationSlot"/> 과 같은 결로 손으로 알린다.
+    /// </summary>
+    public void NotifyEdited()
+    {
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(Description));
+        OnPropertyChanged(nameof(HasDescription));
+    }
 }

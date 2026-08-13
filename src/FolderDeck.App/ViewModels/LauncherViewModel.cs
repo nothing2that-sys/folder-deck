@@ -5,8 +5,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FolderDeck.App.Services;
 using FolderDeck.Core.Models;
+using FolderDeck.Core.Paths;
 using FolderDeck.Core.Storage;
-using IoPath = System.IO.Path;
 
 namespace FolderDeck.App.ViewModels;
 
@@ -333,11 +333,7 @@ public sealed partial class LauncherViewModel : ObservableObject
                 continue;
             }
 
-            var normalized = path.TrimEnd(IoPath.DirectorySeparatorChar, IoPath.AltDirectorySeparatorChar);
-            if (normalized.Length == 0)
-            {
-                normalized = path;
-            }
+            var normalized = FolderPathRules.Normalize(path);
 
             if (!NewFolders.Any(p => string.Equals(p, normalized, StringComparison.OrdinalIgnoreCase)))
             {
@@ -370,7 +366,7 @@ public sealed partial class LauncherViewModel : ObservableObject
             Folders = [.. NewFolders.Select((path, index) => new FolderEntry
             {
                 Path = path,
-                DisplayName = LeafName(path),
+                DisplayName = FolderPathRules.LeafName(path),
 
                 // 첫 폴더만 상시로 둔다 — 안 그러면 새 워크스페이스를 열었을 때
                 // 오른쪽에 빈 순환 칸 하나만 보인다. 상시/순환 지정 UI 는 Phase 2 다.
@@ -390,12 +386,5 @@ public sealed partial class LauncherViewModel : ObservableObject
         NewTitle = string.Empty;
         NewFolders.Clear();
         Refresh();
-    }
-
-    private static string LeafName(string path)
-    {
-        var trimmed = path.TrimEnd(IoPath.DirectorySeparatorChar, IoPath.AltDirectorySeparatorChar);
-        var name = IoPath.GetFileName(trimmed);
-        return string.IsNullOrEmpty(name) ? trimmed : name;
     }
 }

@@ -153,7 +153,7 @@ public sealed class LayoutEditTests
         var reopened = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
         var restarted = new MainViewModel(
             reopened, f.Store, new FolderEnumerator(), f.Shell, f.Clipboard, f.Engine, f.Prompt, f.MacroEditor,
-            f.SelfLauncher);
+            f.FolderEditor, f.SelfLauncher);
 
         var tile = restarted.Tiles[0];
         Assert.Equal((3, 3, 1, 1), (tile.CellX, tile.CellY, tile.SpanX, tile.SpanY));
@@ -452,7 +452,7 @@ public sealed class LayoutEditTests
         var reopened = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
         var restarted = new MainViewModel(
             reopened, f.Store, new FolderEnumerator(), f.Shell, f.Clipboard, f.Engine, f.Prompt, f.MacroEditor,
-            f.SelfLauncher);
+            f.FolderEditor, f.SelfLauncher);
 
         Assert.Equal(5, restarted.Tiles.Count);
         Assert.Equal(2, restarted.Tiles.Count(t => t.IsRotating));
@@ -479,7 +479,7 @@ public sealed class LayoutEditTests
         var reopened = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
         var restarted = new MainViewModel(
             reopened, f.Store, new FolderEnumerator(), f.Shell, f.Clipboard, f.Engine, f.Prompt, f.MacroEditor,
-            f.SelfLauncher);
+            f.FolderEditor, f.SelfLauncher);
         await restarted.InitializeAsync();
 
         Assert.Equal((2, 2), (restarted.Tiles[0].CellX, restarted.Tiles[0].CellY));
@@ -501,7 +501,7 @@ public sealed class LayoutEditTests
 
         var vm = new MainViewModel(
             f.Workspace, f.Store, new FolderEnumerator(), f.Shell, f.Clipboard, f.Engine, f.Prompt,
-            f.MacroEditor, f.SelfLauncher);
+            f.MacroEditor, f.FolderEditor, f.SelfLauncher);
 
         Assert.Single(vm.Tiles);
         Assert.Contains("놓을 수 없는 타일 1개", vm.Message);

@@ -221,7 +221,7 @@ public sealed class WindowPositionTests
         var reloaded = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
         _ = new MainViewModel(
             reloaded, f.Store, new FolderEnumerator(), new FakeShellLauncher(), new FakeClipboardService(),
-            f.Engine, f.Prompt, f.MacroEditor, f.SelfLauncher);
+            f.Engine, f.Prompt, f.MacroEditor, f.FolderEditor, f.SelfLauncher);
 
         Assert.Equal(300, reloaded.Window!.X);
         Assert.True(reloaded.Window.Maximized);

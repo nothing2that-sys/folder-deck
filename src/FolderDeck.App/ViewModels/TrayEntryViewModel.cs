@@ -46,4 +46,7 @@ public sealed partial class TrayEntryViewModel : ObservableObject, IFileDropTarg
 
     [RelayCommand]
     private void Remove() => _remove(this);
+
+    /// <summary>폴더의 표시 이름을 고쳤다 (§4.11-3) — <c>Entry</c> 에서 계산되므로 손으로 알린다.</summary>
+    public void NotifyEdited() => OnPropertyChanged(nameof(DisplayName));
 }

@@ -12,6 +12,7 @@ using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Layout;
 using FolderDeck.Core.Models;
 using FolderDeck.Core.Operations;
+using FolderDeck.Core.Paths;
 using FolderDeck.Core.Storage;
 
 namespace FolderDeck.App.ViewModels;
@@ -26,6 +27,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     private readonly IFileOperationEngine _engine;
     private readonly IUserPrompt _prompt;
     private readonly IMacroEditor _macroEditor;
+    private readonly IFolderEditor _folderEditor;
     private readonly ISelfLauncher _selfLauncher;
 
     /// <summary>디바운스 저장 실패는 스레드 풀에서 올라온다 — UI 스레드로 되돌리기 위해 잡아 둔다.</summary>
@@ -43,6 +45,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         IFileOperationEngine engine,
         IUserPrompt prompt,
         IMacroEditor macroEditor,
+        IFolderEditor folderEditor,
         ISelfLauncher selfLauncher)
     {
         Workspace = workspace;
@@ -53,6 +56,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         _engine = engine;
         _prompt = prompt;
         _macroEditor = macroEditor;
+        _folderEditor = folderEditor;
         _selfLauncher = selfLauncher;
 
         Rows = [.. workspace.Folders.Select(f => new FolderRowViewModel(f))];
@@ -1703,7 +1707,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
         // 접근 불가 표시는 열거를 기다리지 않고 따로 확인한다. 죽은 네트워크 경로 하나가
         // 몇 초를 잡아먹어도 나머지 UI 는 이미 떠 있다.
-        var probes = Rows.Select(ProbeRowAsync);
+        var probes = Rows.Select(ProbeRowAsync).ToList();
 
         await Task.WhenAll(loads.Concat(probes)).ConfigureAwait(true);
         UpdateRowStates();
@@ -1887,6 +1891,217 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         Save();
     }
 
+    // ── 폴더 등록·제거·수정 (§4.11) ──────────────────────────────────────────
+
+    /// <summary>
+    /// 타일 파일 목록에서 우클릭한 하위 폴더를 워크스페이스에 등록한다 (§4.11-1).
+    /// </summary>
+    /// <remarks>
+    /// <b>넣는 자리가 둘이다</b> — 저장되는 <c>folders[]</c> 와 화면이 읽는 <see cref="Rows"/> 는
+    /// 워크스페이스를 열 때 한 번 맞춰질 뿐 그 뒤로 서로를 따라가지 않는다. 둘 다에 넣고 저장한다.
+    /// <para>
+    /// <b>목록 맨 뒤에 붙인다.</b> 정렬을 새로 넣지 않는다 — 지금 순서는 파일에 적힌 순서이고,
+    /// 등록이 그 순서를 흔들면 왼쪽 리스트가 이유 없이 뒤바뀐 것처럼 보인다.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    public void RegisterFolder(FileItemViewModel? item)
+    {
+        // 파일에는 뜻이 없다. 메뉴가 이미 감추지만 커맨드 쪽에서도 막는다 — 통로가 하나 더
+        // 생기면(단축키 등) 메뉴의 판정만으로는 못 막는다.
+        if (item is null || !item.IsDirectory)
+        {
+            return;
+        }
+
+        var normalized = FolderPathRules.Normalize(item.FullPath);
+
+        // D3 — 같은 path 는 거절한다. 다만 거절은 여기(UI 층)에서만이다. 파일을 여는 시점의
+        // 검증(WorkspaceStore)에는 넣지 않는다 — 손으로 고치다 겹친 사용자가 워크스페이스
+        // 자체를 못 열게 되는 쪽이 더 나쁘다.
+        if (Workspace.Folders.Any(f => PathsEqual(f.Path, normalized)))
+        {
+            Warn($"이미 등록된 폴더다: {normalized}", transient: true);
+            return;
+        }
+
+        var entry = new FolderEntry
+        {
+            Path = normalized,
+
+            // 기본 표시 이름은 잎 이름, 설명은 빈 값으로 시작한다 (§4.11-1).
+            DisplayName = FolderPathRules.LeafName(normalized),
+        };
+
+        Workspace.Folders.Add(entry);
+        Rows.Add(new FolderRowViewModel(entry));
+
+        // 새 행에도 "순환 칸 지정" 선택지가 있어야 한다 — 배치는 안 바뀌었으므로 그것만 다시 센다.
+        RefreshRotationChoices();
+        Save();
+
+        Inform($"등록했다: {entry.DisplayName}");
+    }
+
+    /// <summary>
+    /// 왼쪽 리스트에서 고른 폴더 등록을 지운다 (§4.11-2). <b>실제 폴더는 건드리지 않는다.</b>
+    /// </summary>
+    /// <remarks>
+    /// 폴더 하나가 화면 배치와 저장된 규칙 여러 곳에 동시에 걸려 있어서, <b>딸려 갈 것을 먼저
+    /// 센다</b> — 세어 보이지 않으면 무엇이 사라지는지 누르기 전에 알 방법이 없다(D1).
+    /// <para>
+    /// 고아 참조 셋(타일·대상함·매크로)의 처리가 지금은 제각각이다. <b>제거 경로는 셋을 같은
+    /// 규칙으로 맞춘다: 세어서 보이고, 지우고, 저장한다</b>(E3). 매크로 정의에 남은 죽은 id 도
+    /// 이때 같이 지운다 — 실행할 때만 거르면 정의에는 영영 남는다.
+    /// </para>
+    /// <para>
+    /// <b>세는 것은 상태를 바꾸지 않는다.</b> 취소하면 아무것도 바뀌지 않아야 한다.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    public void RemoveFolder(FolderRowViewModel? row)
+    {
+        if (row is null || !Rows.Contains(row))
+        {
+            return;
+        }
+
+        var id = row.Entry.Id;
+
+        // ── 센다 (읽기만 한다) ────────────────────────────────────────────────
+
+        // 타일: 상시 칸이 못박은 폴더만이 이 폴더를 "쓴다". 순환 칸은 folderId 를 갖지 않는다
+        // — GridLayout.NormalizeTiles 가 폴더가 사라진 타일을 세는 기준과 같다.
+        var doomedTiles = Tiles
+            .Where(t => t.Spec.Kind == TileKind.Pinned && t.Spec.FolderId == id)
+            .ToList();
+
+        // 대상함: copyTray[] 는 폴더 id 를 그냥 담은 List<Guid> 다 — folderId 라는 이름이 아니다.
+        var trayCount = Workspace.CopyTray?.Count(g => g == id) ?? 0;
+
+        // 매크로: 목적지가 "고정 폴더"인 규칙이 이 id 를 들고 있는 것.
+        var doomedMacros = (Workspace.Macros ?? [])
+            .Where(m => m.Dest?.FolderIds?.Contains(id) == true)
+            .ToList();
+
+        var confirmed = _prompt.Confirm(
+            "폴더 제거",
+            $"'{row.DisplayName}' 등록을 지운다.\n\n" +
+            $"타일 {doomedTiles.Count}개 · 대상함 {trayCount}개 · 매크로 {doomedMacros.Count}개가 같이 정리된다.\n\n" +
+            "실제 폴더는 지워지지 않는다 — 작업 관리의 등록만 없어진다.");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        // ── 지운다 ───────────────────────────────────────────────────────────
+
+        foreach (var tile in doomedTiles)
+        {
+            Workspace.Tiles!.Remove(tile.Spec);
+            Tiles.Remove(tile);
+            tile.Panel.Clear();
+            DetachWatcher(tile);
+        }
+
+        // 순환 칸이 지금 이 폴더를 띄우고 있으면 비운다 — 등록이 없어진 폴더를 계속 보여 줄 수 없다.
+        foreach (var tile in Tiles.Where(t => t.IsRotating && ReferenceEquals(t.Panel.Entry, row.Entry)))
+        {
+            tile.Panel.Clear();
+        }
+
+        foreach (var entry in Tray.Where(t => t.Entry.Id == id).ToList())
+        {
+            Tray.Remove(entry);
+        }
+
+        foreach (var macro in doomedMacros)
+        {
+            macro.Dest!.FolderIds!.RemoveAll(g => g == id);
+
+            // 비면 슬롯 자체를 지운다 — 빈 배열을 파일에 남기지 않는다(copyTray·macros 와 같은 결).
+            if (macro.Dest.FolderIds.Count == 0)
+            {
+                macro.Dest.FolderIds = null;
+            }
+
+            Macros.FirstOrDefault(c => ReferenceEquals(c.Definition, macro))?.NotifyChanged();
+        }
+
+        Rows.Remove(row);
+        Workspace.Folders.Remove(row.Entry);
+
+        // ── 저장한다 ─────────────────────────────────────────────────────────
+        //
+        // SaveTray 가 copyTray[] 를 Tray 에서 되쓰고 Save 까지 부른다 — 대상함이 안 걸렸으면
+        // 그 경로를 타지 않으므로 아래에서 따로 저장한다.
+        if (trayCount > 0)
+        {
+            SaveTray();
+        }
+
+        RefreshDerivedLayout();
+        UpdateRowStates();
+        Save();
+
+        Inform($"등록을 지웠다: {row.DisplayName} " +
+               $"(타일 {doomedTiles.Count} · 대상함 {trayCount} · 매크로 {doomedMacros.Count})");
+    }
+
+    /// <summary>
+    /// 왼쪽 리스트에서 고른 폴더의 <c>displayName</c>·<c>description</c> 을 고친다 (§4.11-3).
+    /// </summary>
+    /// <remarks>
+    /// <b>고치는 것은 둘뿐이다.</b> <c>pinned</c> 는 상시 타일의 그림자라 여기서 손대면 다음
+    /// 배치 갱신이 되돌려 놓는다(D2). <c>viewMode</c>·<c>sortBy</c>·<c>sortDesc</c>·
+    /// <c>rotationSlot</c> 은 각자의 기존 진입점을 그대로 쓴다.
+    /// <para>
+    /// <c>description</c> 은 <b>값이 들어간 적이 한 번도 없는 필드</b>다 — 여기가 그 첫 경로다.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    public void EditFolder(FolderRowViewModel? row)
+    {
+        if (row is null || !Rows.Contains(row))
+        {
+            return;
+        }
+
+        var edited = _folderEditor.Edit(
+            new FolderEditDraft(row.Entry.DisplayName, row.Entry.Description), row.Entry.Path);
+
+        if (edited is null)
+        {
+            return;
+        }
+
+        row.Entry.DisplayName = edited.DisplayName;
+        row.Entry.Description = edited.Description;
+
+        // 이름·설명은 FolderEntry 에서 계산되는 값이라 알림이 저절로 걸리지 않는다 — 같은 폴더를
+        // 보여 주는 세 곳(왼쪽 리스트·대상함·타일 헤더)에 손으로 알린다.
+        row.NotifyEdited();
+
+        foreach (var entry in Tray.Where(t => ReferenceEquals(t.Entry, row.Entry)))
+        {
+            entry.NotifyEdited();
+        }
+
+        foreach (var panel in Panels.Where(p => ReferenceEquals(p.Entry, row.Entry)))
+        {
+            panel.NotifyAnchorName();
+        }
+
+        Save();
+        Inform($"폴더를 고쳤다: {row.DisplayName}");
+    }
+
+    /// <summary>등록 경로 비교 — 끝 구분자와 대소문자를 무시한다 (§4.11-1 D3).</summary>
+    private static bool PathsEqual(string a, string b) =>
+        string.Equals(
+            FolderPathRules.Normalize(a), FolderPathRules.Normalize(b), StringComparison.OrdinalIgnoreCase);
+
     // ── 내부 ─────────────────────────────────────────────────────────────────
 
     private TileViewModel CreateTile(TileSpec spec)
@@ -1906,6 +2121,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             // 헤더에서 뷰 방식을 뒤집으면 folders[].viewMode 가 바뀐다 — pinned·배치가 이미
             // 쓰는 디바운스 저장에 얹는다(§7.1). 패널은 저장소를 모른다.
             SaveFolderEntry = Save,
+
+            // 항목 우클릭 "새 폴더로 등록"이 닿을 통로 (§4.11-1). 패널은 Workspace 를 모른다.
+            RegisterFolderCommand = RegisterFolderCommand,
         };
 
         if (spec.Kind == TileKind.Pinned && spec.FolderId is { } id)

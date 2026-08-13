@@ -49,6 +49,17 @@
                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <!-- 폴더 항목만 워크스페이스에 등록할 수 있다 (§4.11-1). 파일에는 뜻이 없으므로
+                 항목이 폴더가 아니면 감춘다 — 눌러도 아무 일 없는 항목을 남기지 않는다.
+                 재귀 검색 결과의 하위 폴더에도 그대로 뜬다(§4.10) — 막지 않는다. -->
+            <MenuItem Header="새 폴더로 등록"
+                      Visibility="{Binding PlacementTarget.DataContext.IsDirectory,
+                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                           Converter={StaticResource BoolToVisibility}}"
+                      Command="{Binding PlacementTarget.Tag.RegisterFolderCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext,
+                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
             <Separator />
             <!-- 고른 것 전부를 휴지통으로 (§4.4). 우클릭은 그 자리에서 선택을 잡아 주므로
                  (OnItemPreviewRightButtonDown) 무엇이 지워질지가 목록에 그대로 보인다. -->

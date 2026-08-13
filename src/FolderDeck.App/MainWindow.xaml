@@ -238,6 +238,24 @@
                                                         </Style>
                                                     </MenuItem.ItemContainerStyle>
                                                 </MenuItem>
+                                                <Separator />
+                                                <!-- 폴더 등록 자체를 고치고 지운다 (§4.11-2·3).
+                                                     위의 둘은 이 폴더를 "어디에 쓸지"를 정하고,
+                                                     아래 둘은 등록 자체를 건드린다. -->
+                                                <MenuItem Header="수정"
+                                                          Command="{Binding PlacementTarget.Tag.EditFolderCommand,
+                                                                    RelativeSource={RelativeSource
+                                                                        AncestorType=ContextMenu}}"
+                                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                    RelativeSource={RelativeSource
+                                                                        AncestorType=ContextMenu}}" />
+                                                <MenuItem Header="제거"
+                                                          Command="{Binding PlacementTarget.Tag.RemoveFolderCommand,
+                                                                    RelativeSource={RelativeSource
+                                                                        AncestorType=ContextMenu}}"
+                                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                    RelativeSource={RelativeSource
+                                                                        AncestorType=ContextMenu}}" />
                                             </ContextMenu>
                                         </Button.ContextMenu>
                                         <Grid>
