@@ -44,6 +44,15 @@ internal sealed class FakeClipboardService : IClipboardService
 {
     public List<string> Texts { get; } = [];
 
+    /// <summary><c>SetFiles</c> 로 실린 뭉치들 — 한 번도 안 실었으면 비어 있다 (A군 ③ C-1).</summary>
+    public List<IReadOnlyList<OperationItem>> FileSets { get; } = [];
+
+    /// <summary>
+    /// 지금 클립보드에 있는 데이터 개체. <b>기본값은 null = 빈 클립보드</b>다 — 이 기능을 모르는
+    /// 기존 테스트가 실수로 붙여넣지 않게 (선례: <c>FakeUserPrompt.NameAnswer</c> 기본 null).
+    /// </summary>
+    public System.Windows.IDataObject? Data { get; set; }
+
     public string? Error { get; set; }
 
     public string? Text => Texts.Count > 0 ? Texts[^1] : null;
@@ -53,6 +62,22 @@ internal sealed class FakeClipboardService : IClipboardService
         Texts.Add(text);
         return Error;
     }
+
+    public string? SetFiles(IReadOnlyList<OperationItem> items)
+    {
+        FileSets.Add(items);
+
+        if (Error is not null)
+        {
+            return Error;
+        }
+
+        // 실물과 같은 것이 실린다 — 무엇이 실리는지는 진짜 코드가 정한다(가짜가 아니라).
+        Data = ClipboardService.FileDataObject(items);
+        return null;
+    }
+
+    public System.Windows.IDataObject? GetData() => Data;
 }
 
 /// <summary>진짜 휴지통을 건드리지 않고 지운다 — 무엇을 보냈는지만 적는다.</summary>

@@ -33,6 +33,14 @@
              인자를 안 받는 RenameSelectionCommand 가 선택에서 대상을 뽑아 메뉴와 같은 경로로
              들어간다 — KeyBinding 에는 넘길 항목이 없다. -->
         <KeyBinding Key="F2" Command="{Binding RenameSelectionCommand}" />
+        <!-- 복사 Ctrl+C (§4.6 310행 · A군 ③ C-1). F2 와 같은 이유로 창이 아니라 여기다:
+             대상이 "이 패널에서 고른 항목"이라 창에 물리면 어느 패널의 선택인지 가릴 수 없다.
+             「경로 복사」(글자)와 다른 커맨드다 — 이쪽은 셸 파일 포맷을 싣는다. -->
+        <KeyBinding Modifiers="Ctrl" Key="C" Command="{Binding CopySelectionToClipboardCommand}" />
+        <!-- 붙여넣기 Ctrl+V (§4.6 322~323행 · A군 ③ C-2). 여기 두는 이유는 Ctrl+C 와 다르다:
+             대상이 "고른 항목"이 아니라 "이 패널이 지금 보고 있는 폴더"라서다(§4.9 429행).
+             창에 물리면 어느 타일에 붙여넣을지 가릴 수 없는 것은 마찬가지다. -->
+        <KeyBinding Modifiers="Ctrl" Key="V" Command="{Binding PasteIntoCurrentCommand}" />
         <!-- Ctrl+F 는 펴는 것으로 끝이 아니라 포커스까지 줘야 하고, 갓 보이게 된 TextBox 는
              레이아웃 뒤에야 포커스를 받는다. 그래서 MainWindow 코드 비하인드가 처리한다. -->
     </UserControl.InputBindings>
@@ -101,6 +109,15 @@
                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <!-- 복사 (§4.6 310행 · A군 ③ C-1) — 「쓰기」 자리의 둘째다. 위의 「경로 복사」(2번)와
+                 다섯 칸 떨어뜨려 둔다: 둘이 나란히 서면 무엇이 글자고 무엇이 파일인지 헷갈린다.
+                 Ctrl+C 는 실물이다 — UserControl.InputBindings 가 그 키를 물고 있다.
+                 대상은 우클릭한 항목이 아니라 <b>고른 것 전부</b>라 CommandParameter 가 없다
+                 (「휴지통으로 삭제」와 같다 — 우클릭이 그 자리에서 선택을 잡아 준다). -->
+            <MenuItem Header="복사"
+                      InputGestureText="Ctrl+C"
+                      Command="{Binding PlacementTarget.Tag.CopySelectionToClipboardCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
             <Separator />
             <!-- 고른 것 전부를 휴지통으로 (§4.4). 우클릭은 그 자리에서 선택을 잡아 주므로
                  (OnItemPreviewRightButtonDown) 무엇이 지워질지가 목록에 그대로 보인다. -->
@@ -334,6 +351,14 @@
                         <ItemsControl.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="경로 복사" Command="{Binding CopyCurrentPathCommand}" />
+                                <!-- 붙여넣기 (§4.6 322~323행 · A군 ③ C-2) — 목적지가 "지금 보고
+                                     있는 폴더"라 항목 메뉴가 아니라 이 자리다. 항목을 우클릭한
+                                     것이 아니므로 무엇에 붙여넣을지 헷갈리지 않는다.
+                                     빈 곳(배경) 메뉴를 새로 만들지 않는다 — 고무줄 선택이
+                                     그 자리를 쓴다(§4.2-2). -->
+                                <MenuItem Header="붙여넣기"
+                                          InputGestureText="Ctrl+V"
+                                          Command="{Binding PasteIntoCurrentCommand}" />
                             </ContextMenu>
                         </ItemsControl.ContextMenu>
                         <ItemsControl.ItemsPanel>

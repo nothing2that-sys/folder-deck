@@ -803,14 +803,20 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     /// 엔진에 넘기기 전에 ①(온 곳과 같은 폴더)로 빠진 건수 (§4.9). 엔진의 보고에는 없으므로
     /// 결과 문구까지 따로 들고 간다.
     /// </param>
+    /// <param name="verbOverride">
+    /// 사용자에게 보일 이름. 기본은 동작 그대로(복사/이동)이고, <b>같은 <c>Copy</c> 인데 이름이
+    /// 달라야 하는 자리</b>만 이걸 준다 — 붙여넣기가 그렇다(§4.6 322~323행). 확인창·진행 줄·
+    /// 결과 요약이 전부 이 낱말을 쓴다.
+    /// </param>
     private async Task StartOperationAsync(
         FileOperationKind op,
         IReadOnlyList<OperationItem> items,
         IReadOnlyList<string> destinations,
         bool confirmMove,
-        int sameFolderSkipped = 0)
+        int sameFolderSkipped = 0,
+        string? verbOverride = null)
     {
-        var verb = op == FileOperationKind.Copy ? "복사" : "이동";
+        var verb = verbOverride ?? (op == FileOperationKind.Copy ? "복사" : "이동");
 
         // 겹치는 건수는 <b>정책과 무관하게</b> 세야 한다. 엔진은 덮어쓰기일 때만 세므로
         // (건너뛰기·이름바꾸기는 덮어쓰지 않으니까) 여기서는 항상 덮어쓰기로 훑는다.
@@ -1515,6 +1521,105 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             [destinationPath],
             confirmMove: false,
             sameFolderSkipped: items.Count - accepted.Count).ConfigureAwait(true);
+    }
+
+    // ── 붙여넣기 (§4.6 310행 · 322~323행 · A군 ③ C-2) ────────────────────────
+    //
+    // 클립보드에서 온 것도 <b>셸에서 온 것</b>이다 — 포맷이 같고(CF_HDROP), 목적지가 같고
+    // (타일의 currentPath), 받을지 말지의 판정도 같다. 그래서 여기서 하는 일은 "꺼내서 ·
+    // 거절할 것을 거절하고 · 기존 드롭 판정에 얹는 것"뿐이다. 새 파서도 새 판정도 없다.
+
+    /// <summary><c>DROPEFFECT_MOVE</c> — 탐색기가 <c>Ctrl+X</c> 로 실어 놓는 값.</summary>
+    private const uint DropEffectMove = 2;
+
+    /// <summary>
+    /// 클립보드의 것을 <paramref name="destinationPath"/> 로 <b>복사</b>한다.
+    /// </summary>
+    /// <remarks>
+    /// 거절은 전부 <b>스스로 지워지는</b> 상태 바 경고다(§5.1) — 사용자가 키를 눌러 생긴 거절이고
+    /// 화면이 이미 답을 보여준다. 파일 시스템 실패는 그 뒤 <see cref="ReportOperation"/> 이
+    /// <b>남는</b> 등급으로 적는다.
+    /// <para>
+    /// 목적지를 고르지도, 받을 수 있는지 새로 판정하지도 않는다 — 목적지는 패널이 넘긴 값이고
+    /// 판정은 셸 드롭이 쓰는 <see cref="CanDropOnto(string?, IReadOnlyList{OperationItem})"/> ·
+    /// <see cref="AcceptedForDrop"/> 그대로다.
+    /// </para>
+    /// </remarks>
+    public async Task PasteIntoAsync(string? destinationPath)
+    {
+        if (destinationPath is null)
+        {
+            // 아직 폴더를 안 띄운 순환 칸이거나 접근 불가 폴더를 보고 있는 타일이다.
+            Warn("붙여넣을 곳이 없다 — 폴더를 먼저 띄워라.", transient: true);
+            return;
+        }
+
+        if (_clipboard.GetData() is not { } data)
+        {
+            Warn("클립보드에 붙여넣을 파일이 없다.", transient: true);
+            return;
+        }
+
+        // 잘라내기를 조용히 복사로 처리하지 않는다 — 원본을 지우는 것은 이 앱이 하는 일이 아니다.
+        if (WantsMove(data))
+        {
+            Warn("잘라내기한 것은 아직 붙여넣지 못한다 — 원본은 그대로 두었다. 복사해서 붙여넣어라.",
+                transient: true);
+            return;
+        }
+
+        // 셸 드롭이 쓰는 그 파서다 (§4.9) — 클립보드도 같은 포맷이라 변환 계층이 없다.
+        var items = Views.DropRouter.ShellItems(data);
+
+        if (items.Count == 0)
+        {
+            Warn("클립보드에 붙여넣을 파일이 없다.", transient: true);
+            return;
+        }
+
+        if (!CanDropOnto(destinationPath, items))
+        {
+            // 드롭 판정과 <b>같은 답</b>이다. 드래그는 과녁을 안 켜는 것으로 끝나지만 키는
+            // 아무 일도 안 일어난 것처럼 보이므로 이유를 적는다.
+            Warn("여기에는 붙여넣을 것이 없다 — 온 곳과 같은 폴더이거나, 폴더를 자기 안에 " +
+                 "넣는 것이거나, 다른 조작이 도는 중이다.", transient: true);
+            return;
+        }
+
+        var accepted = AcceptedForDrop(destinationPath, items);
+
+        await StartOperationAsync(
+            FileOperationKind.Copy,
+            accepted,
+            [destinationPath],
+            confirmMove: false,
+            sameFolderSkipped: items.Count - accepted.Count,
+            verbOverride: "붙여넣기").ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 클립보드가 <b>잘라내기</b>를 실었는가 — <c>Preferred DropEffect</c> 를 읽는다.
+    /// </summary>
+    /// <remarks>
+    /// 싣는 쪽(<see cref="Views.ShellExport"/>)은 복사만 싣고 이 앱은 잘라내기를 만들지 않는다.
+    /// <b>읽는 쪽이 여기 처음 생긴다</b> — 탐색기에서 <c>Ctrl+X</c> 한 것이 들어올 수 있어서다.
+    /// <para>
+    /// 값이 <b>없거나</b> 4바이트가 안 되거나 <c>2</c> 가 아니면 복사로 본다. 셸에 따라 복사에
+    /// <c>DROPEFFECT_COPY|DROPEFFECT_LINK</c>(5) 를 싣는 것이 있어 "2일 때만 이동"으로 둔다.
+    /// <b>탐색기가 실제로 무엇을 싣는지는 이 묶음에서 재지 않았다 — 손 확인 항목이다.</b>
+    /// </para>
+    /// </remarks>
+    private static bool WantsMove(System.Windows.IDataObject data)
+    {
+        if (data.GetData(Views.ShellExport.PreferredDropEffectFormat)
+            is not System.IO.MemoryStream stream)
+        {
+            return false;
+        }
+
+        var bytes = stream.ToArray();
+
+        return bytes.Length >= 4 && BitConverter.ToUInt32(bytes, 0) == DropEffectMove;
     }
 
     /// <summary>
@@ -2381,6 +2486,10 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             // 항목 우클릭 「이름 바꾸기」와 F2 가 닿을 통로 (§4.6 309행 · D12~D15). 확인창과
             // folders[] 를 아는 쪽이 여기다 — 패널은 둘 다 모른다.
             RenameOnDisk = RenameFromItem,
+
+            // 붙여넣기(Ctrl+V · breadcrumb 우클릭)가 닿을 통로 (§4.6 322~323행 · A군 ③ C-2).
+            // 클립보드를 읽고 판정하고 엔진에 얹는 일은 전부 이쪽이다 — 패널은 목적지만 안다.
+            PasteInto = PasteIntoAsync,
         };
 
         if (spec.Kind == TileKind.Pinned && spec.FolderId is { } id)

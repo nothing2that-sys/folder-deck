@@ -298,6 +298,20 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public Func<FileItemViewModel, string?>? RenameOnDisk { get; set; }
 
     /// <summary>
+    /// 붙여넣기가 닿을 통로 (§4.6 310행 · 322~323행 · A군 ③ C-2). 인자는 <b>붙여넣을 목적지</b>다.
+    /// </summary>
+    /// <remarks>
+    /// 클립보드를 읽는 것부터 판정·실행·결과 보고까지 전부 이 통로 너머
+    /// (<see cref="MainViewModel"/>)에서 일어난다 — 패널은 엔진도, 다른 조작이 도는 중인지도
+    /// 모른다(<see cref="ShellDropHost"/> 와 같은 결이다).
+    /// <para>
+    /// <b><c>null</c> 목적지를 여기서 걸러내지 않는다.</b> 목적지가 없다는 것도 사용자에게 알릴
+    /// 거절이고, 거절 문구를 상태 바에 적는 자리는 저쪽이다 — 패널은 상태 바가 어디 있는지 모른다.
+    /// </para>
+    /// </remarks>
+    public Func<string?, Task>? PasteInto { get; set; }
+
+    /// <summary>
     /// 셸 드래그가 이 타일 위에 있는가 — 파란 과녁 강조 (§4.2-2 의 폴더 행·대상함과 같은 결).
     /// </summary>
     /// <remarks>
@@ -757,6 +771,48 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
         return Task.CompletedTask;
     }
+
+    // ── 클립보드로 복사 (§4.6 310행 · A군 ③ C-1) ─────────────────────────────
+    //
+    // 「경로 복사」와 다른 일이다 — 그쪽은 경로 <b>글자</b>를 싣고 이쪽은 셸 파일 포맷을 싣는다.
+    // <b>파일 시스템은 건드리지 않는다</b>: 실제 복사는 붙여넣는 쪽(탐색기든 이 앱이든)이 한다.
+
+    /// <summary>
+    /// 지금 고른 것 <b>전부</b>를 셸 파일 클립보드로 (<c>Ctrl+C</c> · 우클릭 「복사」).
+    /// </summary>
+    /// <remarks>
+    /// <b>이 패널 안에서 끝난다</b> — 클립보드 서비스가 이미 여기 있고 엔진도 <c>Workspace</c> 도
+    /// 필요 없다. 「휴지통으로 삭제」와 달리 통로 칸이 없는 것이 그 때문이다.
+    /// 대상을 <b>고른 것 전부</b>로 잡는 것은 그 「휴지통으로 삭제」와 같다.
+    /// </remarks>
+    [RelayCommand]
+    public void CopySelectionToClipboard()
+    {
+        if (SelectedItems.Count == 0)
+        {
+            // 클립보드를 건드리지 않는다 — 빈 것으로 덮으면 아까 복사해 둔 것이 사라진다.
+            _reportError?.Invoke("복사할 것이 없다 — 먼저 고른 뒤에 Ctrl+C");
+            return;
+        }
+
+        Report(
+            _clipboard.SetFiles(
+                [.. SelectedItems.Select(i =>
+                    new Core.Operations.OperationItem(i.FullPath, i.IsDirectory))]),
+            "클립보드에 올리지 못했다");
+    }
+
+    /// <summary>
+    /// 클립보드의 것을 <b>이 타일이 지금 보고 있는 폴더</b>로 (<c>Ctrl+V</c> · breadcrumb 우클릭
+    /// 「붙여넣기」).
+    /// </summary>
+    /// <remarks>
+    /// 목적지는 앵커가 아니라 <see cref="ShellDropDestination"/> 이다(§4.9 429행 — 셸 드롭이 쓰는
+    /// 바로 그 값이다). <c>null</c> 이어도 그대로 넘긴다 — 거절 문구는 통로 너머가 적는다.
+    /// </remarks>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    public Task PasteIntoCurrentAsync() =>
+        PasteInto is { } paste ? paste(ShellDropDestination) : Task.CompletedTask;
 
     // ── 검색 ─────────────────────────────────────────────────────────────────
 
