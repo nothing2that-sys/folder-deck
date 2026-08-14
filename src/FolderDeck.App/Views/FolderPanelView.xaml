@@ -610,5 +610,43 @@
                 </Canvas>
             </Grid>
         </DockPanel>
+
+        <!-- 활성 링 — "지금 키보드가 이 타일에 있다" (Phase 5 「타일 포커스」 C-2).
+             C-1 이 여백 다운으로 이 패널에 포커스를 주게 됐으니, 어느 타일이 그것을 가졌는지가
+             화면에 보여야 한다.
+
+             <b>기존 테두리 Rectangle(:243)을 건드리지 않는다.</b> 그 하나가 이미 면·상시/순환
+             성격·드롭 과녁 셋을 Stroke/Fill 로 들고 있어서, 넷째를 얹으면 같은 속성을 두고
+             트리거 우선순위를 다툰다(:241~242 주석과 같은 사고). 그래서 별 요소로 얹는다.
+
+             Fill 을 주지 않는다 — 면은 기존 Rectangle 것이고 이것은 테두리만이다.
+             IsHitTestVisible="False" — 이것이 클릭을 먹으면 C-1 이 무너진다(이 요소가 다운을
+             가져가면 그 아래 목록·버튼이 못 받는다).
+
+             Margin="4" 은 기존 테두리와 <b>2px 를 띄우려고</b> 고른 값이다: 기존 것이 타일
+             가장자리 0~2px 를 쓰므로 Margin="2" 면 이 링이 곧바로 2~4px 를 이어 받아 두 겹이
+             4px 한 줄로 붙어 보인다. 4 로 들이면 2(테두리)-2(빈틈)-2(링) 가 되어 갈린다.
+             RadiusX/Y 는 기존 4 보다 작은 2 다 — 모서리 곡률까지 달라야 두 겹이 더 갈린다.
+
+             Visibility 는 로컬 값이 아니라 Style 로 준다. 로컬 값을 주면 트리거가 이기지 못한다
+             (:291~292 가 같은 이유로 같은 방법을 쓴다). 판정은 뷰의 IsKeyboardFocusWithin 을
+             직접 읽는다 — 뷰모델에 새 활성 상태를 만들지 않는다(판정이 이미 SelectionOwner(선택)
+             와 IsKeyboardFocusWithin(포커스) 둘로 갈라져 있어 셋째를 만들지 않는다).
+             새 컨버터를 만들지 않는다 — DataTrigger 가 bool 을 그대로 본다. -->
+        <Rectangle Margin="4" RadiusX="2" RadiusY="2" IsHitTestVisible="False"
+                   Stroke="{StaticResource Brush.TileActive}" StrokeThickness="2">
+            <Rectangle.Style>
+                <Style TargetType="Rectangle">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsKeyboardFocusWithin,
+                                               RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                     Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Rectangle.Style>
+        </Rectangle>
     </Grid>
 </UserControl>

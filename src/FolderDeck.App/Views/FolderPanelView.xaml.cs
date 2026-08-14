@@ -743,6 +743,10 @@ public partial class FolderPanelView : UserControl
     /// <summary>
     /// 마우스 뒤로/앞으로 버튼. 목록 안에서 눌러도 듣도록 터널링 단계에서 받는다 —
     /// 자식이 먼저 처리해 버리면 놓치기 때문이다.
+    /// <para>
+    /// <b>왼쪽 버튼은 이 패널에 키보드 포커스를 준다</b> (Phase 5 「타일 포커스」 C-1).
+    /// 같은 터널링 자리를 쓰는 이유는 그 아래 분기 주석에 있다.
+    /// </para>
     /// </summary>
     private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -753,6 +757,25 @@ public partial class FolderPanelView : UserControl
 
         switch (e.ChangedButton)
         {
+            case MouseButton.Left:
+                // 여백 다운으로는 WPF 가 포커스를 주지 않아 패널 층 InputBindings 일곱
+                // (Alt+Home·Alt+↑·Alt+←·Alt+→·F2·Ctrl+C·Ctrl+V)이 전부 죽었다 — 그 일곱은
+                // 이 패널 안에 포커스가 있어야 발동한다. 항목을 직접 클릭할 때만 WPF 가
+                // 컨테이너에 포커스를 줘서 그 경로만 멀쩡했다.
+                //
+                // 가드가 없으면 항목·검색창의 포커스를 빼앗는다. 이 핸들러는 터널링
+                // (Preview) 단계라 ListViewItem·SearchBox 보다 먼저 오므로, 이미 패널 안에
+                // 들어와 있는 포커스도 매 다운마다 패널 자신으로 끌어올려 버린다.
+                //
+                // e.Handled 는 세우지 않는다 — 이후 경로(항목 선택·고무줄·버튼·TextBox·
+                // ContextMenu)가 그대로 돌아야 한다. 그것이 이 한 줄의 유일한 안전장치다.
+                if (!IsKeyboardFocusWithin)
+                {
+                    Focus();
+                }
+
+                break;
+
             case MouseButton.XButton1:
                 // 스택이 비었으면 CanExecute 가 false 라 무동작이다.
                 if (panel.GoBackCommand.CanExecute(null))
