@@ -2,6 +2,7 @@ using System.Windows;
 using FolderDeck.App.Services;
 using FolderDeck.App.ViewModels;
 using FolderDeck.App.Views;
+using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Models;
 using FolderDeck.Core.Operations;
 
@@ -86,6 +87,49 @@ public sealed class ClipboardCopyPasteTests
         Assert.Null(f.Clipboard.Data);
         Assert.Contains("복사할 것이 없다", f.ViewModel.Message);
         Assert.True(f.ViewModel.MessageIsWarning);
+
+        // 거절이라 스스로 사라진다 (D28) — CreateTile 이 거절 통로를 걸어 주었다는 뜻이기도 하다.
+        Assert.True(f.ViewModel.MessageIsTransient);
+    }
+
+    /// <summary>패널만 떼어 만든다 — 통로 둘을 갈라 받는 자리라 상위가 없어도 된다.</summary>
+    private static FolderPanelViewModel Bare(
+        Action<string>? reportError, Action<string>? reportRejection) =>
+        new(
+            new FolderEnumerator(),
+            new FakeShellLauncher(),
+            new FakeClipboardService(),
+            isRotating: false,
+            reportError,
+            reportRejection);
+
+    /// <summary>거절은 <b>거절 통로</b>로 간다 — 실패 통로는 조용하다 (D28).</summary>
+    [Fact]
+    public void CopyingNothingGoesDownTheRejectionChannelNotTheFailureOne()
+    {
+        var failures = new List<string>();
+        var rejections = new List<string>();
+        var panel = Bare(failures.Add, rejections.Add);
+
+        panel.CopySelectionToClipboard();
+
+        Assert.Contains("복사할 것이 없다", Assert.Single(rejections));
+        Assert.Empty(failures);
+    }
+
+    /// <summary>
+    /// 거절 통로를 안 받았으면 <b>실패 통로로 떨어진다</b> — 새 생성 자리가 인자를 잊어도
+    /// 거절이 조용히 사라지지 않는다 (D28).
+    /// </summary>
+    [Fact]
+    public void WithoutARejectionChannelTheRejectionFallsBackToTheFailureOne()
+    {
+        var failures = new List<string>();
+        var panel = Bare(failures.Add, reportRejection: null);
+
+        panel.CopySelectionToClipboard();
+
+        Assert.Contains("복사할 것이 없다", Assert.Single(failures));
     }
 
     /// <summary>클립보드 쓰기 실패는 조용히 삼키지 않는다 (§5) — 서비스가 준 메시지를 그대로.</summary>

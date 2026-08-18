@@ -280,6 +280,30 @@ public sealed class StoreBehaviorTests
         Assert.True(flushReturned.IsSet);
     }
 
+    /// <summary>
+    /// <c>Dispose()</c> 는 멱등하다 (D29). <c>_disposed</c> 를 맨 앞에서 세우므로 두 번째는
+    /// 바로 돌아간다 — 처분한 <c>_idle</c> 을 다시 기다리지 않는다.
+    /// </summary>
+    [Fact]
+    public void DisposingTwiceDoesNotThrow()
+    {
+        var scheduler = new DebouncedSaveScheduler(TimeSpan.FromMilliseconds(20));
+        scheduler.Schedule("key", () => null);
+
+        scheduler.Dispose();
+        scheduler.Dispose();
+    }
+
+    /// <summary><c>Dispose()</c> 뒤의 예약은 조용히 사라지지 않는다 (D29).</summary>
+    [Fact]
+    public void SchedulingAfterDisposeThrows()
+    {
+        var scheduler = new DebouncedSaveScheduler(TimeSpan.FromMilliseconds(20));
+        scheduler.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => scheduler.Schedule("key", () => null));
+    }
+
     [Fact]
     public void DebouncedSettingsSaveWorks()
     {

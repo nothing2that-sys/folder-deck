@@ -2461,7 +2461,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     private TileViewModel CreateTile(TileSpec spec)
     {
         var panel = new FolderPanelViewModel(
-            _enumerator, _shell, _clipboard, spec.Kind == TileKind.Rotating, ReportError)
+            _enumerator, _shell, _clipboard, spec.Kind == TileKind.Rotating, ReportError, ReportRejection)
         {
             // 우클릭 "휴지통으로 삭제"가 닿을 통로. 패널은 엔진을 모른다 (§4.4).
             TrashSelectionCommand = TrashSelectionCommand,
@@ -2723,4 +2723,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     }
 
     private void ReportError(string text) => Warn(text);
+
+    /// <summary>거절 — 화면이 이미 답을 보여주므로 스스로 사라진다 (§5.1).</summary>
+    private void ReportRejection(string text) => Warn(text, transient: true);
 }

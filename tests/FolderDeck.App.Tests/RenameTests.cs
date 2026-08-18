@@ -341,6 +341,9 @@ public sealed class RenameTests
         Assert.Empty(f.Prompt.NamesAsked);
         Assert.True(f.ViewModel.MessageIsWarning);
         Assert.Contains("하나만", f.ViewModel.Message);
+
+        // 거절이라 스스로 사라진다 (D28) — 위의 "이름을 바꾸지 못했다"(실패)와 갈리는 자리다.
+        Assert.True(f.ViewModel.MessageIsTransient);
     }
 
     // ── 문턱 ─────────────────────────────────────────────────────────────────

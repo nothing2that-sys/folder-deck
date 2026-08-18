@@ -39,6 +39,12 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     private readonly IClipboardService _clipboard;
     private readonly Action<string>? _reportError;
 
+    /// <summary>
+    /// 거절을 알리는 통로. 실패(<see cref="_reportError"/>)와 결이 달라 따로 받는다 —
+    /// 거절은 스스로 사라지고 실패는 남는다 (§5.1).
+    /// </summary>
+    private readonly Action<string>? _reportRejection;
+
     /// <summary>진행 중인 열거. 폴더를 빠르게 갈아타면 이전 것을 취소한다.</summary>
     private CancellationTokenSource? _cts;
 
@@ -58,12 +64,14 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         IShellLauncher shell,
         IClipboardService clipboard,
         bool isRotating,
-        Action<string>? reportError = null)
+        Action<string>? reportError = null,
+        Action<string>? reportRejection = null)
     {
         _enumerator = enumerator;
         _shell = shell;
         _clipboard = clipboard;
         _reportError = reportError;
+        _reportRejection = reportRejection;
         this.isRotating = isRotating;
     }
 
@@ -766,7 +774,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
         if (SelectedItems.Count > 1)
         {
-            _reportError?.Invoke($"이름 바꾸기는 하나만 고른 뒤에 — 지금 {SelectedItems.Count}개다");
+            Reject($"이름 바꾸기는 하나만 고른 뒤에 — 지금 {SelectedItems.Count}개다");
         }
 
         return Task.CompletedTask;
@@ -791,7 +799,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         if (SelectedItems.Count == 0)
         {
             // 클립보드를 건드리지 않는다 — 빈 것으로 덮으면 아까 복사해 둔 것이 사라진다.
-            _reportError?.Invoke("복사할 것이 없다 — 먼저 고른 뒤에 Ctrl+C");
+            Reject("복사할 것이 없다 — 먼저 고른 뒤에 Ctrl+C");
             return;
         }
 
@@ -1075,6 +1083,15 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         GoBackCommand.NotifyCanExecuteChanged();
         GoForwardCommand.NotifyCanExecuteChanged();
     }
+
+    /// <summary>
+    /// 거절(사용자가 잘못 눌렀고 화면이 이미 답을 보여준다)을 알린다. 스스로 사라지는 경고다 —
+    /// 실패(<see cref="_reportError"/>)와 달리 남지 않는다.
+    /// </summary>
+    /// <remarks>
+    /// 통로를 안 받았으면 실패 통로로 떨어진다 — 거절이 조용히 사라지는 것보다 낫다.
+    /// </remarks>
+    private void Reject(string text) => (_reportRejection ?? _reportError)?.Invoke(text);
 
     private void Report(string? error, string prefix)
     {

@@ -118,12 +118,26 @@ public sealed class DebouncedSaveScheduler : IDisposable
 
     public void Dispose()
     {
+        // _disposed 를 맨 앞에서 세운다 (D29). 먼저 세워야 그 뒤 Schedule() 이 막혀
+        // 새 claim 이 생기지 않고, 새 claim 이 없어야 아래 Flush() 가 기존 claim 을 다
+        // 기다린 뒤의 _idle.Dispose() 에 늦은 Set() 이 오지 않는다. Flush() 뒤에 세우면
+        // 그 틈으로 들어온 Schedule() 의 타이머가 발화해 처분된 _idle 을 건드린다.
+        // 덤으로 두 번 불러도 두 번째는 여기서 바로 돌아간다.
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+        }
+
         Flush();
 
         List<Pending> leftovers;
         lock (_gate)
         {
-            _disposed = true;
             leftovers = [.. _pending.Values];
             _pending.Clear();
         }
