@@ -168,29 +168,34 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     public bool HasMessage => !string.IsNullOrEmpty(Message);
 
     /// <summary>정보성 안내 — 보조색, 잠깐 떴다 사라진다.</summary>
-    private void Inform(string text)
-    {
-        Message = text;
-        MessageIsWarning = false;
-        MessageIsTransient = true;
-    }
+    private void Inform(string text) => SetMessage(text, warning: false, transient: true);
 
     /// <summary>
     /// 경고 — 빨강. 기본은 남는다(실패·부분 실패). 화면이 이미 답을 보여주는 거절
     /// (겹쳐서 못 놓음 등)은 <paramref name="transient"/> 로 스스로 지우게 한다.
     /// </summary>
-    private void Warn(string text, bool transient = false)
-    {
-        Message = text;
-        MessageIsWarning = true;
-        MessageIsTransient = transient;
-    }
+    private void Warn(string text, bool transient = false) =>
+        SetMessage(text, warning: true, transient);
 
-    private void ClearMessage()
+    private void ClearMessage() => SetMessage(null, warning: false, transient: false);
+
+    /// <summary>
+    /// 상태 바 메시지를 세우는 <b>유일한</b> 자리. <b>순서가 계약이다</b> —
+    /// 플래그를 먼저 세우고 <see cref="Message"/> 를 마지막에 쓴다.
+    /// <para>
+    /// <see cref="Message"/> 의 대입이 <c>PropertyChanged</c> 를 내고, 뷰(<c>MainWindow</c>)가
+    /// 그 알림을 받은 그 자리에서 <see cref="MessageIsTransient"/> 를 읽어 수명 타이머를
+    /// 세울지 정한다. 그러므로 <see cref="Message"/> 를 먼저 쓰면 뷰가 <b>직전 메시지의
+    /// 플래그</b>를 읽는다 — 첫 transient 는 기본값 <c>false</c> 를 읽혀 타이머가 서지 않고
+    /// 영영 사라지지 않는다(D30).
+    /// </para>
+    /// <para>새 메시지 종류를 더할 때도 이 메서드를 거쳐라. 순서를 밖에 흩으면 같은 결함이 돌아온다.</para>
+    /// </summary>
+    private void SetMessage(string? text, bool warning, bool transient)
     {
-        Message = null;
-        MessageIsWarning = false;
-        MessageIsTransient = false;
+        MessageIsWarning = warning;
+        MessageIsTransient = transient;
+        Message = text;
     }
 
     /// <summary>타이머가 부른다. 남아야 할 메시지는 건드리지 않는다.</summary>
@@ -1919,7 +1924,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     [RelayCommand(AllowConcurrentExecutions = true)]
     public async Task RefreshAllAsync()
     {
-        ClearMessage();
+        // 창 활성화도 이 경로로 들어오므로 등급을 가려야 한다(§5.1) — 무조건 지우면
+        // 남아야 할 실패가 alt-tab 한 번에 사라진다(D31).
+        ExpireTransientMessage();
 
         await Task.WhenAll(Panels.Where(p => p.Entry is not null).Select(p => p.RefreshAsync()))
             .ConfigureAwait(true);

@@ -379,4 +379,119 @@ public sealed class MainViewModelTests
         Assert.False(f.ViewModel.MessageIsTransient);
         Assert.Contains("모든 파이프 인스턴스가 사용 중입니다.", f.ViewModel.Message);
     }
+
+    // ── 플래그는 Message 알림보다 먼저 선다 (D30) ───────────────────
+    //
+    // 뷰(MainWindow)는 PropertyChanged("Message") 를 받은 그 자리에서 MessageIsTransient 를
+    // 읽어 수명 타이머를 세울지 정한다. 그래서 "끝난 뒤의 값"이 맞는 것만으로는 부족하고,
+    // 알림이 나는 그 순간에 이미 새 메시지의 값이어야 한다. 아래 셋은 뷰가 하는 판단을
+    // 같은 시점에서 재현한다 — 타이머를 기다리지 않으므로 시간과 무관하다.
+
+    /// <summary>
+    /// 뷰가 하는 일을 그대로 흉내낸다 — <c>PropertyChanged("Message")</c> 가 나는 그 순간의
+    /// 두 플래그를 붙잡아 둔다. 끝난 뒤의 값이 아니라 <b>그 시점</b>의 값이라야 뜻이 있다.
+    /// </summary>
+    private static List<(bool Warning, bool Transient)> FlagsWhenMessageFires(MainViewModel vm)
+    {
+        var seen = new List<(bool Warning, bool Transient)>();
+
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.Message))
+            {
+                seen.Add((vm.MessageIsWarning, vm.MessageIsTransient));
+            }
+        };
+
+        return seen;
+    }
+
+    /// <summary>
+    /// 앱을 켜고 나서 첫 transient — 알림 시점에 이미 <c>true</c> 여야 한다. 예전에는
+    /// <c>Message</c> 를 먼저 써서 뷰가 기본값 <c>false</c> 를 읽었고, 타이머가 서지 않아
+    /// 거절이 영영 남았다 (D30).
+    /// </summary>
+    [Fact]
+    public void TheFirstTransientIsAlreadyTransientWhenTheMessageNotificationFires()
+    {
+        using var f = new MainWindowFixture();
+
+        var seen = FlagsWhenMessageFires(f.ViewModel);
+
+        f.ViewModel.ReportTileOverlap();
+
+        var (warning, transient) = Assert.Single(seen);
+        Assert.True(transient);
+        Assert.True(warning);
+    }
+
+    /// <summary>낡은 <c>true</c> 가 다음 메시지로 새지 않는다 — 남는 경고는 알림 시점에 <c>false</c>.</summary>
+    [Fact]
+    public void AStayingWarningDoesNotInheritTheTransientFlagOfTheOneBefore()
+    {
+        using var f = new MainWindowFixture();
+        f.ViewModel.ReportTileOverlap();
+
+        var seen = FlagsWhenMessageFires(f.ViewModel);
+
+        f.ViewModel.ReportDuplicateWindow();
+
+        var (warning, transient) = Assert.Single(seen);
+        Assert.False(transient);
+        Assert.True(warning);
+    }
+
+    /// <summary>지우는 것도 같은 계약이다 — 알림 시점에 두 플래그가 이미 내려가 있다.</summary>
+    [Fact]
+    public void ClearingLowersBothFlagsBeforeTheMessageNotification()
+    {
+        using var f = new MainWindowFixture();
+        f.ViewModel.ReportTileOverlap();
+
+        var seen = FlagsWhenMessageFires(f.ViewModel);
+
+        f.ViewModel.ExpireTransientMessage();
+
+        var (warning, transient) = Assert.Single(seen);
+        Assert.False(transient);
+        Assert.False(warning);
+    }
+    // ── 재조회는 등급을 가린다 (D31) ─────────────────────────────────────────
+    //
+    // RefreshAllAsync 는 F5 만 부르는 것이 아니다 — 창 활성화(MainWindow.OnActivated)도
+    // 같은 경로로 들어온다. 그래서 무조건 지우면 다른 프로그램에 갔다 돌아오기만 해도
+    // 남아야 할 실패 경고가 사라진다. §5.1 이 실패·경고를 「남는다」로 못박았으므로
+    // 지우는 것은 등급을 가려야 한다.
+
+    /// <summary>남아야 할 경고는 재조회를 넘긴다 — alt-tab 한 번에 실패를 잃지 않는다 (D31).</summary>
+    [Fact]
+    public async Task RefreshKeepsAWarningThatIsMeantToStay()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        f.ViewModel.ReportDuplicateWindow();
+        Assert.False(f.ViewModel.MessageIsTransient);
+
+        await f.ViewModel.RefreshAllAsync();
+
+        Assert.True(f.ViewModel.HasMessage);
+        Assert.True(f.ViewModel.MessageIsWarning);
+        Assert.Contains("두 창", f.ViewModel.Message);
+    }
+
+    /// <summary>사라질 것은 재조회가 그대로 걷어 간다 — 등급을 가릴 뿐 안 지우는 것이 아니다.</summary>
+    [Fact]
+    public async Task RefreshStillClearsATransientRefusal()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        f.ViewModel.ReportTileOverlap();
+        Assert.True(f.ViewModel.MessageIsTransient);
+
+        await f.ViewModel.RefreshAllAsync();
+
+        Assert.False(f.ViewModel.HasMessage);
+    }
 }
