@@ -1084,6 +1084,16 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 셸 컨텍스트 메뉴가 실패했다고 상태 바에 올리는 통로 (§4.6 · D26).
+    /// </summary>
+    /// <remarks>
+    /// 우클릭 메뉴는 뷰가 직접 띄운다(COM STA 라 UI 스레드에서만 되는 일이다) — 그래서 실패도
+    /// 뷰가 먼저 잡는다. 여기는 <b>그 글자를 상태 바로 넘기는 한 칸</b>일 뿐이고 판정은 하지
+    /// 않는다. 확장이 던진 말을 우리 문구로 덮지 않는다.
+    /// </remarks>
+    public void ReportShellMenuFailure(string message) => _reportError?.Invoke(message);
+
     private async Task LoadAsync(string path)
     {
         if (Entry is null)

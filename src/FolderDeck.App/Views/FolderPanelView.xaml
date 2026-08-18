@@ -46,86 +46,10 @@
     </UserControl.InputBindings>
 
     <UserControl.Resources>
-        <!-- 항목 우클릭 메뉴 — 이번엔 두 항목만. 나머지(이름 바꾸기·삭제·복사 등)는 뒤 Phase.
-             ContextMenu 의 DataContext 는 항목이고, 커맨드는 컨테이너의 Tag(=패널 VM)로 잡는다. -->
-        <!-- x:Shared="False" — 조회마다 새 인스턴스를 준다. 하나를 여러 컨테이너가 나눠 쓰면
-             메뉴의 DataContext 가 마지막으로 가져간 항목을 가리킨다. 대상은 PlacementTarget
-             에서 직접 읽어 그 위험을 아예 없앤다. -->
-        <ContextMenu x:Key="ItemMenu" x:Shared="False">
-            <!-- 더블클릭과 같은 동작이다 (§4.6) — 폴더면 타일 안에서 하위 진입, 파일이면 셸 기본
-                 연결로 실행. 탐색기 별창은 아래 "탐색기에서 열기"의 일이고 겹치지 않는다.
-                 커맨드를 복제하지 않고 더블클릭이 부르는 OpenCommand 를 그대로 부른다.
-                 단축키 라벨은 달지 않는다 — 이 항목에 물린 키가 없고, 라벨만 달면 눌러도
-                 안 되는 표시가 생긴다(아래 "Del" 은 창이 실제로 키를 물고 있는 경우다). -->
-            <MenuItem Header="열기"
-                      Command="{Binding PlacementTarget.Tag.OpenCommand,
-                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <MenuItem Header="경로 복사"
-                      Command="{Binding PlacementTarget.Tag.CopyItemPathCommand,
-                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <MenuItem Header="탐색기에서 열기"
-                      Command="{Binding PlacementTarget.Tag.RevealItemCommand,
-                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <!-- 폴더 항목만 워크스페이스에 등록할 수 있다 (§4.11-1). 파일에는 뜻이 없으므로
-                 항목이 폴더가 아니면 감춘다 — 눌러도 아무 일 없는 항목을 남기지 않는다.
-                 재귀 검색 결과의 하위 폴더에도 그대로 뜬다(§4.10) — 막지 않는다. -->
-            <MenuItem Header="새 폴더로 등록"
-                      Visibility="{Binding PlacementTarget.DataContext.IsDirectory,
-                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
-                                           Converter={StaticResource BoolToVisibility}}"
-                      Command="{Binding PlacementTarget.Tag.RegisterFolderCommand,
-                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <!-- 등록과 나란한 자리다 (§4.6 305행 · D8) — 새 등록을 만드는 대신 이 타일의 앵커
-                 path 를 갈아치운다. 폴더에만 뜻이 있으므로 등록과 같은 조건으로 감춘다. -->
-            <MenuItem Header="이 폴더를 앵커로 지정"
-                      Visibility="{Binding PlacementTarget.DataContext.IsDirectory,
-                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
-                                           Converter={StaticResource BoolToVisibility}}"
-                      Command="{Binding PlacementTarget.Tag.SetAnchorToItemCommand,
-                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <!-- 셸 속성 대화상자. 읽기라 폴더·파일 어느 쪽에도 뜻이 있어 감추지 않는다. -->
-            <MenuItem Header="속성"
-                      Command="{Binding PlacementTarget.Tag.ShowItemPropertiesCommand,
-                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <!-- 이름 바꾸기 (§4.6 309행 · A군 ②) — 폴더도 파일도 대상이라 등록·앵커 지정과 달리
-                 감추지 않는다. 여기가 "쓰기"의 첫 항목이라 읽기 여섯 아래, 삭제 위에 둔다.
-                 라벨의 F2 는 실물이다 — UserControl.InputBindings 가 그 키를 물고 있다(D16).
-                 F2 는 고른 항목을, 이 메뉴는 우클릭한 항목을 대상으로 삼고 경로는 하나다. -->
-            <MenuItem Header="이름 바꾸기"
-                      InputGestureText="F2"
-                      Command="{Binding PlacementTarget.Tag.RenameItemCommand,
-                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext,
-                                                 RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <!-- 복사 (§4.6 310행 · A군 ③ C-1) — 「쓰기」 자리의 둘째다. 위의 「경로 복사」(2번)와
-                 다섯 칸 떨어뜨려 둔다: 둘이 나란히 서면 무엇이 글자고 무엇이 파일인지 헷갈린다.
-                 Ctrl+C 는 실물이다 — UserControl.InputBindings 가 그 키를 물고 있다.
-                 대상은 우클릭한 항목이 아니라 <b>고른 것 전부</b>라 CommandParameter 가 없다
-                 (「휴지통으로 삭제」와 같다 — 우클릭이 그 자리에서 선택을 잡아 준다). -->
-            <MenuItem Header="복사"
-                      InputGestureText="Ctrl+C"
-                      Command="{Binding PlacementTarget.Tag.CopySelectionToClipboardCommand,
-                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <Separator />
-            <!-- 고른 것 전부를 휴지통으로 (§4.4). 우클릭은 그 자리에서 선택을 잡아 주므로
-                 (OnItemPreviewRightButtonDown) 무엇이 지워질지가 목록에 그대로 보인다. -->
-            <MenuItem Header="휴지통으로 삭제"
-                      InputGestureText="Del"
-                      Command="{Binding PlacementTarget.Tag.TrashSelectionCommand,
-                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-        </ContextMenu>
+        <!-- 항목 우클릭 메뉴는 여기 없다 — 셸이 준 HMENU 를 코드 비하인드가 그대로 띄운다
+             (§4.6 · D26 상시 병합). WPF ContextMenu 로는 셸 확장 항목을 그릴 수 없다:
+             확장은 IContextMenu2/3 메시지를 받아야 자기 서브메뉴를 채운다.
+             자리는 Views/FolderPanelView.xaml.cs 의 OnItemPreviewRightButtonUp 이다. -->
 
         <Style x:Key="FileItemContainer" TargetType="ListViewItem">
             <!-- 행의 히트 영역을 내용 폭까지로 좁힌다 (§4.2-2 · Stage 3C).
@@ -150,11 +74,9 @@
             <EventSetter Event="PreviewMouseLeftButtonDown" Handler="OnItemPreviewMouseDown" />
             <EventSetter Event="PreviewMouseLeftButtonUp" Handler="OnItemPreviewMouseUp" />
             <EventSetter Event="PreviewMouseMove" Handler="OnItemPreviewMouseMove" />
+            <!-- 우클릭 두 단계 (§4.6 · D26): 누를 때 선택을 잡고, 놓을 때 셸 메뉴를 띄운다. -->
             <EventSetter Event="PreviewMouseRightButtonDown" Handler="OnItemPreviewRightButtonDown" />
-            <Setter Property="ContextMenu" Value="{StaticResource ItemMenu}" />
-            <!-- 우클릭 메뉴가 패널 커맨드에 닿게 하는 통로. -->
-            <Setter Property="Tag"
-                    Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+            <EventSetter Event="PreviewMouseRightButtonUp" Handler="OnItemPreviewRightButtonUp" />
 
             <Style.Triggers>
                 <!-- 고른 항목은 포커스가 있든 없든 같은 색이다 (§4.2-1 · Stage 3C).
@@ -428,8 +350,8 @@
                          뜬다 — 순환시키면 8단계가 된다. WPF ContextMenu 는 우클릭에만 저절로
                          열리므로 Click 이 IsOpen 을 세운다(코드 비하인드는 그 일만 한다).
                          값을 정하는 것은 전부 SetSortCommand 안이다.
-                         ContextMenu 는 시각 트리 밖이라 DataContext 가 안 내려온다 — 위의
-                         ItemMenu 와 같이 컨테이너 Tag 로 패널 VM 을 잡는다.
+                         ContextMenu 는 시각 트리 밖이라 DataContext 가 안 내려온다 — 아래
+                         Tag 로 패널 VM 을 잡는다(이 앱에 남은 유일한 WPF ContextMenu 다).
                          재귀 검색 중에는 잠근다: 그 결과는 찾은 순서대로 흘러들고 정렬하지
                          않으므로(§4.10) 기준을 바꿔도 순서가 안 바뀐다 — 문구만 바뀌면 거짓말이 된다.
                          잠긴 모양은 LinkButton 이 이미 갖고 있다(IsEnabled=False → Opacity 0.35). -->
