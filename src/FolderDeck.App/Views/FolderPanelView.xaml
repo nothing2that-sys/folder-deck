@@ -99,6 +99,7 @@
                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext,
                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
             <!-- 이름 바꾸기 (§4.6 309행 · A군 ②) — 폴더도 파일도 대상이라 등록·앵커 지정과 달리
                  감추지 않는다. 여기가 "쓰기"의 첫 항목이라 읽기 여섯 아래, 삭제 위에 둔다.
                  라벨의 F2 는 실물이다 — UserControl.InputBindings 가 그 키를 물고 있다(D16).

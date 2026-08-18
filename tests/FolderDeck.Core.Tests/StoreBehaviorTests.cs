@@ -236,6 +236,50 @@ public sealed class StoreBehaviorTests
         Assert.Equal("예약 당시", temp.Store.LoadWorkspace(workspace.Id).ValueOrThrow().Title);
     }
 
+    /// <summary>
+    /// <c>Flush()</c> 는 <b>남이 시작한</b> 쓰기도 기다린다 (D27). 타이머가 이미 발화해
+    /// <c>Write</c> 안에 들어와 있으면 사전은 비어 있지만 그 쓰기는 진행 중이다 — 그때
+    /// 그냥 돌아가면 호출자가 원자적 교체 전 파일을 읽는다.
+    /// </summary>
+    /// <remarks>
+    /// 타이밍을 재우지 않고 신호로 짠다. 실패해도 굳지 않게 판정은 모아 두고, 기다리는 쪽을
+    /// 먼저 풀어 준 뒤에 단정한다 — 안 풀면 <c>Dispose</c> 의 <c>Flush</c> 까지 같이 굳는다.
+    /// </remarks>
+    [Fact]
+    public async Task FlushWaitsForAWriteThatIsAlreadyRunning()
+    {
+        using var entered = new ManualResetEventSlim(false);
+        using var mayLeave = new ManualResetEventSlim(false);
+        using var flushReturned = new ManualResetEventSlim(false);
+        using var scheduler = new DebouncedSaveScheduler(TimeSpan.FromMilliseconds(20));
+
+        scheduler.Schedule("key", () =>
+        {
+            entered.Set();
+            mayLeave.Wait();
+            return null;
+        });
+
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5)), "타이머가 발화하지 않았다.");
+
+        // 사전은 이미 비었고 쓰기는 진행 중이다 — 그것도 "밀린 것"으로 세야 한다.
+        Assert.True(scheduler.HasPending, "쓰는 중인 것을 HasPending 이 세지 않는다.");
+
+        var flush = Task.Run(() =>
+        {
+            scheduler.Flush();
+            flushReturned.Set();
+        });
+
+        var returnedEarly = flushReturned.Wait(TimeSpan.FromMilliseconds(300));
+
+        mayLeave.Set();
+        await flush;
+
+        Assert.False(returnedEarly, "Flush() 가 진행 중인 쓰기를 기다리지 않고 반환했다.");
+        Assert.True(flushReturned.IsSet);
+    }
+
     [Fact]
     public void DebouncedSettingsSaveWorks()
     {
