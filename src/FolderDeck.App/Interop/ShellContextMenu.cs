@@ -117,6 +117,7 @@ internal sealed class ShellContextMenu : IDisposable
     {
         int hr;
 
+        // 2026-08-19 손 확인 1회 실측: 마스크를 푼 것이 이 호출이다(before=0x00080003 — I·Z·O 해제). 1회뿐이니 다른 스코프를 빼지 마라.
         using (FpuGuard.Enter("QueryContextMenu"))
         {
             hr = _menu!.QueryContextMenu(hMenu, firstIndex, IdCmdFirst, IdCmdLast, ShellNative.CMF_NORMAL);

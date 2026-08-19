@@ -1,3 +1,4 @@
+using FolderDeck.App;
 using FolderDeck.App.Interop;
 
 namespace FolderDeck.App.Tests;
@@ -108,6 +109,50 @@ public class FpuGuardTests
             FpuGuard.MaskEm);
 
         Assert.Equal(0x0008001Fu, FpuGuard.MaskEm);
+    }
+
+    /// <summary>
+    /// 계측이 <b>실사용 로그 파일</b>에 쓰지 않는가 (F-1b 일감 2).
+    /// </summary>
+    /// <remarks>
+    /// 마스크를 풀어 <see cref="FpuGuard"/> 가 실제로 기록을 뱉게 만든 뒤, 파일이 생기지도
+    /// 커지지도 않았음을 본다. <b>파일을 지우지 않는다</b> — 손 확인 증거가 거기 있다.
+    /// </remarks>
+    [Fact]
+    public void 계측은_실사용_로그_파일에_쓰지_않는다()
+    {
+        string path = ShellMenuProbe.LogPath;
+        bool existedBefore = File.Exists(path);
+        long sizeBefore = existedBefore ? new FileInfo(path).Length : -1;
+
+        int capturedBefore = ProbeSink.Captured.Count;
+        uint saved = Require(FpuGuard.Current());
+
+        try
+        {
+            // 되돌림이 일어나야 Log 가 불린다 — 안 풀렸으면 계측이 조용하다.
+            Assert.True(FpuGuard.SetExceptionMask(Unmasked));
+
+            using (FpuGuard.Enter("시험:로그싱크"))
+            {
+            }
+        }
+        finally
+        {
+            FpuGuard.SetExceptionMask(saved);
+        }
+
+        // 심이 실제로 받았는가 — 안 받았으면 위 시험이 아무것도 안 재고 통과한 셈이다.
+        Assert.True(ProbeSink.Captured.Count > capturedBefore);
+        Assert.Contains(ProbeSink.Captured, l => l.Contains("시험:로그싱크"));
+
+        // 그런데 파일은 그대로다.
+        Assert.Equal(existedBefore, File.Exists(path));
+
+        if (existedBefore)
+        {
+            Assert.Equal(sizeBefore, new FileInfo(path).Length);
+        }
     }
 
     /// <summary>제어워드를 못 읽으면 시험이 성립하지 않는다 — 그 자리에서 세운다.</summary>

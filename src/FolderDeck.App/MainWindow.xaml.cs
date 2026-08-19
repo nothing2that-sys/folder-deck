@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using FolderDeck.App.Interop;
 using FolderDeck.App.ViewModels;
 using FolderDeck.App.Views;
 using FolderDeck.Core.Layout;
@@ -270,6 +271,7 @@ public partial class MainWindow : Window
 
         var data = new DataObject();
         data.SetData(TileGridView.FolderRowFormat, row);
+        using var fpu = FpuGuard.Enter("DoDragDrop(폴더 행)");
         DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Copy);
     }
 
