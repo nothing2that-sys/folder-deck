@@ -5,7 +5,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Threading;
+using FolderDeck.App.Interop;
 using FolderDeck.App.ViewModels;
 using FolderDeck.Core.Operations;
 
@@ -649,6 +651,103 @@ public partial class FolderPanelView : UserControl
 
         list.SelectedItems.Clear();
         container.IsSelected = true;
+    }
+
+    /// <summary>
+    /// 항목 우클릭 — <b>셸 메뉴를 그대로 띄운다</b> (§4.6 · D26 상시 병합).
+    /// </summary>
+    /// <remarks>
+    /// <b>버튼을 놓을 때 띄운다.</b> 선택을 잡는 것은 누를 때
+    /// (<see cref="OnItemPreviewRightButtonDown"/>)이고 — 순서가 뒤집히면 무엇이 대상인지가
+    /// 메뉴가 뜬 뒤에 정해진다 — 메뉴는 그 선택이 목록에 보인 뒤에 뜬다.
+    /// <para>
+    /// 대상은 <b>고른 것 전부</b>다. 누를 때 선택을 잡아 주므로 선택 밖 항목을 우클릭했으면
+    /// 이 시점에 이미 그것 하나만 골라져 있다.
+    /// </para>
+    /// <para>
+    /// 메뉴가 떠 있는 동안 UI 가 멈추는 것은 감수한 대가다(조사 실측 70~90ms · 프로세스
+    /// 첫 호출 532.7ms). COM STA 라 백그라운드로 뺄 수 없다.
+    /// </para>
+    /// </remarks>
+    private void OnItemPreviewRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not ListViewItem { DataContext: FileItemViewModel item }
+            || ViewModel is not { } panel
+            || PresentationSource.FromVisual(this) is not HwndSource source)
+        {
+            return;
+        }
+
+        // 우클릭한 항목이 선택 안에 없으면(=선택 잡기가 안 걸린 경로) 그것 하나만 대상이다.
+        var chosen = panel.SelectedItems.Count > 0 && panel.SelectedItems.Contains(item)
+            ? panel.SelectedItems
+            : [item];
+
+        var paths = chosen.Select(i => i.FullPath).ToList();
+        if (paths.Count == 0)
+        {
+            return;
+        }
+
+        e.Handled = true;
+
+        var screen = PointToScreen(e.GetPosition(this));
+
+        try
+        {
+            var outcome = ShellItemMenu.Show(source, paths, item.IsDirectory, (int)screen.X, (int)screen.Y);
+
+            if (outcome.ShellHr != 0)
+            {
+                panel.ReportShellMenuFailure($"메뉴 항목을 실행하지 못했다 — 0x{outcome.ShellHr:X8}");
+            }
+
+            RunAppCommand(panel, item, outcome.App);
+        }
+        catch (Exception ex)
+        {
+            // 확장이 던진 것을 우리 문구로 덮지 않는다 — 그대로 상태 바에 올린다(§5).
+            panel.ReportShellMenuFailure($"우클릭 메뉴를 띄우지 못했다 — {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 셸 메뉴에 끼워 둔 앱 항목 다섯을 <b>기존 커맨드</b>로 잇는다 (§4.6 · D27).
+    /// </summary>
+    /// <remarks>
+    /// 새 커맨드를 만들지 않는다 — 옛 <c>ItemMenu</c> 가 바인딩으로 부르던 그 커맨드 그대로다.
+    /// 대상도 그때와 같다: 넷은 우클릭한 항목 하나, 「휴지통으로 삭제」만 <b>고른 것 전부</b>라
+    /// 인자가 없다.
+    /// <para>
+    /// <c>TrashSelectionCommand</c>·<c>RegisterFolderCommand</c> 는 패널이 아니라 타일이 걸어
+    /// 주는 통로라 <c>null</c> 일 수 있다 — 안 걸렸으면 조용히 지난다(옛 메뉴도 그랬다).
+    /// </para>
+    /// </remarks>
+    private static void RunAppCommand(
+        FolderPanelViewModel panel, FileItemViewModel item, ShellMenuAppCommand app)
+    {
+        switch (app)
+        {
+            case ShellMenuAppCommand.RevealInExplorer:
+                panel.RevealItemCommand.Execute(item);
+                break;
+
+            case ShellMenuAppCommand.Rename:
+                panel.RenameItemCommand.Execute(item);
+                break;
+
+            case ShellMenuAppCommand.SetAnchor:
+                panel.SetAnchorToItemCommand.Execute(item);
+                break;
+
+            case ShellMenuAppCommand.RegisterFolder:
+                panel.RegisterFolderCommand?.Execute(item);
+                break;
+
+            case ShellMenuAppCommand.Trash:
+                panel.TrashSelectionCommand?.Execute(null);
+                break;
+        }
     }
 
     // ── 끌어온 것 받기 (§4.9 Phase 5 Stage 1 · §4.2-2 Phase 5 Stage 3) ────────
