@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using FolderDeck.App.Interop;
 
 namespace FolderDeck.App.Services;
 
@@ -85,6 +86,11 @@ public sealed class ShellLauncher : IShellLauncher
     /// </remarks>
     public string? ShowProperties(string path)
     {
+        // SEE_MASK_INVOKEIDLIST 는 제3자 property sheet handler 를 in-proc 로 올린다 —
+        // 셸 메뉴와 같은 위험이다(F-1). 스코프가 메서드 전체라 아래 GetLastWin32Error 읽기가
+        // 이 안에 들어간다 — _controlfp_s 가 last error 를 덮으므로 순서가 이래야 한다.
+        using var fpu = FpuGuard.Enter("ShellExecuteExW(properties)");
+
         var info = new ShellExecuteInfo
         {
             cbSize = Marshal.SizeOf<ShellExecuteInfo>(),

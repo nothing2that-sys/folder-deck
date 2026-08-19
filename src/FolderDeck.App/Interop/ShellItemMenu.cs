@@ -204,6 +204,10 @@ internal static class ShellItemMenu
             Interlocked.Increment(ref MenuDepth);
             try
             {
+                // ── F-1. 스코프가 아래 GetLastPInvokeError 읽기를 **안에** 둔다 —
+                // Dispose 의 _controlfp_s 가 last error 를 덮으므로 순서가 이래야 한다.
+                using var fpu = FpuGuard.Enter("TrackPopupMenuEx");
+
                 chosen = ShellNative.TrackPopupMenuEx(
                     hMenu,
                     ShellNative.TPM_RETURNCMD | ShellNative.TPM_LEFTALIGN | ShellNative.TPM_RIGHTBUTTON,

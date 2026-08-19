@@ -80,8 +80,16 @@ internal sealed class ShellContextMenu : IDisposable
             }
 
             var menuIid = ShellNative.IID_IContextMenu;
-            int uiHr = parent.GetUIObjectOf(
-                ownerHwnd, (uint)children.Length, children, ref menuIid, IntPtr.Zero, out var ppv);
+            IntPtr ppv;
+            int uiHr;
+
+            // 확장 DLL 이 여기서 우리 주소 공간에 올라온다 — FPU 마스크가 풀리는 첫 자리다(F-1).
+            using (FpuGuard.Enter("GetUIObjectOf"))
+            {
+                uiHr = parent.GetUIObjectOf(
+                    ownerHwnd, (uint)children.Length, children, ref menuIid, IntPtr.Zero, out ppv);
+            }
+
             if (uiHr != 0 || ppv == IntPtr.Zero)
             {
                 throw new COMException("GetUIObjectOf(IID_IContextMenu) 실패", uiHr);
@@ -107,7 +115,13 @@ internal sealed class ShellContextMenu : IDisposable
     /// </summary>
     public IntPtr BuildMenu(IntPtr hMenu, uint firstIndex)
     {
-        int hr = _menu!.QueryContextMenu(hMenu, firstIndex, IdCmdFirst, IdCmdLast, ShellNative.CMF_NORMAL);
+        int hr;
+
+        using (FpuGuard.Enter("QueryContextMenu"))
+        {
+            hr = _menu!.QueryContextMenu(hMenu, firstIndex, IdCmdFirst, IdCmdLast, ShellNative.CMF_NORMAL);
+        }
+
         if (hr < 0)
         {
             throw new COMException("QueryContextMenu 실패", hr);
@@ -126,6 +140,9 @@ internal sealed class ShellContextMenu : IDisposable
         {
             return false;
         }
+
+        // 메뉴 메시지가 아닌 것은 위에서 이미 걸러졌다 — 여기부터가 확장 코드다(F-1).
+        using var fpu = FpuGuard.Enter("HandleMenuMsg");
 
         if (_menu3 is not null)
         {
@@ -152,8 +169,14 @@ internal sealed class ShellContextMenu : IDisposable
         }
 
         var buffer = new byte[520];
-        int hr = _menu!.GetCommandString(
-            (UIntPtr)(menuId - IdCmdFirst), ShellNative.GCS_VERBW, IntPtr.Zero, buffer, 260);
+        int hr;
+
+        using (FpuGuard.Enter("GetCommandString"))
+        {
+            hr = _menu!.GetCommandString(
+                (UIntPtr)(menuId - IdCmdFirst), ShellNative.GCS_VERBW, IntPtr.Zero, buffer, 260);
+        }
+
         if (hr != 0)
         {
             return null;
@@ -181,6 +204,9 @@ internal sealed class ShellContextMenu : IDisposable
             nShow = 1, // SW_SHOWNORMAL
         };
 
+        // 고른 verb 를 확장이 실행하는 자리다. using var 라 반환값을 만든 뒤 되돌린다(F-1).
+        using var fpu = FpuGuard.Enter("InvokeCommand");
+
         return _menu!.InvokeCommand(ref info);
     }
 
@@ -205,7 +231,16 @@ internal sealed class ShellContextMenu : IDisposable
         _menu3 = null;
         _menu2 = null;
         _menu = null;
-        if (_menuUnknown != IntPtr.Zero) { Marshal.Release(_menuUnknown); _menuUnknown = IntPtr.Zero; }
+        // 확장 객체의 Release 다 — 그 안에서 확장의 정리 코드가 돈다(F-1).
+        if (_menuUnknown != IntPtr.Zero)
+        {
+            using (FpuGuard.Enter("Release(확장)"))
+            {
+                Marshal.Release(_menuUnknown);
+            }
+
+            _menuUnknown = IntPtr.Zero;
+        }
         _parent = null;
 
         foreach (var pidl in _absolutePidls)

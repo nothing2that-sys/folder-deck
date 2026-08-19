@@ -72,6 +72,9 @@ public sealed class ClipboardService : IClipboardService
     {
         try
         {
+            // OLE 클립보드는 포맷을 셸·타 앱 코드로 렌더링할 수 있다 — 셸 메뉴와 같은 위험이다(F-1).
+            using var fpu = FolderDeck.App.Interop.FpuGuard.Enter("Clipboard.SetDataObject");
+
             // copy: true — 앱이 닫혀도 클립보드에 남는다(OLE 플러시). 탐색기의 복사와 같은 결이다.
             System.Windows.Clipboard.SetDataObject(FileDataObject(items), copy: true);
             return null;
@@ -93,6 +96,9 @@ public sealed class ClipboardService : IClipboardService
     {
         try
         {
+            // 남이 올린 데이터 개체를 받는다 — 렌더링이 그쪽 코드다(F-1).
+            using var fpu = FolderDeck.App.Interop.FpuGuard.Enter("Clipboard.GetDataObject");
+
             return System.Windows.Clipboard.GetDataObject();
         }
         catch (Exception)

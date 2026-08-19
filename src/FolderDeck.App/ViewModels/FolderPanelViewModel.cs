@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FolderDeck.App.Interop;
 using FolderDeck.App.Services;
 using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Models;
@@ -873,6 +874,10 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
     partial void OnDisplayItemsChanged(IReadOnlyList<FileItemViewModel> value)
     {
+        // ── F-1 그물. 여기가 레이아웃 직전이다 — 이 줄이 되돌림을 찍으면 §2 열거에서
+        // 자리를 빠뜨린 것이다. 스코프의 진입 쪽이 곧 「첫 줄 검사」다.
+        using var fpu = FpuGuard.Enter("그물:DisplayItems");
+
         long seq = Interlocked.Increment(ref _displaySwapSeq);
 
         ShellMenuProbe.Log("Display", $"#{seq} 교체 count={value.Count} {ShellMenuProbe.MenuContext()}");

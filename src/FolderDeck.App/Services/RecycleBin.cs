@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using FolderDeck.App.Interop;
 using FolderDeck.Core.Operations;
 
 namespace FolderDeck.App.Services;
@@ -37,6 +38,9 @@ public sealed class RecycleBin : IRecycleBin
     public string? Send(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        // SHFileOperation 은 셸 복사 훅(ICopyHook)을 in-proc 로 돌린다 — 같은 위험이다(F-1).
+        using var fpu = FpuGuard.Enter("SHFileOperationW");
 
         var operation = new ShFileOpStruct
         {

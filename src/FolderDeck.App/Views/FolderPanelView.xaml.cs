@@ -267,7 +267,16 @@ public partial class FolderPanelView : UserControl
 
         // 기본 이동 · Ctrl 복사는 놓는 쪽이 정한다 — 여기서는 둘 다 허용만 한다.
         var landedInside = ObserveDropsInThisWindow();
-        var effect = DragDrop.DoDragDrop(this, data, ShellExport.AllowedEffects);
+
+        DragDropEffects effect;
+
+        // OLE 드래그는 중첩 루프를 돌며 놓는 쪽의 코드를 우리 스레드에서 돌린다 —
+        // 셸 메뉴와 같은 위험이다(F-1).
+        using (FpuGuard.Enter("DoDragDrop"))
+        {
+            effect = DragDrop.DoDragDrop(this, data, ShellExport.AllowedEffects);
+        }
+
         landedInside.Dispose();
 
         // 밖으로 나갔을 때만 알린다. 앱 안에 놓였으면 그쪽 경로가 자기 결과를 적는다(§4.2-2) —
