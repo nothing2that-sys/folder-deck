@@ -37,8 +37,8 @@
              대상이 "이 패널에서 고른 항목"이라 창에 물리면 어느 패널의 선택인지 가릴 수 없다.
              「경로 복사」(글자)와 다른 커맨드다 — 이쪽은 셸 파일 포맷을 싣는다. -->
         <KeyBinding Modifiers="Ctrl" Key="C" Command="{Binding CopySelectionToClipboardCommand}" />
-        <!-- 붙여넣기 Ctrl+V (§4.6 322~323행 · A군 ③ C-2). 여기 두는 이유는 Ctrl+C 와 다르다:
-             대상이 "고른 항목"이 아니라 "이 패널이 지금 보고 있는 폴더"라서다(§4.9 429행).
+        <!-- 붙여넣기 Ctrl+V (§4.6 330~336행 · A군 ③ C-2). 여기 두는 이유는 Ctrl+C 와 다르다:
+             대상이 "고른 항목"이 아니라 "이 패널이 지금 보고 있는 폴더"라서다(§4.9 442행).
              창에 물리면 어느 타일에 붙여넣을지 가릴 수 없는 것은 마찬가지다. -->
         <KeyBinding Modifiers="Ctrl" Key="V" Command="{Binding PasteIntoCurrentCommand}" />
         <!-- Ctrl+F 는 펴는 것으로 끝이 아니라 포커스까지 줘야 하고, 갓 보이게 된 TextBox 는
@@ -352,7 +352,7 @@
                         <ItemsControl.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="경로 복사" Command="{Binding CopyCurrentPathCommand}" />
-                                <!-- 붙여넣기 (§4.6 322~323행 · A군 ③ C-2) — 목적지가 "지금 보고
+                                <!-- 붙여넣기 (§4.6 330~336행 · A군 ③ C-2) — 목적지가 "지금 보고
                                      있는 폴더"라 항목 메뉴가 아니라 이 자리다. 항목을 우클릭한
                                      것이 아니므로 무엇에 붙여넣을지 헷갈리지 않는다.
                                      빈 곳(배경) 메뉴를 새로 만들지 않는다 — 고무줄 선택이

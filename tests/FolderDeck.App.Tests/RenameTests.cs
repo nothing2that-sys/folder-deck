@@ -442,7 +442,7 @@ public sealed class RenameAnchorTests
         Assert.Equal(5, f.Workspace.Folders.Count);
     }
 
-    /// <summary>저장되는 <c>folders[]</c> 와 화면 쪽 목록이 같이 간다 (§4.11 537~539행).</summary>
+    /// <summary>저장되는 <c>folders[]</c> 와 화면 쪽 목록이 같이 간다 (§4.11 550~552행).</summary>
     [Fact]
     public async Task BothLayersMove()
     {

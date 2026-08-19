@@ -306,7 +306,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public Func<FileItemViewModel, string?>? RenameOnDisk { get; set; }
 
     /// <summary>
-    /// 붙여넣기가 닿을 통로 (§4.6 310행 · 322~323행 · A군 ③ C-2). 인자는 <b>붙여넣을 목적지</b>다.
+    /// 붙여넣기가 닿을 통로 (§4.6 310행 · 330~336행 · A군 ③ C-2). 인자는 <b>붙여넣을 목적지</b>다.
     /// </summary>
     /// <remarks>
     /// 클립보드를 읽는 것부터 판정·실행·결과 보고까지 전부 이 통로 너머
@@ -815,7 +815,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// 「붙여넣기」).
     /// </summary>
     /// <remarks>
-    /// 목적지는 앵커가 아니라 <see cref="ShellDropDestination"/> 이다(§4.9 429행 — 셸 드롭이 쓰는
+    /// 목적지는 앵커가 아니라 <see cref="ShellDropDestination"/> 이다(§4.9 442행 — 셸 드롭이 쓰는
     /// 바로 그 값이다). <c>null</c> 이어도 그대로 넘긴다 — 거절 문구는 통로 너머가 적는다.
     /// </remarks>
     [RelayCommand(AllowConcurrentExecutions = true)]

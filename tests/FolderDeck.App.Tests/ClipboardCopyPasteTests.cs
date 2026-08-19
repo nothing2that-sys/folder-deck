@@ -9,7 +9,7 @@ using FolderDeck.Core.Operations;
 namespace FolderDeck.App.Tests;
 
 /// <summary>
-/// 복사(<c>Ctrl+C</c>)와 붙여넣기(<c>Ctrl+V</c>) — §4.6 310행 · 322~323행 (A군 ③).
+/// 복사(<c>Ctrl+C</c>)와 붙여넣기(<c>Ctrl+V</c>) — §4.6 310행 · 330~336행 (A군 ③).
 /// </summary>
 /// <remarks>
 /// 여기서 시험하는 것은 <b>무엇이 실리고, 무엇을 거절하고, 무엇이 실제로 복사되는가</b>다.
@@ -196,7 +196,7 @@ public sealed class ClipboardCopyPasteTests
         Assert.False(items.Single(i => i.Path.EndsWith("Main.cs")).IsDirectory);
     }
 
-    /// <summary>목적지는 앵커가 아니라 타일이 <b>지금 보고 있는 폴더</b>다 (§4.9 429행).</summary>
+    /// <summary>목적지는 앵커가 아니라 타일이 <b>지금 보고 있는 폴더</b>다 (§4.9 442행).</summary>
     [Fact]
     public async Task PasteCopiesTheClipboardFilesIntoTheFolderTheTileIsShowing()
     {

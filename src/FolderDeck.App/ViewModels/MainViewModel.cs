@@ -810,7 +810,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     /// </param>
     /// <param name="verbOverride">
     /// 사용자에게 보일 이름. 기본은 동작 그대로(복사/이동)이고, <b>같은 <c>Copy</c> 인데 이름이
-    /// 달라야 하는 자리</b>만 이걸 준다 — 붙여넣기가 그렇다(§4.6 322~323행). 확인창·진행 줄·
+    /// 달라야 하는 자리</b>만 이걸 준다 — 붙여넣기가 그렇다(§4.6 330~336행). 확인창·진행 줄·
     /// 결과 요약이 전부 이 낱말을 쓴다.
     /// </param>
     private async Task StartOperationAsync(
@@ -1528,7 +1528,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             sameFolderSkipped: items.Count - accepted.Count).ConfigureAwait(true);
     }
 
-    // ── 붙여넣기 (§4.6 310행 · 322~323행 · A군 ③ C-2) ────────────────────────
+    // ── 붙여넣기 (§4.6 310행 · 330~336행 · A군 ③ C-2) ────────────────────────
     //
     // 클립보드에서 온 것도 <b>셸에서 온 것</b>이다 — 포맷이 같고(CF_HDROP), 목적지가 같고
     // (타일의 currentPath), 받을지 말지의 판정도 같다. 그래서 여기서 하는 일은 "꺼내서 ·
@@ -2304,7 +2304,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     /// 맨 뒤에 둔다: 이름을 판정하고, 겹치는지 보고, 그러고 나서 옮긴다.
     /// <para>
     /// <b>거절은 여기(UI 층)에서만이다</b> — 워크스페이스를 여는 시점의 검증에는 넣지 않는다
-    /// (§4.11-1 D3 · §4.11 534~536행과 같은 규칙).
+    /// (§4.11-1 D3 · §4.11 547~549행과 같은 규칙).
     /// </para>
     /// <para>
     /// <b>이름 규칙을 여기서 다시 적지 않는다</b>(D4) —
@@ -2494,7 +2494,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             // folders[] 를 아는 쪽이 여기다 — 패널은 둘 다 모른다.
             RenameOnDisk = RenameFromItem,
 
-            // 붙여넣기(Ctrl+V · breadcrumb 우클릭)가 닿을 통로 (§4.6 322~323행 · A군 ③ C-2).
+            // 붙여넣기(Ctrl+V · breadcrumb 우클릭)가 닿을 통로 (§4.6 330~336행 · A군 ③ C-2).
             // 클립보드를 읽고 판정하고 엔진에 얹는 일은 전부 이쪽이다 — 패널은 목적지만 안다.
             PasteInto = PasteIntoAsync,
         };
