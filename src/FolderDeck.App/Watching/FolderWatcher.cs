@@ -181,6 +181,10 @@ public sealed class FolderWatcher : IDisposable
             return;
         }
 
+        // ── E-4 임시 계측. 이 줄이 menuDepth=1 로 찍히면 감시 갱신이 중첩 메시지 루프
+        // 안에서 실행된 것이다 — 조사 §4 중점 3 이 바로 그 갈림이다.
+        ShellMenuProbe.Log("Watcher", $"Refresh {ShellMenuProbe.MenuContext()}");
+
         // 재귀 검색이 걸려 있으면 삼키고 잊는다. 갱신은 Items 를 갈아끼우고, 그 통지가
         // 검색을 처음부터 다시 돌린다 — 바깥에서 파일 하나만 바뀌어도 검색이 리셋된다.
         // 쌓아 두었다가 나중에 터뜨리지도 않는다.

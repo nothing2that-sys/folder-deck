@@ -133,6 +133,8 @@ public partial class App : Application
         MainWindow = window;
         window.Show();
 
+        WindowVanishProbe.Watch(window, "런처");
+
         // 런처는 "앞으로" 신호 말고 "누가 닫혔다"도 받는다 — 그때 배지를 다시 잰다.
         // 창 활성화만으로는 배지가 낡은 채 남는 경로가 둘 있다(ActivationSignal.ClosedPayload).
         StartListener(
@@ -239,6 +241,8 @@ public partial class App : Application
 
         MainWindow = window;
         window.Show();
+
+        WindowVanishProbe.Watch(window, "워크스페이스");
 
         // 자리를 바꿨으면 밝힌다 — "내가 둔 자리가 아닌데" 하는 순간을 없앤다 (§5.1 정보).
         switch (placement.Decision)

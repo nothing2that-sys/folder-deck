@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FolderDeck.App.Services;
@@ -858,6 +859,30 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     partial void OnIncludeSubfoldersChanged(bool value) => RestartSearch();
 
     partial void OnItemsChanged(IReadOnlyList<FileItemViewModel> value) => RestartSearch();
+
+    // ── E-4 임시 계측 ────────────────────────────────────────────────────────
+    //
+    // 「덱 업데이트가 셸 메뉴와 겹치는가」(조사 §4 중점 3)만 본다. 경로는 찍지 않는다 —
+    // 개인 경로가 로그에 남는다. DisplayItems 대입이 곧 두 ListView 의 ItemsSource 통째
+    // 교체다(둘 다 VirtualizationMode=Recycling).
+    //
+    // 「교체」 다음에 「레이아웃 통과」가 없으면 그 교체가 부른 레이아웃 패스에서 죽은 것이다 —
+    // FailFast 는 로그를 남기지 않으므로 이 짝의 결손이 유일한 증거다. 기록은 매번
+    // 파일을 닫으므로 프로세스가 즉사해도 앞줄은 남는다.
+    private static long _displaySwapSeq;
+
+    partial void OnDisplayItemsChanged(IReadOnlyList<FileItemViewModel> value)
+    {
+        long seq = Interlocked.Increment(ref _displaySwapSeq);
+
+        ShellMenuProbe.Log("Display", $"#{seq} 교체 count={value.Count} {ShellMenuProbe.MenuContext()}");
+
+        // Loaded 는 레이아웃이 끝난 뒤에 도는 우선순위다. 대입이 UI 스레드가 아니면 이 줄은
+        // 영영 안 찍히지만, 지금 대입 자리는 전부 UI 스레드다(await 뒤 ConfigureAwait(true)).
+        Dispatcher.CurrentDispatcher.BeginInvoke(
+            () => ShellMenuProbe.Log("Display", $"#{seq} 레이아웃 통과"),
+            DispatcherPriority.Loaded);
+    }
 
     /// <summary>검색어·체크·목록이 바뀔 때마다 이전 검색을 즉시 취소하고 다시 잡는다.</summary>
     private void RestartSearch()

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows.Interop;
 
 namespace FolderDeck.App.Interop;
@@ -21,6 +22,15 @@ internal readonly record struct ShellMenuOutcome(ShellMenuAppCommand App, int Sh
 /// </remarks>
 internal static class ShellItemMenu
 {
+    /// <summary>
+    /// <b>임시 계측이다(E-4).</b> <c>TrackPopupMenuEx</c> 의 중첩 메시지 루프가 도는 동안
+    /// 1 이상이다 — 그 사이에 무엇이 큐에서 실행됐는지 가리려고 둔다.
+    /// </summary>
+    internal static int MenuDepth;
+
+    /// <summary><b>임시 계측이다(E-4).</b> 메뉴가 마지막으로 닫힌 시각(UTC). 안 띄웠으면 null.</summary>
+    internal static DateTime? LastMenuClosedUtc;
+
     /// <summary>
     /// 메뉴를 띄운다. 고른 것이 셸 항목이면 <b>여기서 실행하고</b>, 앱 항목이면 무엇이
     /// 눌렸는지만 돌려준다 — 앱 커맨드는 뷰모델 것이라 뷰가 부른다.
@@ -187,16 +197,29 @@ internal static class ShellItemMenu
         source.AddHook(Hook);
         try
         {
-            uint chosen = ShellNative.TrackPopupMenuEx(
-                hMenu,
-                ShellNative.TPM_RETURNCMD | ShellNative.TPM_LEFTALIGN | ShellNative.TPM_RIGHTBUTTON,
-                x,
-                y,
-                source.Handle,
-                IntPtr.Zero);
+            uint chosen;
+            int lastError;
 
-            // ── E-3 임시 계측. 바로 다음 줄에서 읽는다 — 사이에 P/Invoke 하나라도 끼면 값이 덮인다.
-            int lastError = Marshal.GetLastPInvokeError();
+            // ── E-4 임시 계측. 중첩 메시지 루프가 도는 구간을 표시한다. finally 라 예외로도 샌다.
+            Interlocked.Increment(ref MenuDepth);
+            try
+            {
+                chosen = ShellNative.TrackPopupMenuEx(
+                    hMenu,
+                    ShellNative.TPM_RETURNCMD | ShellNative.TPM_LEFTALIGN | ShellNative.TPM_RIGHTBUTTON,
+                    x,
+                    y,
+                    source.Handle,
+                    IntPtr.Zero);
+
+                // ── E-3 임시 계측. 바로 다음 줄에서 읽는다 — 사이에 P/Invoke 하나라도 끼면 값이 덮인다.
+                lastError = Marshal.GetLastPInvokeError();
+            }
+            finally
+            {
+                Interlocked.Decrement(ref MenuDepth);
+                LastMenuClosedUtc = DateTime.UtcNow;
+            }
 
             ShellMenuProbe.Log(
                 "Track",
