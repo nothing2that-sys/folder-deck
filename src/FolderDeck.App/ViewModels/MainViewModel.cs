@@ -1567,7 +1567,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         }
 
         // 잘라내기는 이동으로 붙여넣는다 — 엔진은 드롭 경로가 쓰는 것과 같다(D35).
-        // 원본이 사라지는 조작이고 목적지가 「타일이 지금 보고 있는 폴더」라 확인창을 띄운다.
+        // 확인창은 띄우지 않는다 — 탐색기가 묻지 않고, 드롭 경로도 묻지 않는다.
         var move = WantsMove(data);
 
         // 셸 드롭이 쓰는 그 파서다 (§4.9) — 클립보드도 같은 포맷이라 변환 계층이 없다.
@@ -1594,7 +1594,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             move ? FileOperationKind.Move : FileOperationKind.Copy,
             accepted,
             [destinationPath],
-            confirmMove: move,
+            confirmMove: false,
             sameFolderSkipped: items.Count - accepted.Count,
             verbOverride: "붙여넣기").ConfigureAwait(true);
     }

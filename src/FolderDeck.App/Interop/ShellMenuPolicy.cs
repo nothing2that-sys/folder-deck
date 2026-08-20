@@ -37,16 +37,14 @@ public static class ShellMenuPolicy
     /// </summary>
     /// <remarks>
     /// <c>delete</c>(영구 삭제)를 남기면 「앱에 영구 삭제 경로 자체가 없다」(§4.4)가 깨진다.
-    /// <c>cut</c> 은 우리 붙여넣기가 <c>Preferred DropEffect</c> 가 정확히 2(Move)면 거절하므로
-    /// 노출하면 <b>반드시 거절되는 죽은 경로</b>가 메뉴에 보인다.
+    /// <c>cut</c> 은 붙여넣기가 이동을 처리하게 되면서 되살렸다(D33 개정 · D35).
     /// <para>
     /// <b>verb 로만 판정한다</b> — 지역화된 항목 이름(「삭제(&amp;D)」·「잘라내기(&amp;T)」)으로 찾으면
     /// 다른 언어에서 깨진다. <c>link</c>(바로 가기 만들기)는 충돌이 없어 남긴다.
     /// </para>
     /// </remarks>
     public static bool IsRemovedVerb(string? verb) =>
-        string.Equals(verb, "delete", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(verb, "cut", StringComparison.OrdinalIgnoreCase);
+        string.Equals(verb, "delete", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// 고른 것들이 <b>한 부모 아래</b>에 있는가 — 셸 메뉴를 띄울 수 있는 조건이다 (F-05).

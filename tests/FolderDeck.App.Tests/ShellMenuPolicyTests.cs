@@ -12,20 +12,21 @@ namespace FolderDeck.App.Tests;
 /// </remarks>
 public sealed class ShellMenuPolicyTests
 {
-    // ── D33: 지우는 verb 는 delete · cut 둘뿐 ────────────────────────────────
+    // ── D33 개정: 지우는 verb 는 delete 하나다 — cut 은 되살렸다(D35) ─────────
 
     [Theory]
     [InlineData("delete")]
-    [InlineData("cut")]
-    public void RemovesDeleteAndCut(string verb)
+    public void RemovesDeleteOnly(string verb)
     {
         Assert.True(ShellMenuPolicy.IsRemovedVerb(verb));
     }
 
     /// <summary>
     /// <c>link</c>(바로 가기 만들기)는 <b>남긴다</b> — 충돌이 없고 폴더 감시가 새 파일을 잡는다.
+    /// <c>cut</c> 도 남긴다 — 붙여넣기가 이동을 처리하므로 죽은 경로가 아니다(D33 개정 · D35).
     /// </summary>
     [Theory]
+    [InlineData("cut")]
     [InlineData("link")]
     [InlineData("open")]
     [InlineData("copy")]
@@ -46,16 +47,25 @@ public sealed class ShellMenuPolicyTests
     }
 
     /// <summary>
-    /// verb 의 대소문자는 셸이 정한다 — <c>Delete</c> 도 <c>CUT</c> 도 같은 것이다.
+    /// verb 의 대소문자는 셸이 정한다 — <c>Delete</c> 도 <c>DELETE</c> 도 같은 것이다.
     /// </summary>
     [Theory]
     [InlineData("Delete")]
     [InlineData("DELETE")]
-    [InlineData("Cut")]
-    [InlineData("CUT")]
     public void VerbMatchIsCaseInsensitive(string verb)
     {
         Assert.True(ShellMenuPolicy.IsRemovedVerb(verb));
+    }
+
+    /// <summary>
+    /// 되살린 <c>cut</c> 은 <b>어느 대소문자로 와도 남는다</b> (D33 개정 · D35).
+    /// </summary>
+    [Theory]
+    [InlineData("Cut")]
+    [InlineData("CUT")]
+    public void KeptCutMatchIsCaseInsensitive(string verb)
+    {
+        Assert.False(ShellMenuPolicy.IsRemovedVerb(verb));
     }
 
     // ── D34: 앱/셸 분기는 id 대역 하나로 갈린다 ──────────────────────────────
