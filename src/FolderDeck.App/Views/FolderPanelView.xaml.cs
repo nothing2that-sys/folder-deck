@@ -663,7 +663,7 @@ public partial class FolderPanelView : UserControl
     }
 
     /// <summary>
-    /// 항목 우클릭 — <b>셸 메뉴를 그대로 띄운다</b> (§4.6 · D26 상시 병합).
+    /// 항목 우클릭 — <b>셸 메뉴를 그대로 띄운다</b> (§4.6 · D32 상시 병합).
     /// </summary>
     /// <remarks>
     /// <b>버튼을 놓을 때 띄운다.</b> 선택을 잡는 것은 누를 때
@@ -721,7 +721,7 @@ public partial class FolderPanelView : UserControl
     }
 
     /// <summary>
-    /// 셸 메뉴에 끼워 둔 앱 항목 다섯을 <b>기존 커맨드</b>로 잇는다 (§4.6 · D27).
+    /// 셸 메뉴에 끼워 둔 앱 항목 다섯을 <b>기존 커맨드</b>로 잇는다 (§4.6 · D34).
     /// </summary>
     /// <remarks>
     /// 새 커맨드를 만들지 않는다 — 옛 <c>ItemMenu</c> 가 바인딩으로 부르던 그 커맨드 그대로다.

@@ -1,7 +1,7 @@
 namespace FolderDeck.App.Interop;
 
 /// <summary>
-/// 셸 메뉴에 끼우는 앱 고유 항목 (§4.6 · D27). <b>값이 곧 메뉴 id 다.</b>
+/// 셸 메뉴에 끼우는 앱 고유 항목 (§4.6 · D34). <b>값이 곧 메뉴 id 다.</b>
 /// </summary>
 /// <remarks>
 /// 전부 <see cref="ShellContextMenu.IdCmdFirst"/>(0x1000) <b>아래</b>다 — 셸에는 그 위 대역을
@@ -24,7 +24,7 @@ public enum ShellMenuAppCommand : uint
 public readonly record struct ShellMenuAppItem(ShellMenuAppCommand Command, string Text);
 
 /// <summary>
-/// 셸 메뉴를 우리 것으로 만드는 <b>판정만</b> 모은 자리 (§4.6 · D27 · D28).
+/// 셸 메뉴를 우리 것으로 만드는 <b>판정만</b> 모은 자리 (§4.6 · D33 · D34).
 /// </summary>
 /// <remarks>
 /// COM 도 HMENU 도 여기 없다 — 그래서 UI 스레드 없이 시험할 수 있다. 실제로 메뉴를 만들고
@@ -33,7 +33,7 @@ public readonly record struct ShellMenuAppItem(ShellMenuAppCommand Command, stri
 public static class ShellMenuPolicy
 {
     /// <summary>
-    /// 셸 메뉴에서 <b>지워야 하는</b> verb 인가 (D27 · D28).
+    /// 셸 메뉴에서 <b>지워야 하는</b> verb 인가 (D33).
     /// </summary>
     /// <remarks>
     /// <c>delete</c>(영구 삭제)를 남기면 「앱에 영구 삭제 경로 자체가 없다」(§4.4)가 깨진다.
@@ -61,7 +61,7 @@ public static class ShellMenuPolicy
             : ShellMenuAppCommand.None;
 
     /// <summary>
-    /// 셸 항목 <b>앞에</b> 넣을 앱 항목들 (§4.6 · D27 — 다섯).
+    /// 셸 항목 <b>앞에</b> 넣을 앱 항목들 (§4.6 · D34 — 다섯).
     /// </summary>
     /// <remarks>
     /// 겹치는 넷(열기 <c>open</c> · 복사 <c>copy</c> · 경로 복사 <c>copyaspath</c> ·

@@ -1132,7 +1132,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 셸 컨텍스트 메뉴가 실패했다고 상태 바에 올리는 통로 (§4.6 · D26).
+    /// 셸 컨텍스트 메뉴가 실패했다고 상태 바에 올리는 통로 (§4.6 · D32).
     /// </summary>
     /// <remarks>
     /// 우클릭 메뉴는 뷰가 직접 띄운다(COM STA 라 UI 스레드에서만 되는 일이다) — 그래서 실패도

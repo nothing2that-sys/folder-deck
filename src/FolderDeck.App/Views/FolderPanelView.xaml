@@ -47,7 +47,7 @@
 
     <UserControl.Resources>
         <!-- 항목 우클릭 메뉴는 여기 없다 — 셸이 준 HMENU 를 코드 비하인드가 그대로 띄운다
-             (§4.6 · D26 상시 병합). WPF ContextMenu 로는 셸 확장 항목을 그릴 수 없다:
+             (§4.6 · D32 상시 병합). WPF ContextMenu 로는 셸 확장 항목을 그릴 수 없다:
              확장은 IContextMenu2/3 메시지를 받아야 자기 서브메뉴를 채운다.
              자리는 Views/FolderPanelView.xaml.cs 의 OnItemPreviewRightButtonUp 이다. -->
 
@@ -74,7 +74,7 @@
             <EventSetter Event="PreviewMouseLeftButtonDown" Handler="OnItemPreviewMouseDown" />
             <EventSetter Event="PreviewMouseLeftButtonUp" Handler="OnItemPreviewMouseUp" />
             <EventSetter Event="PreviewMouseMove" Handler="OnItemPreviewMouseMove" />
-            <!-- 우클릭 두 단계 (§4.6 · D26): 누를 때 선택을 잡고, 놓을 때 셸 메뉴를 띄운다. -->
+            <!-- 우클릭 두 단계 (§4.6 · D32): 누를 때 선택을 잡고, 놓을 때 셸 메뉴를 띄운다. -->
             <EventSetter Event="PreviewMouseRightButtonDown" Handler="OnItemPreviewRightButtonDown" />
             <EventSetter Event="PreviewMouseRightButtonUp" Handler="OnItemPreviewRightButtonUp" />
 

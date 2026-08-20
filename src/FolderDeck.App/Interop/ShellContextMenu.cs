@@ -13,7 +13,7 @@ namespace FolderDeck.App.Interop;
 /// <para>
 /// <b>UI 스레드에서만 쓴다.</b> COM STA 라 <c>QueryContextMenu</c> 를 백그라운드로 뺄 수 없다 —
 /// 얻기와 채우기가 그대로 UI 멈춤이고(조사 실측 70~90ms · 프로세스 첫 호출 532.7ms) 그것은
-/// 감수한 대가다(D26). 확장 DLL 이 우리 주소 공간에 in-proc 로 로드되는 것도 마찬가지다.
+/// 감수한 대가다(D32). 확장 DLL 이 우리 주소 공간에 in-proc 로 로드되는 것도 마찬가지다.
 /// </para>
 /// <para>이 파일의 모양은 <c>spike/ShellMenuProbe/Interop/ShellContextMenu.cs</c> 에서 왔다.</para>
 /// </remarks>

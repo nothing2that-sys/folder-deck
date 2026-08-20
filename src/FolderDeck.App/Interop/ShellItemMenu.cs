@@ -11,7 +11,7 @@ namespace FolderDeck.App.Interop;
 internal readonly record struct ShellMenuOutcome(ShellMenuAppCommand App, int ShellHr);
 
 /// <summary>
-/// 항목 우클릭 한 판 — <b>셸 메뉴를 그대로 띄우고 고른 것을 실행한다</b> (§4.6 · D26).
+/// 항목 우클릭 한 판 — <b>셸 메뉴를 그대로 띄우고 고른 것을 실행한다</b> (§4.6 · D32).
 /// </summary>
 /// <remarks>
 /// 탐색기 동등성이 목표다. 앱이 자기 <c>ContextMenu</c> 를 그리는 대신 셸이 준 HMENU 를
@@ -117,7 +117,7 @@ internal static class ShellItemMenu
     }
 
     /// <summary>
-    /// 셸이 넣은 <c>delete</c>·<c>cut</c> 항목을 지운다 (D27 · D28).
+    /// 셸이 넣은 <c>delete</c>·<c>cut</c> 항목을 지운다 (D33).
     /// </summary>
     /// <remarks>
     /// <b>최상위만 본다.</b> 그 둘은 최상위에 오고(조사 실측), 서브메뉴까지 파고들면

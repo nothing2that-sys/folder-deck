@@ -3,7 +3,7 @@ using FolderDeck.App.Interop;
 namespace FolderDeck.App.Tests;
 
 /// <summary>
-/// 셸 컨텍스트 메뉴 상시 병합의 <b>판정</b> (§4.6 · D26~D28).
+/// 셸 컨텍스트 메뉴 상시 병합의 <b>판정</b> (§4.6 · D32~D34).
 /// </summary>
 /// <remarks>
 /// COM interop 자체는 여기서 못 덮는다 — <c>IContextMenu</c> 는 STA 를 요구하고 이 테스트
@@ -12,7 +12,7 @@ namespace FolderDeck.App.Tests;
 /// </remarks>
 public sealed class ShellMenuPolicyTests
 {
-    // ── D28: 지우는 verb 는 delete · cut 둘뿐 ────────────────────────────────
+    // ── D33: 지우는 verb 는 delete · cut 둘뿐 ────────────────────────────────
 
     [Theory]
     [InlineData("delete")]
@@ -58,7 +58,7 @@ public sealed class ShellMenuPolicyTests
         Assert.True(ShellMenuPolicy.IsRemovedVerb(verb));
     }
 
-    // ── D27: 앱/셸 분기는 id 대역 하나로 갈린다 ──────────────────────────────
+    // ── D34: 앱/셸 분기는 id 대역 하나로 갈린다 ──────────────────────────────
 
     /// <summary>앱 항목 다섯이 <b>각각 자기 커맨드로</b> 갈린다.</summary>
     [Theory]
@@ -102,7 +102,7 @@ public sealed class ShellMenuPolicyTests
         Assert.Equal(ShellMenuAppCommand.None, ShellMenuPolicy.ToAppCommand(id));
     }
 
-    // ── D27: 끼우는 항목은 다섯 (폴더) / 셋 (파일) ───────────────────────────
+    // ── D34: 끼우는 항목은 다섯 (폴더) / 셋 (파일) ───────────────────────────
 
     /// <summary>폴더에는 다섯 전부가 그 순서로 들어간다.</summary>
     [Fact]
