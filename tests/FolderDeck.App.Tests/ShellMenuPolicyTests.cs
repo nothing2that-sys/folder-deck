@@ -181,4 +181,40 @@ public sealed class ShellMenuPolicyTests
             Assert.Equal(item.Command, ShellMenuPolicy.ToAppCommand((uint)item.Command));
         }
     }
+
+    // ── F-05: 셸 메뉴는 한 부모 아래에서 고른 것에만 ─────────────────────────
+
+    /// <summary>
+    /// 같은 폴더의 둘은 함께 넘길 수 있다 — 대소문자만 다른 것도 같은 폴더다
+    /// (비교가 <c>OrdinalIgnoreCase</c> 라 Windows 와 어긋나지 않는다).
+    /// </summary>
+    [Fact]
+    public void TwoInTheSameFolderShareOneParent()
+    {
+        Assert.True(ShellMenuPolicy.SharesOneParent([@"C:\a\b\one.txt", @"C:\a\b\two.txt"]));
+        Assert.True(ShellMenuPolicy.SharesOneParent([@"C:\a\b\one.txt", @"C:\A\B\two.txt"]));
+    }
+
+    /// <summary>
+    /// 서로 다른 폴더가 섞이면 거절한다 — <c>GetUIObjectOf</c> 는 그 폴더의 자식 PIDL 만 받는다.
+    /// </summary>
+    [Fact]
+    public void TwoInDifferentFoldersDoNot()
+    {
+        Assert.False(ShellMenuPolicy.SharesOneParent([@"C:\a\b\one.txt", @"C:\a\c\two.txt"]));
+    }
+
+    /// <summary>하나면 언제나 한 부모다 — 우클릭 하나가 막히면 안 된다.</summary>
+    [Fact]
+    public void OneAlwaysSharesOneParent()
+    {
+        Assert.True(ShellMenuPolicy.SharesOneParent([@"C:\a\b\one.txt"]));
+    }
+
+    /// <summary>빈 목록은 <c>false</c> 다 — 띄울 대상이 없으면 띄우지 않는다.</summary>
+    [Fact]
+    public void EmptyListSharesNothing()
+    {
+        Assert.False(ShellMenuPolicy.SharesOneParent([]));
+    }
 }

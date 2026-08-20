@@ -700,6 +700,15 @@ public partial class FolderPanelView : UserControl
 
         e.Handled = true;
 
+        // 셸에 넘기기 전에 막는다 (F-05). GetUIObjectOf 는 한 폴더의 자식 PIDL 만 받으므로
+        // 재귀 검색 결과에서 여러 폴더를 섞어 고른 것은 띄우지 않고 거절한다 — 그대로 넘기면
+        // 셸이 거절하거나 같은 이름의 엉뚱한 파일에 메뉴가 걸린다.
+        if (!ShellMenuPolicy.SharesOneParent(paths))
+        {
+            panel.ReportShellMenuRejection("셸 메뉴는 한 폴더 안에서 고른 것에만 — 지금 여러 폴더가 섞였다");
+            return;
+        }
+
         var screen = PointToScreen(e.GetPosition(this));
 
         try

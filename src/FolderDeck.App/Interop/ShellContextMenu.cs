@@ -69,13 +69,12 @@ internal sealed class ShellContextMenu : IDisposable
             {
                 var iid2 = ShellNative.IID_IShellFolder;
                 int hr2 = ShellNative.SHBindToParent(
-                    result._absolutePidls[i], ref iid2, out var otherParent, out var child);
+                    result._absolutePidls[i], ref iid2, out _, out var child);
                 if (hr2 != 0)
                 {
                     throw new COMException("SHBindToParent(다중) 실패", hr2);
                 }
 
-                Marshal.ReleaseComObject(otherParent);
                 children[i] = child;
             }
 

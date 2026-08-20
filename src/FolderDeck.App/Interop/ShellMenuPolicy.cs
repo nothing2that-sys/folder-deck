@@ -49,6 +49,40 @@ public static class ShellMenuPolicy
         || string.Equals(verb, "cut", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// 고른 것들이 <b>한 부모 아래</b>에 있는가 — 셸 메뉴를 띄울 수 있는 조건이다 (F-05).
+    /// </summary>
+    /// <remarks>
+    /// <c>IShellFolder.GetUIObjectOf</c> 는 <b>그 폴더의 자식 PIDL</b> 만 받는다. 서로 다른 폴더의
+    /// 항목을 섞어 넘기면 계약 위반이고, 셸이 거절하거나 <b>같은 이름의 엉뚱한 파일</b>에 메뉴가
+    /// 걸린다. 비교는 COM 이 아니라 상위 디렉터리 문자열로 한다 — 여기 오는 것은 전부 파일
+    /// 시스템 경로다.
+    /// <para><b>빈 목록은 false</b> 다. 띄울 대상이 없으면 띄우지 않는다.</para>
+    /// </remarks>
+    public static bool SharesOneParent(IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0)
+        {
+            return false;
+        }
+
+        string? first = System.IO.Path.GetDirectoryName(paths[0]);
+        if (string.IsNullOrEmpty(first))
+        {
+            return false;
+        }
+
+        for (int i = 1; i < paths.Count; i++)
+        {
+            if (!string.Equals(System.IO.Path.GetDirectoryName(paths[i]), first, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// <c>TrackPopupMenuEx</c> 가 돌려준 id 가 앱 항목인가 — <b>앱/셸 분기는 이 함수 하나다.</b>
     /// </summary>
     /// <remarks>

@@ -1141,6 +1141,17 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// </remarks>
     public void ReportShellMenuFailure(string message) => _reportError?.Invoke(message);
 
+    /// <summary>
+    /// 셸 컨텍스트 메뉴를 <b>띄우지 않고 거절</b>했다고 알리는 통로 (F-05).
+    /// </summary>
+    /// <remarks>
+    /// 판정과 대상 목록은 뷰가 쥐고 있으므로(COM STA) 거절도 뷰가 먼저 잡는다 — 여기는
+    /// <see cref="ReportShellMenuFailure"/> 와 마찬가지로 <b>글자를 넘기는 한 칸</b>이고,
+    /// 통로 자체는 「이름 바꾸기는 하나만 고른 뒤에」와 <b>같은 <c>Reject</c></b> 다.
+    /// 실패 통로로 보내지 않는다 — 거절은 스스로 사라지고 실패는 남는다.
+    /// </remarks>
+    public void ReportShellMenuRejection(string message) => Reject(message);
+
     private async Task LoadAsync(string path)
     {
         if (Entry is null)
