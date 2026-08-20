@@ -214,6 +214,7 @@ public sealed class ClipboardCopyPasteTests
 
         // 붙여넣기는 <b>복사</b>다 — 원본이 남는다.
         Assert.True(File.Exists(Path.Combine(f.CodePath, "Main.cs")));
+        Assert.Empty(f.Prompt.Messages);   // 복사는 확인창을 지나지 않는다 (D35)
     }
 
     /// <summary>결과는 기존 보고 경로를 탄다 — 낱말만 「붙여넣기」다 (§5).</summary>
@@ -231,20 +232,26 @@ public sealed class ClipboardCopyPasteTests
     }
 
     /// <summary>
-    /// 잘라내기는 붙여넣지 않는다 (D20) — <b>원본을 지우지 않고</b> 목적지에도 아무것도 안 생긴다.
+    /// 잘라내기는 <b>이동</b>으로 붙여넣는다 (D35) — 목적지에 생기고 <b>원본이 사라진다</b>.
     /// </summary>
+    /// <remarks>
+    /// 원본이 사라지는 조작이라 확인창을 지난다(<c>confirmMove: true</c>) — 대상함의 이동과
+    /// 같은 통로이므로 <see cref="FakeUserPrompt.Answer"/> 로 「예」를 답한다.
+    /// </remarks>
     [Fact]
-    public async Task PasteRefusesWhenTheClipboardSaysCutAndLeavesTheOriginalAlone()
+    public async Task PasteMovesWhenTheClipboardSaysCutAndRemovesTheOriginal()
     {
         using var f = await ReadyAsync();
         f.Clipboard.Data = Cut(Path.Combine(f.CodePath, "Main.cs"));
+        f.Prompt.Answer = true;
 
         await Tile(f, f.OutputPath).PasteIntoCurrentCommand.ExecuteAsync(null);
 
-        Assert.False(File.Exists(Path.Combine(f.OutputPath, "Main.cs")));
-        Assert.True(File.Exists(Path.Combine(f.CodePath, "Main.cs")));
-        Assert.Contains("잘라내기", f.ViewModel.Message);
-        Assert.True(f.ViewModel.MessageIsWarning);
+        Assert.True(File.Exists(Path.Combine(f.OutputPath, "Main.cs")));
+        Assert.False(File.Exists(Path.Combine(f.CodePath, "Main.cs")));
+        Assert.Contains("붙여넣기 — 성공 1 · 건너뜀 0 · 실패 0", f.ViewModel.Message);
+        Assert.False(f.ViewModel.MessageIsWarning);
+        Assert.Contains("원본은 사라진다", Assert.Single(f.Prompt.Messages));
     }
 
     /// <summary>빈 클립보드는 거절이다 — 파일 수가 그대로다.</summary>

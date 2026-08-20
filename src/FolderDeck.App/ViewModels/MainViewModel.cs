@@ -1538,7 +1538,8 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     private const uint DropEffectMove = 2;
 
     /// <summary>
-    /// 클립보드의 것을 <paramref name="destinationPath"/> 로 <b>복사</b>한다.
+    /// 클립보드의 것을 <paramref name="destinationPath"/> 로 <b>붙여넣는다</b> — 클립보드가
+    /// 잘라내기를 실었으면 <b>이동</b>, 아니면 <b>복사</b>다.
     /// </summary>
     /// <remarks>
     /// 거절은 전부 <b>스스로 지워지는</b> 상태 바 경고다(§5.1) — 사용자가 키를 눌러 생긴 거절이고
@@ -1565,13 +1566,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             return;
         }
 
-        // 잘라내기를 조용히 복사로 처리하지 않는다 — 원본을 지우는 것은 이 앱이 하는 일이 아니다.
-        if (WantsMove(data))
-        {
-            Warn("잘라내기한 것은 아직 붙여넣지 못한다 — 원본은 그대로 두었다. 복사해서 붙여넣어라.",
-                transient: true);
-            return;
-        }
+        // 잘라내기는 이동으로 붙여넣는다 — 엔진은 드롭 경로가 쓰는 것과 같다(D35).
+        // 원본이 사라지는 조작이고 목적지가 「타일이 지금 보고 있는 폴더」라 확인창을 띄운다.
+        var move = WantsMove(data);
 
         // 셸 드롭이 쓰는 그 파서다 (§4.9) — 클립보드도 같은 포맷이라 변환 계층이 없다.
         var items = Views.DropRouter.ShellItems(data);
@@ -1594,10 +1591,10 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         var accepted = AcceptedForDrop(destinationPath, items);
 
         await StartOperationAsync(
-            FileOperationKind.Copy,
+            move ? FileOperationKind.Move : FileOperationKind.Copy,
             accepted,
             [destinationPath],
-            confirmMove: false,
+            confirmMove: move,
             sameFolderSkipped: items.Count - accepted.Count,
             verbOverride: "붙여넣기").ConfigureAwait(true);
     }
