@@ -205,7 +205,7 @@ internal static class ShellNative
     [DllImport("shell32.dll")]
     internal static extern void ILFree(IntPtr pidl);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     internal static extern IntPtr CreatePopupMenu();
 
     [DllImport("user32.dll")]
