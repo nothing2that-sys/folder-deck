@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 using FolderDeck.App.ViewModels;
 using FolderDeck.Core.Watching;
@@ -29,6 +30,9 @@ public sealed class FolderWatcher : IDisposable
     private FileSystemWatcher? _watcher;
     private bool _disposed;
 
+    /// <summary>되살리기 시도가 배경에서 도는 중. <b>UI 스레드에서만</b> 읽고 쓴다.</summary>
+    private bool _reviving;
+
     /// <param name="isOperationRunning">
     /// 앱 자신의 파일 조작이 도는 중인가 (<c>MainViewModel.IsOperationRunning</c>). 켜져 있는
     /// 동안 감시 발화를 삼킨다 — <b>새 상태가 아니라 이미 있는 그 플래그를 읽는다</b>.
@@ -51,6 +55,7 @@ public sealed class FolderWatcher : IDisposable
         _coalescer.Due += OnDue;
 
         _panel.PropertyChanged += OnPanelPropertyChanged;
+        _panel.LoadCompleted += OnPanelLoadCompleted;
         Retarget();
     }
 
@@ -70,6 +75,7 @@ public sealed class FolderWatcher : IDisposable
         _disposed = true;
 
         _panel.PropertyChanged -= OnPanelPropertyChanged;
+        _panel.LoadCompleted -= OnPanelLoadCompleted;
         _coalescer.Due -= OnDue;
         _coalescer.Dispose();
         Stop();
@@ -81,6 +87,129 @@ public sealed class FolderWatcher : IDisposable
         {
             Retarget();
         }
+    }
+
+    /// <summary>
+    /// 목록 읽기가 끝났다 — <b>갱신하려는 것이 아니다.</b> 저쪽이 그 경로를 방금 읽어 봤다는
+    /// 뜻이니, 여기서는 내가 죽어 있는지만 다시 본다.
+    /// </summary>
+    private void OnPanelLoadCompleted(object? sender, EventArgs e) => TryRevive();
+
+    /// <summary>
+    /// <b>봐야 하는데 안 보고 있으면</b> 배경에서 다시 등록한다 (§8 · D37).
+    /// </summary>
+    /// <remarks>
+    /// 「봐야 하는데 안 보고 있다」에 새 플래그를 두지 않는다 — <c>_watcher is null</c> 과
+    /// <c>CurrentPath is not null</c> 두 값으로 유도된다. 진실이 두 곳이 되면 하나만 켜지는
+    /// 사고가 난다.
+    /// <para>
+    /// 끊긴 네트워크 경로에서 <see cref="FileSystemWatcher"/> 를 <b>만드는 일</b>은 오래
+    /// 붙잡을 수 있다(워크스페이스 열기에서 약 30초 실측). 그 한 가지만 배경으로 밀어낸다 —
+    /// 폴더 열거가 이미 같은 이유로 나가 있다. <b><see cref="_watcher"/> 필드에 쓰는 것은 UI
+    /// 스레드뿐</b>이다.
+    /// </para>
+    /// <para>
+    /// 시도 하나가 오래 걸리므로 <b>「이미 시도 중이면 새로 시작하지 않는다」 하나로</b> 반복
+    /// 비용이 막힌다. 주기 점검도, 시간 기반 유예도 두지 않는다.
+    /// </para>
+    /// </remarks>
+    private void TryRevive()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        // 살아 있다. 평상시엔 여기서 끝난다 — 목록 읽기마다 불리지만 비용이 0인 자리다.
+        if (_watcher is not null)
+        {
+            return;
+        }
+
+        // 볼 것이 없다 — 빈 순환 칸이다.
+        if (_panel.CurrentPath is not { } path)
+        {
+            return;
+        }
+
+        if (_reviving)
+        {
+            return;
+        }
+
+        _reviving = true;
+        _ = Task.Run(() => Revive(path));
+    }
+
+    /// <summary>
+    /// 배경 스레드. <b>여기서 하는 일은 새 인스턴스를 만드는 것뿐</b>이고
+    /// <see cref="_watcher"/> 는 건드리지 않는다 — 마무리는 UI 스레드가 한다.
+    /// </summary>
+    private void Revive(string path)
+    {
+        FileSystemWatcher? made = null;
+
+        try
+        {
+            made = new FileSystemWatcher(path);
+            made.Created += OnChanged;
+            made.Changed += OnChanged;
+            made.Deleted += OnChanged;
+            made.Renamed += OnRenamed;
+            made.Error += OnError;
+            made.EnableRaisingEvents = true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            // 아직 닿지 못한다. 다음 목록 읽기가 또 물어볼 것이다.
+            if (made is not null)
+            {
+                Discard(made);
+                made = null;
+            }
+        }
+
+        if (_disposed || _dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished)
+        {
+            if (made is not null)
+            {
+                Discard(made);
+            }
+
+            return;
+        }
+
+        var revived = made;
+        _dispatcher.BeginInvoke(() => FinishRevive(path, revived));
+    }
+
+    /// <summary>
+    /// UI 스레드. 만드는 동안 판이 바뀌었으면 <b>만든 것을 버린다</b> — 뒤늦은 등록이
+    /// 지금 보고 있는 폴더를 덮어쓰지 않게.
+    /// </summary>
+    private void FinishRevive(string path, FileSystemWatcher? made)
+    {
+        _reviving = false;
+
+        if (made is null)
+        {
+            // 되살리기의 실패는 여기서만 센다 — 세는 자리가 둘이 되면 값의 주인이 없어진다.
+            SkippedCount++;
+            return;
+        }
+
+        // 버려야 하는 세 경우: 그 사이 Dispose 됐다 · Retarget 이 먼저 성공했다 · 이동했다.
+        if (_disposed
+            || _watcher is not null
+            || _panel.CurrentPath is not { } current
+            || !string.Equals(current, path, StringComparison.OrdinalIgnoreCase))
+        {
+            Discard(made);
+            return;
+        }
+
+        // 갱신을 부르지 않는다 — 이 신호를 낸 것이 방금 끝난 목록 읽기라 이미 최신이다.
+        _watcher = made;
     }
 
     /// <summary>
@@ -137,14 +266,20 @@ public sealed class FolderWatcher : IDisposable
             return;
         }
 
-        _watcher.Created -= OnChanged;
-        _watcher.Changed -= OnChanged;
-        _watcher.Deleted -= OnChanged;
-        _watcher.Renamed -= OnRenamed;
-        _watcher.Error -= OnError;
-
-        _watcher.Dispose();
+        Discard(_watcher);
         _watcher = null;
+    }
+
+    /// <summary>이 감시자를 버린다 — 뗀 뒤에 버리는 순서를 한 자리에 둔다.</summary>
+    private void Discard(FileSystemWatcher watcher)
+    {
+        watcher.Created -= OnChanged;
+        watcher.Changed -= OnChanged;
+        watcher.Deleted -= OnChanged;
+        watcher.Renamed -= OnRenamed;
+        watcher.Error -= OnError;
+
+        watcher.Dispose();
     }
 
     // ── 핸들러는 무조건 즉시 반환한다 ────────────────────────────────────────

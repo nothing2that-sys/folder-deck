@@ -274,6 +274,56 @@ public sealed class MainViewModelTests
         Assert.Equal(Path.Combine(f.WorkPath, "Recipe"), f.Rotating.CurrentPath);
     }
 
+    // ── 목록 읽기 완료 신호 (§8 · D37) ───────────────────────────────────────
+    //
+    // 감시자는 이 신호로 자기가 죽었는지 다시 본다. 신호가 안 나면 끊긴 네트워크에서
+    // 죽은 감시자를 되살릴 트리거가 없다 — 그래서 「난다」가 아니라 「정확히 한 번
+    // 난다」를 문다. 감시자 쪽은 Application·Dispatcher 를 요구해 시험에 안 매달린다.
+
+    /// <summary>읽기가 끝나면 신호가 정확히 한 번 난다.</summary>
+    [Fact]
+    public async Task LoadCompletedFiresOncePerRead()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+        await f.ViewModel.ShowFolderAsync(f.Row("문서"));
+
+        var panel = f.Rotating;
+        var fired = 0;
+        panel.LoadCompleted += (_, _) => fired++;
+
+        await panel.RefreshAsync();
+
+        Assert.Equal(1, fired);
+        Assert.False(panel.HasFailure);
+        Assert.Single(panel.Items);
+    }
+
+    /// <summary>
+    /// <b>실패해도</b> 난다. 여기서 안 내면 「접근 불가」 배너의 "다시 시도" 로는 죽은
+    /// 감시자를 되살릴 길이 없다 — 네트워크가 돌아온 뒤 제일 먼저 누르는 버튼이 그것이다.
+    /// </summary>
+    [Fact]
+    public async Task LoadCompletedFiresOnceEvenWhenTheReadFails()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+        await f.ViewModel.ShowFolderAsync(f.Row("설비 로그"));
+
+        var panel = f.Rotating;
+        Assert.True(panel.HasFailure);
+
+        var fired = 0;
+        panel.LoadCompleted += (_, _) => fired++;
+
+        // 배너의 "다시 시도" 가 부르는 그 커맨드.
+        await panel.RefreshAsync();
+
+        Assert.Equal(1, fired);
+        Assert.True(panel.HasFailure);
+        Assert.Equal(MainWindowFixture.UnreachablePath, panel.CurrentPath);
+    }
+
     // ── 파일 열기 (§4.5) ─────────────────────────────────────────────────────
 
     [Fact]

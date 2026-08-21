@@ -626,6 +626,16 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public Task RefreshAsync() =>
         CurrentPath is null ? Task.CompletedTask : LoadAsync(CurrentPath);
 
+    /// <summary>
+    /// 목록 읽기가 <b>끝날 때마다</b> 낸다 — 성공·실패 가리지 않는다.
+    /// 감시자가 이 신호로 자기가 죽었는지 다시 본다(§8 · D37). 이 뷰모델은 감시자를 모른다.
+    /// </summary>
+    /// <remarks>
+    /// <b>취소로 버려진 읽기는 내지 않는다</b> — 그 호출은 결과를 쓰지 않았으므로 「끝났다」가
+    /// 아니다. 접근 불가로 <b>실패</b>한 읽기는 낸다: 「다시 시도」가 지나는 길이 바로 그것이다.
+    /// </remarks>
+    public event EventHandler? LoadCompleted;
+
     /// <summary>더블클릭: 폴더면 안에서 진입(히스토리 쌓임), 파일이면 OS 기본 프로그램(§4.5).</summary>
     [RelayCommand(AllowConcurrentExecutions = true)]
     public Task OpenAsync(FileItemViewModel? item)
@@ -1212,6 +1222,10 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
         IsLoading = true;
 
+        // 이 호출이 목록을 실제로 갈아끼웠는가. 취소로 버려진 경로에서는 켜지지 않는다 —
+        // 아래 LoadCompleted 를 「완료마다 정확히 한 번」으로 묶는 것이 이 지역 변수다.
+        var completed = false;
+
         try
         {
             var listing = await _enumerator
@@ -1238,6 +1252,8 @@ public sealed partial class FolderPanelViewModel : ObservableObject
                 SelectedItems = [.. Items.Where(i => chosen.Contains(i.FullPath))];
                 SelectionRestored?.Invoke(this, EventArgs.Empty);
             }
+
+            completed = true;
         }
         catch (OperationCanceledException)
         {
@@ -1252,6 +1268,11 @@ public sealed partial class FolderPanelViewModel : ObservableObject
             }
 
             cts.Dispose();
+        }
+
+        if (completed)
+        {
+            LoadCompleted?.Invoke(this, EventArgs.Empty);
         }
     }
 
