@@ -65,6 +65,32 @@ public sealed class FolderCrudTests
         Assert.True(f.ViewModel.MessageIsWarning);
     }
 
+    [Fact]
+    public void FolderListAddRegistersSelectionAndSkipsDuplicates()
+    {
+        using var f = new MainWindowFixture();
+        var target = Path.Combine(f.CodePath, "Recipe");
+
+        f.ViewModel.AddFolders([target, f.DocsPath]);
+
+        Assert.Equal(6, f.Workspace.Folders.Count);
+        Assert.Equal(6, f.ViewModel.Rows.Count);
+        Assert.Equal(target, f.Workspace.Folders[^1].Path);
+        Assert.Contains("폴더 1개를 등록했다", f.ViewModel.Message!);
+        Assert.Contains("이미 등록 1개 제외", f.ViewModel.Message!);
+    }
+
+    [Fact]
+    public void EmptyFolderSelectionDoesNotChangeRegistration()
+    {
+        using var f = new MainWindowFixture();
+
+        f.ViewModel.AddFolders([]);
+
+        Assert.Equal(5, f.Workspace.Folders.Count);
+        Assert.Equal(5, f.ViewModel.Rows.Count);
+    }
+
     // ── 3. 제거 (§4.11-2) ────────────────────────────────────────────────────
 
     [Fact]

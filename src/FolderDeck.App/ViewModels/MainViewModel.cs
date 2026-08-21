@@ -2002,6 +2002,43 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
     // ── 폴더 등록·제거·수정 (§4.11) ──────────────────────────────────────────
 
+    /// <summary>선택한 폴더들을 등록한다. 타일 배치는 건드리지 않는다.</summary>
+    public void AddFolders(IEnumerable<string> selected)
+    {
+        var paths = selected.ToList();
+        if (paths.Count == 0)
+        {
+            return;
+        }
+
+        var added = 0;
+        var duplicates = 0;
+
+        foreach (var path in paths)
+        {
+            if (TryRegisterFolderPath(path))
+            {
+                added++;
+            }
+            else
+            {
+                duplicates++;
+            }
+        }
+
+        if (added == 0)
+        {
+            Warn("고른 폴더가 모두 이미 등록되어 있다.", transient: true);
+            return;
+        }
+
+        RefreshRotationChoices();
+        Save();
+
+        var duplicateText = duplicates > 0 ? $" · 이미 등록 {duplicates}개 제외" : string.Empty;
+        Inform($"폴더 {added}개를 등록했다{duplicateText}.");
+    }
+
     /// <summary>
     /// 타일 파일 목록에서 우클릭한 하위 폴더를 워크스페이스에 등록한다 (§4.11-1).
     /// </summary>
@@ -2023,15 +2060,27 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             return;
         }
 
-        var normalized = FolderPathRules.Normalize(item.FullPath);
+        if (!TryRegisterFolderPath(item.FullPath))
+        {
+            Warn($"이미 등록된 폴더다: {FolderPathRules.Normalize(item.FullPath)}", transient: true);
+            return;
+        }
+
+        RefreshRotationChoices();
+        Save();
+        Inform($"등록했다: {FolderPathRules.LeafName(item.FullPath)}");
+    }
+
+    private bool TryRegisterFolderPath(string path)
+    {
+        var normalized = FolderPathRules.Normalize(path);
 
         // D3 — 같은 path 는 거절한다. 다만 거절은 여기(UI 층)에서만이다. 파일을 여는 시점의
         // 검증(WorkspaceStore)에는 넣지 않는다 — 손으로 고치다 겹친 사용자가 워크스페이스
         // 자체를 못 열게 되는 쪽이 더 나쁘다.
         if (Workspace.Folders.Any(f => PathsEqual(f.Path, normalized)))
         {
-            Warn($"이미 등록된 폴더다: {normalized}", transient: true);
-            return;
+            return false;
         }
 
         var entry = new FolderEntry
@@ -2044,12 +2093,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
         Workspace.Folders.Add(entry);
         Rows.Add(new FolderRowViewModel(entry));
-
-        // 새 행에도 "순환 칸 지정" 선택지가 있어야 한다 — 배치는 안 바뀌었으므로 그것만 다시 센다.
-        RefreshRotationChoices();
-        Save();
-
-        Inform($"등록했다: {entry.DisplayName}");
+        return true;
     }
 
     /// <summary>

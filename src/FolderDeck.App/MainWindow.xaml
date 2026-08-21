@@ -145,29 +145,37 @@
 
                 <!-- 위: 폴더 리스트 = 유일한 컨트롤러 (§3.2) -->
                 <DockPanel Grid.Row="0">
-                    <!-- 헤더 클릭 = 접기/펴기. 자동으로 접히지 않는다. -->
-                    <Button DockPanel.Dock="Top" Style="{StaticResource FolderRowButton}"
-                            Command="{Binding ToggleFoldersCommand}"
-                            ToolTip="폴더 리스트 접기/펴기"
-                            AutomationProperties.Name="폴더 리스트 접기/펴기"
-                            Margin="6,6,6,2">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock FontSize="10" VerticalAlignment="Center" Margin="0,0,5,0"
-                                       Foreground="{StaticResource Brush.TextSecondary}">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Text" Value="▾" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding FoldersCollapsed}" Value="True">
-                                                <Setter Property="Text" Value="▸" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                            <TextBlock Text="폴더" FontWeight="SemiBold" />
-                        </StackPanel>
-                    </Button>
+                    <!-- Terminal Deck 목록 헤더와 같은 결: 제목/접기와 새 항목 추가를 한 줄에 둔다. -->
+                    <DockPanel DockPanel.Dock="Top" Margin="6,6,6,2">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource NavButton}"
+                                Content="＋"
+                                Click="OnAddFoldersClick"
+                                ToolTip="폴더를 선택해 이 작업 관리에 등록"
+                                AutomationProperties.Name="폴더 추가" />
+
+                        <!-- 헤더 클릭 = 접기/펴기. 자동으로 접히지 않는다. -->
+                        <Button Style="{StaticResource FolderRowButton}"
+                                Command="{Binding ToggleFoldersCommand}"
+                                ToolTip="폴더 리스트 접기/펴기"
+                                AutomationProperties.Name="폴더 리스트 접기/펴기">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontSize="10" VerticalAlignment="Center" Margin="0,0,5,0"
+                                           Foreground="{StaticResource Brush.TextSecondary}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="▾" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding FoldersCollapsed}" Value="True">
+                                                    <Setter Property="Text" Value="▸" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="폴더" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Button>
+                    </DockPanel>
 
                     <TextBlock DockPanel.Dock="Bottom" Margin="10,4,10,6" FontSize="11"
                                Foreground="{StaticResource Brush.TextSecondary}" TextWrapping="Wrap"
@@ -182,7 +190,13 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:FolderRowViewModel}">
                                     <!-- 우클릭 = 순환 번호 지정. 배치 편집 중에는 빈 칸으로 끌어다 놓을 수 있다. -->
-                                    <Button Style="{StaticResource FolderListRowButton}"
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <Button Grid.Column="0" Style="{StaticResource FolderListRowButton}"
                                             Command="{Binding DataContext.ShowFolderCommand,
                                                               RelativeSource={RelativeSource AncestorType=Window}}"
                                             CommandParameter="{Binding}"
@@ -350,8 +364,21 @@
                                                            Visibility="{Binding HasLocationHint,
                                                                Converter={StaticResource BoolToVisibility}}" />
                                             </StackPanel>
-                                        </Grid>
-                                    </Button>
+                                            </Grid>
+                                        </Button>
+
+                                        <!-- 목록에서 바로 제거한다. 실제 폴더 삭제가 아니라 등록 제거이며,
+                                             기존 RemoveFolderCommand 의 영향 범위 안내/확인을 그대로 쓴다. -->
+                                        <Button Grid.Column="1" Style="{StaticResource NavButton}"
+                                                Content="✕" Margin="2,3,2,0"
+                                                VerticalAlignment="Top"
+                                                Foreground="{StaticResource Brush.Danger}"
+                                                Command="{Binding DataContext.RemoveFolderCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="작업 관리에서 폴더 등록 제거 (실제 폴더는 그대로)"
+                                                AutomationProperties.Name="폴더 등록 제거" />
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

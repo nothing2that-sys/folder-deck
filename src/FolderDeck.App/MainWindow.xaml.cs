@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using FolderDeck.App.Interop;
+using FolderDeck.App.Services;
 using FolderDeck.App.ViewModels;
 using FolderDeck.App.Views;
 using FolderDeck.Core.Layout;
@@ -227,6 +228,9 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnTrayCheckChanged(object sender, RoutedEventArgs e) =>
         ViewModel.NotifyOperationState();
+
+    private void OnAddFoldersClick(object sender, RoutedEventArgs e) =>
+        ViewModel.AddFolders(new FolderPicker().PickFolders("작업 관리에 등록할 폴더 선택"));
 
     private void OnMessageExpired(object? sender, EventArgs e)
     {
