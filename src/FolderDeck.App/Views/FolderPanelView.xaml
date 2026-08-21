@@ -37,6 +37,10 @@
              대상이 "이 패널에서 고른 항목"이라 창에 물리면 어느 패널의 선택인지 가릴 수 없다.
              「경로 복사」(글자)와 다른 커맨드다 — 이쪽은 셸 파일 포맷을 싣는다. -->
         <KeyBinding Modifiers="Ctrl" Key="C" Command="{Binding CopySelectionToClipboardCommand}" />
+        <!-- 잘라내기 Ctrl+X (D36). Ctrl+C(39행)와 같은 층·같은 이유다:
+             대상이 "이 패널에서 고른 항목"이라 창에 물리면 어느 패널의 선택인지 가릴 수 없다.
+             D20("Ctrl+X 는 넣지 않는다")은 붙여넣기가 이동을 처리하게 되면서 폐기됐다. -->
+        <KeyBinding Modifiers="Ctrl" Key="X" Command="{Binding CutSelectionToClipboardCommand}" />
         <!-- 붙여넣기 Ctrl+V (§4.6 330~336행 · A군 ③ C-2). 여기 두는 이유는 Ctrl+C 와 다르다:
              대상이 "고른 항목"이 아니라 "이 패널이 지금 보고 있는 폴더"라서다(§4.9 442행).
              창에 물리면 어느 타일에 붙여넣을지 가릴 수 없는 것은 마찬가지다. -->

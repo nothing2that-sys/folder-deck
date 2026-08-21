@@ -28,6 +28,11 @@ public static class ShellExport
     private const uint DropEffectCopy = 1;
 
     /// <summary>
+    /// <c>DROPEFFECT_MOVE</c> — 탐색기가 <c>Ctrl+X</c> 로 싣는 값과 같다 (D36).
+    /// </summary>
+    private const uint DropEffectMove = 2;
+
+    /// <summary>
     /// <c>DoDragDrop</c> 의 셋째 인자. <b>한 번의 호출이 두 규칙을 다 만족해야 한다</b> —
     /// 내부 드래그는 기본 이동/<c>Ctrl</c> 복사라 <see cref="DragDropEffects.Move"/> 가 허용에
     /// 있어야 하고(§4.2-2), 셸 내보내기는 기본이 복사여야 한다(§4.9).
@@ -53,12 +58,24 @@ public static class ShellExport
     /// 다른 폴더의 경로가 섞여 들어온다(§4.10). 셸은 그것을 그대로 받으므로 여기서 출처별로
     /// 가르거나 걸러내지 않는다. 폴더도 경로 하나로 실어 보낸다 — 폴더를 폴더로 풀지, 그 안의
     /// 파일로 풀지는 <b>받는 쪽이 정한다</b>(§4.9).
+    /// <para>
+    /// <b>기본값이 복사다 — 이동은 부르는 쪽이 명시해야 한다</b>(D36). 파괴적인 방향만 명시를
+    /// 요구하는 꼴이라 빠뜨리면 안전한 쪽으로 떨어진다. 드래그 내보내기(§4.9)는 기본값을
+    /// 그대로 쓰므로 <c>PDE = DROPEFFECT_COPY</c> 라는 §4.9 의 약속이 그대로 지켜지고,
+    /// <b>싣는 함수는 여전히 하나다</b>(§4.6 — 「드래그 내보내기와 같은 함수로 싣는다」).
+    /// </para>
     /// </remarks>
-    public static void Attach(DataObject data, IReadOnlyList<OperationItem> items)
+    /// <param name="move">
+    /// <c>true</c> 면 <c>DROPEFFECT_MOVE</c>(2) 를 싣는다 — <c>Ctrl+X</c> 가 쓰는 자리다.
+    /// 기본값 <c>false</c> 는 <c>DROPEFFECT_COPY</c>(1) 다.
+    /// </param>
+    public static void Attach(DataObject data, IReadOnlyList<OperationItem> items, bool move = false)
     {
         data.SetData(DataFormats.FileDrop, items.Select(i => i.Path).ToArray(), autoConvert: true);
 
         // 스트림 하나에 DWORD 하나. DataObject 가 소유권을 가져가므로 여기서 닫지 않는다.
-        data.SetData(PreferredDropEffectFormat, new MemoryStream(BitConverter.GetBytes(DropEffectCopy)));
+        data.SetData(
+            PreferredDropEffectFormat,
+            new MemoryStream(BitConverter.GetBytes(move ? DropEffectMove : DropEffectCopy)));
     }
 }

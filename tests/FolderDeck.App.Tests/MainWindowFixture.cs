@@ -63,7 +63,7 @@ internal sealed class FakeClipboardService : IClipboardService
         return Error;
     }
 
-    public string? SetFiles(IReadOnlyList<OperationItem> items)
+    public string? SetFiles(IReadOnlyList<OperationItem> items, bool move = false)
     {
         FileSets.Add(items);
 
@@ -73,7 +73,7 @@ internal sealed class FakeClipboardService : IClipboardService
         }
 
         // 실물과 같은 것이 실린다 — 무엇이 실리는지는 진짜 코드가 정한다(가짜가 아니라).
-        Data = ClipboardService.FileDataObject(items);
+        Data = ClipboardService.FileDataObject(items, move);
         return null;
     }
 

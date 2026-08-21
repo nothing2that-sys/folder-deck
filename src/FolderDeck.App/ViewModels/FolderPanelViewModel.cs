@@ -813,6 +813,35 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     }
 
     /// <summary>
+    /// 지금 고른 것 <b>전부</b>를 <b>이동</b> 클립보드로 (<c>Ctrl+X</c>).
+    /// </summary>
+    /// <remarks>
+    /// <b>여기서도 파일 시스템은 건드리지 않는다</b> — 실제 이동은 붙여넣는 쪽(탐색기든 이
+    /// 앱이든)이 한다. 원본이 사라지는 것은 이 명령이 아니라 그 붙여넣기다.
+    /// <para>
+    /// 「복사」(<see cref="CopySelectionToClipboard"/>)와 <b>다른 것은 실리는 효과 하나뿐</b>이다
+    /// — 대상도 통로도 같고 <c>Preferred DropEffect</c> 만 이동이 된다(D36 · D20 폐기).
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    public void CutSelectionToClipboard()
+    {
+        if (SelectedItems.Count == 0)
+        {
+            // 클립보드를 건드리지 않는다 — 빈 것으로 덮으면 아까 복사해 둔 것이 사라진다.
+            Reject("잘라낼 것이 없다 — 먼저 고른 뒤에 Ctrl+X");
+            return;
+        }
+
+        Report(
+            _clipboard.SetFiles(
+                [.. SelectedItems.Select(i =>
+                    new Core.Operations.OperationItem(i.FullPath, i.IsDirectory))],
+                move: true),
+            "잘라낸 것을 클립보드에 올리지 못했다");
+    }
+
+    /// <summary>
     /// 클립보드의 것을 <b>이 타일이 지금 보고 있는 폴더</b>로 (<c>Ctrl+V</c> · breadcrumb 우클릭
     /// 「붙여넣기」).
     /// </summary>

@@ -74,6 +74,32 @@ public sealed class ClipboardCopyPasteTests
         Assert.Equal([1, 0, 0, 0], effect.ToArray());
     }
 
+    /// <summary>
+    /// 잘라내기가 싣는 것은 같은 셸 파일 포맷 + <c>Preferred DropEffect</c>(<b>이동</b>)다 (D36).
+    /// </summary>
+    /// <remarks>
+    /// 경로 목록은 복사와 <b>같다</b> — 갈리는 것은 효과 하나뿐이다. 싣는 함수도 같은 하나다
+    /// (드래그 내보내기가 쓰는 <see cref="ShellExport.Attach"/> 그대로 · §4.6).
+    /// </remarks>
+    [Fact]
+    public void WhatCutPutsOnTheClipboardCarriesTheShellFormatAndSaysMove()
+    {
+        var data = ClipboardService.FileDataObject(
+            [
+                new OperationItem(@"C:\deck\work\Main.cs", false),
+                new OperationItem(@"C:\deck\work\Views", true),
+            ],
+            move: true);
+
+        Assert.Equal(
+            [@"C:\deck\work\Main.cs", @"C:\deck\work\Views"],
+            Assert.IsType<string[]>(data.GetData(DataFormats.FileDrop)));
+
+        var effect = Assert.IsType<MemoryStream>(data.GetData(ShellExport.PreferredDropEffectFormat));
+
+        Assert.Equal([2, 0, 0, 0], effect.ToArray());
+    }
+
     /// <summary>고른 것이 없으면 거절이고 <b>클립보드를 건드리지 않는다</b>.</summary>
     /// <remarks>빈 것으로 덮으면 아까 복사해 둔 것이 사라진다 — 그래서 "아무 일 없음"이 아니다.</remarks>
     [Fact]

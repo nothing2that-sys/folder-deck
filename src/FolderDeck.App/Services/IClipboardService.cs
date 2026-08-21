@@ -17,8 +17,12 @@ public interface IClipboardService
     /// <remarks>
     /// 계약은 <see cref="SetText"/> 와 같다 — 성공하면 null, 실패하면 사용자에게 보일 메시지.
     /// 싣는 것은 경로 <b>글자</b>가 아니라 파일 포맷이다(「경로 복사」와 다른 일이다).
+    /// <para>
+    /// <b>복사만 내는 것이 아니다</b> — <paramref name="move"/> 가 <c>true</c> 면 <b>이동</b>
+    /// 클립보드를 낸다(<c>Ctrl+X</c> · D36). 기본값은 복사이고, 이동은 부르는 쪽이 명시한다.
+    /// </para>
     /// </remarks>
-    string? SetFiles(IReadOnlyList<OperationItem> items);
+    string? SetFiles(IReadOnlyList<OperationItem> items, bool move = false);
 
     /// <summary>
     /// 지금 클립보드에 있는 데이터 개체. <b>비었으면 null</b> (§4.6 310행 · A군 ③ C-2).
@@ -60,15 +64,16 @@ public sealed class ClipboardService : IClipboardService
     /// 부를 수 없다. <b>무엇이 실리는가</b>는 여기서 확인하고, 올리는 줄만 손 확인으로 남는다.
     /// </para>
     /// </remarks>
-    public static System.Windows.DataObject FileDataObject(IReadOnlyList<OperationItem> items)
+    public static System.Windows.DataObject FileDataObject(
+        IReadOnlyList<OperationItem> items, bool move = false)
     {
         var data = new System.Windows.DataObject();
-        ShellExport.Attach(data, items);
+        ShellExport.Attach(data, items, move);
         return data;
     }
 
     /// <inheritdoc/>
-    public string? SetFiles(IReadOnlyList<OperationItem> items)
+    public string? SetFiles(IReadOnlyList<OperationItem> items, bool move = false)
     {
         try
         {
@@ -76,7 +81,8 @@ public sealed class ClipboardService : IClipboardService
             using var fpu = FolderDeck.App.Interop.FpuGuard.Enter("Clipboard.SetDataObject");
 
             // copy: true — 앱이 닫혀도 클립보드에 남는다(OLE 플러시). 탐색기의 복사와 같은 결이다.
-            System.Windows.Clipboard.SetDataObject(FileDataObject(items), copy: true);
+            // 이 copy 는 OLE 플러시 인자이고 move 와 아무 관계가 없다 — 둘을 헷갈리면 안 된다.
+            System.Windows.Clipboard.SetDataObject(FileDataObject(items, move), copy: true);
             return null;
         }
         catch (Exception ex)
