@@ -109,6 +109,35 @@
         </Style>
 
         <!--
+            행 안에 겹쳐 두는 작은 조작 버튼 — 지금은 폴더 등록 제거의 「✕」 하나다 (D38 · §4.11-2).
+            평소에는 없다. 그 행에 손이 올라가거나 키보드 초점이 들어왔을 때만 나타난다 —
+            열 줄짜리 목록에 ✕ 열 개가 늘 떠 있으면 목록이 아니라 삭제 화면으로 읽힌다.
+            색은 중립이다. 위험을 말하는 일은 확인창이 맡는다 — 무엇이 같이 정리되는지 세어
+            보이는 쪽이 빨간 글리프보다 정확하다.
+            AncestorType=Button 은 이 버튼이 아니라 <b>행 버튼</b>을 잡는다(FindAncestor 는 부모부터
+            올라간다). 겹쳐 두었으므로 그 행 위 어디에 손이 있어도 조건이 선다.
+        -->
+        <Style x:Key="RowActionButton" TargetType="Button" BasedOn="{StaticResource NavButton}">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextSecondary}" />
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Value="True"
+                             Binding="{Binding IsMouseOver,
+                                       RelativeSource={RelativeSource AncestorType=Button}}">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Value="True"
+                             Binding="{Binding IsKeyboardFocusWithin,
+                                       RelativeSource={RelativeSource AncestorType=Button}}">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--
             좁은 타일에서 아이콘을 접는 두 단계.
 
             1x1 타일은 작은 창에서 100px 도 안 되는데 내비 아이콘 6개만 144px 다. 그대로 두면

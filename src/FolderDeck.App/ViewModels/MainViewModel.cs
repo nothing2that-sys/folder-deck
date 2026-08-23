@@ -2071,6 +2071,15 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         Inform($"등록했다: {FolderPathRules.LeafName(item.FullPath)}");
     }
 
+    /// <summary>
+    /// 목록 두 곳(<c>folders[]</c> · <see cref="Rows"/>)에 넣기만 한다. 넣었으면 <c>true</c>,
+    /// 같은 path 가 이미 있어 거절했으면 <c>false</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="RefreshRotationChoices"/> 와 <see cref="Save"/> 는 부르는 쪽이 한다.</b>
+    /// 새 행에도 "순환 칸 지정" 선택지가 있어야 하므로 그것만 다시 세면 되고(배치는 안 바뀐다),
+    /// 여러 개를 한 번에 넣을 때 그 둘이 개수만큼 도는 것을 막으려고 밖으로 뺐다.
+    /// </remarks>
     private bool TryRegisterFolderPath(string path)
     {
         var normalized = FolderPathRules.Normalize(path);

@@ -228,7 +228,7 @@ public partial class App : Application
             new FolderEditor(),
             new SelfLauncher());
 
-        var window = new MainWindow(viewModel);
+        var window = new MainWindow(viewModel, new FolderPicker());
 
         // 저장된 자리로 띄운다. 되찾을 수 없는 자리면 여기서 기본 위치로 바뀐다 (§6.1).
         // 이 판정은 창을 만들기 전에 도는 코드지만, 매니페스트가 DPI 인식을 프로세스 시작

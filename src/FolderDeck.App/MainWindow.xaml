@@ -190,13 +190,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:FolderRowViewModel}">
                                     <!-- 우클릭 = 순환 번호 지정. 배치 편집 중에는 빈 칸으로 끌어다 놓을 수 있다. -->
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <Button Grid.Column="0" Style="{StaticResource FolderListRowButton}"
+                                    <Button Style="{StaticResource FolderListRowButton}"
                                             Command="{Binding DataContext.ShowFolderCommand,
                                                               RelativeSource={RelativeSource AncestorType=Window}}"
                                             CommandParameter="{Binding}"
@@ -364,21 +358,22 @@
                                                            Visibility="{Binding HasLocationHint,
                                                                Converter={StaticResource BoolToVisibility}}" />
                                             </StackPanel>
-                                            </Grid>
-                                        </Button>
 
-                                        <!-- 목록에서 바로 제거한다. 실제 폴더 삭제가 아니라 등록 제거이며,
-                                             기존 RemoveFolderCommand 의 영향 범위 안내/확인을 그대로 쓴다. -->
-                                        <Button Grid.Column="1" Style="{StaticResource NavButton}"
-                                                Content="✕" Margin="2,3,2,0"
-                                                VerticalAlignment="Top"
-                                                Foreground="{StaticResource Brush.Danger}"
-                                                Command="{Binding DataContext.RemoveFolderCommand,
-                                                                  RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}"
-                                                ToolTip="작업 관리에서 폴더 등록 제거 (실제 폴더는 그대로)"
-                                                AutomationProperties.Name="폴더 등록 제거" />
-                                    </Grid>
+                                            <!-- 목록에서 바로 제거한다. 실제 폴더 삭제가 아니라 등록 제거이며,
+                                                 기존 RemoveFolderCommand 의 확인창을 그대로 쓴다 (D38).
+                                                 행 버튼 안에 겹쳐 둔다 — 칸을 갈라 내주면 그 폭만큼
+                                                 우클릭·파일 드롭·배치 편집 드래그가 죽는다. -->
+                                            <Button Grid.Column="1" Style="{StaticResource RowActionButton}"
+                                                    Content="✕"
+                                                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                    Margin="0,1,0,0"
+                                                    Command="{Binding DataContext.RemoveFolderCommand,
+                                                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip="작업 관리에서 등록만 지운다. 실제 폴더는 그대로다"
+                                                    AutomationProperties.Name="폴더 등록 제거" />
+                                        </Grid>
+                                    </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

@@ -91,6 +91,20 @@ public sealed class FolderCrudTests
         Assert.Equal(5, f.ViewModel.Rows.Count);
     }
 
+    /// <summary>
+    /// 폴더 고르기 대화상자는 <b>창</b>이 든다 — 뷰모델로 새지 않는다 (D38).
+    /// 뷰모델 생성자 열 인자를 지키는 못은 <c>ClipboardCopyPasteTests</c> 에 따로 있다.
+    /// </summary>
+    [Fact]
+    public void TheMainWindowTakesTheFolderPicker()
+    {
+        var parameters = Assert.Single(typeof(MainWindow).GetConstructors()).GetParameters();
+
+        Assert.Equal(2, parameters.Length);
+        Assert.Equal(typeof(MainViewModel), parameters[0].ParameterType);
+        Assert.Equal(typeof(IFolderPicker), parameters[1].ParameterType);
+    }
+
     // ── 3. 제거 (§4.11-2) ────────────────────────────────────────────────────
 
     [Fact]

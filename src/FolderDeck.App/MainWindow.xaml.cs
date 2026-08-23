@@ -40,11 +40,15 @@ public partial class MainWindow : Window
     private GridLength _foldersHeight = new(2, GridUnitType.Star);
     private GridLength _lowerHeight = new(1, GridUnitType.Star);
 
-    public MainWindow(MainViewModel viewModel)
+    /// <summary>폴더 고르기 대화상자. 창이 든다 — 뷰모델로 새지 않는다 (D38).</summary>
+    private readonly IFolderPicker _picker;
+
+    public MainWindow(MainViewModel viewModel, IFolderPicker picker)
     {
         InitializeComponent();
         DataContext = viewModel;
         ViewModel = viewModel;
+        _picker = picker;
 
         _messageTimer = new DispatcherTimer { Interval = TransientMessageLife };
         _messageTimer.Tick += OnMessageExpired;
@@ -230,7 +234,7 @@ public partial class MainWindow : Window
         ViewModel.NotifyOperationState();
 
     private void OnAddFoldersClick(object sender, RoutedEventArgs e) =>
-        ViewModel.AddFolders(new FolderPicker().PickFolders("작업 관리에 등록할 폴더 선택"));
+        ViewModel.AddFolders(_picker.PickFolders("작업 관리에 등록할 폴더 선택"));
 
     private void OnMessageExpired(object? sender, EventArgs e)
     {
