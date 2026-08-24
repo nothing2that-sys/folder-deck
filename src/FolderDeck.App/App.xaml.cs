@@ -25,12 +25,6 @@ public partial class App : Application, IWorkspaceHost
     /// <summary>떠 있는 선택 창 (§3.1). 워크스페이스를 열 때 이 창을 닫고 갈아끼운다.</summary>
     private LauncherWindow? _launcherWindow;
 
-    /// <summary>
-    /// 이 프로세스가 워크스페이스 창을 들고 있는가. 끝나면서 런처에게 알릴지를 여기서 가른다 —
-    /// 런처 자신은 알릴 필요가 없다.
-    /// </summary>
-    private bool _holdsWorkspace;
-
     /// <summary>워크스페이스를 열려고 했을 때 어디로 갈라졌는가.</summary>
     private enum OpenOutcome
     {
@@ -175,7 +169,6 @@ public partial class App : Application, IWorkspaceHost
         var duplicate = _instanceLock is null;
 
         var window = ShowWorkspaceWindow(workspace);
-        _holdsWorkspace = true;
         StartListener(pipeName, window);
 
         // 새 창을 띄운 뒤에 선택 창을 닫는다. App.xaml 에 ShutdownMode 가 없어 기본값
@@ -251,12 +244,11 @@ public partial class App : Application, IWorkspaceHost
     /// 파이프 신호를 받으면 창을 앞으로 가져온다. 수신은 UI 스레드가 아닌 곳에서 일어나므로
     /// 디스패처로 마샬한다 (§3.3).
     /// </summary>
-    private void StartListener(string pipeName, Window window, Action? onPeerClosed = null)
+    private void StartListener(string pipeName, Window window)
     {
         _listener = new ActivationListener(
             pipeName,
-            () => window.Dispatcher.BeginInvoke(() => WindowActivation.BringToFront(window)),
-            onPeerClosed);
+            () => window.Dispatcher.BeginInvoke(() => WindowActivation.BringToFront(window)));
     }
 
     /// <summary>
@@ -297,34 +289,6 @@ public partial class App : Application, IWorkspaceHost
         _store?.Dispose();
         _instanceLock?.Dispose();
 
-        NotifyLauncherThisWindowClosed();
-
         base.OnExit(e);
-    }
-
-    /// <summary>
-    /// 떠 있는 런처에게 "이 창은 닫혔다"를 알린다 — 런처가 배지를 다시 잰다 (§4.2).
-    /// </summary>
-    /// <remarks>
-    /// <b>자기 파이프를 닫은 뒤에 알리는 것이 핵심이다.</b> 먼저 알리면 런처가 아직 살아 있는
-    /// 이 프로세스의 파이프를 보고 "열려 있음"으로 다시 판정한다 — 고치려던 것과 같은 상태가 된다.
-    /// <para>
-    /// 런처가 없으면 보내지 않는다(존재 확인은 부작용 없는 열거다). 없는 상대에게 보내면
-    /// 연결 한도만큼 종료가 늦어지는데, 그 대가로 얻는 것이 없다.
-    /// </para>
-    /// </remarks>
-    private void NotifyLauncherThisWindowClosed()
-    {
-        if (!_holdsWorkspace)
-        {
-            return;
-        }
-
-        var launcherPipe = InstanceNames.LauncherPipe();
-        if (InstanceSignals.IsLive(launcherPipe))
-        {
-            // 실패해도 할 것이 없다 — 배지가 다음 활성화까지 낡아 있을 뿐이다.
-            ActivationSignal.TryNotifyClosed(launcherPipe);
-        }
     }
 }

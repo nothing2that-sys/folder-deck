@@ -7,7 +7,7 @@ namespace FolderDeck.App.Services;
 
 /// <summary>
 /// 인스턴스 신호를 받는 쪽 (§3.3). 파이프 서버를 띄우고, 본문에 따라 콜백을 부른다 —
-/// <c>"activate"</c> 면 창을 앞으로, <c>"closed"</c> 면 (런처에서) 배지를 다시.
+/// <c>"activate"</c> 면 창을 앞으로 가져온다. 그 밖의 본문에는 아무것도 하지 않는다.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -28,7 +28,6 @@ public sealed class ActivationListener : IDisposable
 
     private readonly string _pipeName;
     private readonly Action _onActivate;
-    private readonly Action? _onPeerClosed;
     private readonly CancellationTokenSource _cts = new();
     private readonly Lock _gate = new();
 
@@ -36,18 +35,13 @@ public sealed class ActivationListener : IDisposable
     private bool _disposed;
 
     /// <param name="onActivate">"앞으로" 신호를 받았을 때.</param>
-    /// <param name="onPeerClosed">
-    /// 다른 인스턴스가 닫혔다고 알렸을 때 (<see cref="ActivationSignal.ClosedPayload"/>).
-    /// 런처만 쓴다 — 배지를 다시 재는 자리고, <b>창을 올리지 않는다</b>.
-    /// </param>
-    public ActivationListener(string pipeName, Action onActivate, Action? onPeerClosed = null)
+    public ActivationListener(string pipeName, Action onActivate)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
         ArgumentNullException.ThrowIfNull(onActivate);
 
         _pipeName = pipeName;
         _onActivate = onActivate;
-        _onPeerClosed = onPeerClosed;
 
         // 첫 서버는 여기서 동기로 만든다 — 이름이 이미 쓰이고 있으면(다른 세션 등) 그 사실을
         // 창을 띄우기 전에 알 수 있어야 한다. 조용히 "신호를 못 받는 창"이 되지 않게 (§5).
@@ -106,10 +100,6 @@ public sealed class ActivationListener : IDisposable
                 if (line == ActivationSignal.ActivatePayload)
                 {
                     _onActivate();
-                }
-                else if (line == ActivationSignal.ClosedPayload)
-                {
-                    _onPeerClosed?.Invoke();
                 }
             }
             catch (OperationCanceledException)

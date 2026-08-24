@@ -16,11 +16,6 @@ public sealed partial class LauncherViewModel : ObservableObject
     /// <summary>실제 폴더는 건드리지 않는다는 것을 확인창 문구에 못박는다 (§3.1).</summary>
     public const string DeleteNotice = "실제 폴더는 지워지지 않습니다. 작업 관리 항목만 삭제됩니다.";
 
-    /// <summary>런처가 두 벌 떴다 — 배지가 서로 달라질 수 있다는 것을 밝힌다 (§4.3).</summary>
-    public const string DuplicateLauncherWarning =
-        "이미 떠 있는 런처에 신호를 보내지 못해 이 창을 새로 열었다. " +
-        "런처가 두 개 떠 있으면 '열려 있음' 표시가 서로 다를 수 있다 — 한쪽을 닫는 편이 좋다.";
-
     private readonly IWorkspaceStore _store;
     private readonly IFolderPicker _picker;
     private readonly IUserPrompt _prompt;
@@ -51,11 +46,6 @@ public sealed partial class LauncherViewModel : ObservableObject
 
         Refresh();
     }
-
-    /// <summary>이 런처가 신호를 못 받는 상태다 — 두 번째 실행이 기존 창을 못 찾는다.</summary>
-    public static string NoSignalWarning(string detail) =>
-        $"이 런처는 다른 실행이 보내는 신호를 받지 못한다 (파이프를 열지 못했다: {detail}). " +
-        "FolderDeck 을 또 실행하면 런처가 하나 더 뜬다.";
 
     public AppSettings Settings { get; }
 

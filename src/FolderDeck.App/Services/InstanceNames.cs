@@ -27,23 +27,14 @@ namespace FolderDeck.App.Services;
 /// </remarks>
 public static class InstanceNames
 {
-    /// <summary>런처는 워크스페이스가 아니므로 GUID 가 아니라 이 고정 키를 쓴다 (§4.3).</summary>
-    private const string LauncherKey = "launcher";
-
     /// <summary>이 프로세스가 속한 터미널 세션. 파이프 이름을 세션별로 갈라 놓는 데 쓴다.</summary>
     public static int SessionId { get; } = ReadSessionId();
 
     /// <summary>워크스페이스 하나를 나타내는 뮤텍스 이름.</summary>
     public static string WorkspaceMutex(Guid workspaceId) => $@"Local\FolderDeck.{workspaceId}";
 
-    /// <summary>런처 자신의 뮤텍스 이름 (§4.3).</summary>
-    public static string LauncherMutex() => $@"Local\FolderDeck.{LauncherKey}";
-
     /// <summary>워크스페이스 창이 "앞으로" 신호를 받는 파이프 이름.</summary>
     public static string WorkspacePipe(Guid workspaceId) => Pipe(workspaceId.ToString());
-
-    /// <summary>런처가 "앞으로" 신호를 받는 파이프 이름.</summary>
-    public static string LauncherPipe() => Pipe(LauncherKey);
 
     private static string Pipe(string key) => $"FolderDeck.s{SessionId}.{key}";
 

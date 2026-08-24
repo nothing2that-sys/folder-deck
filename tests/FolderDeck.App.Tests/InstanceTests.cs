@@ -133,14 +133,6 @@ public sealed class InstanceTests
         var id = Guid.NewGuid();
 
         Assert.Equal($"FolderDeck.s{InstanceNames.SessionId}.{id}", InstanceNames.WorkspacePipe(id));
-        Assert.Equal($"FolderDeck.s{InstanceNames.SessionId}.launcher", InstanceNames.LauncherPipe());
-    }
-
-    [Fact]
-    public void TheLauncherHasItsOwnName()
-    {
-        Assert.NotEqual(InstanceNames.LauncherMutex(), InstanceNames.WorkspaceMutex(Guid.NewGuid()));
-        Assert.StartsWith(@"Local\FolderDeck.", InstanceNames.LauncherMutex());
     }
 
     // ── 뮤텍스 상태 판정 (§3.2) ──────────────────────────────────────────────
@@ -410,70 +402,7 @@ public sealed class InstanceTests
         Assert.Empty(new InstanceSignals().WhichAreOpen([]));
     }
 
-    // ── 닫힘 알림 (배지가 낡는 것을 막는 경로) ───────────────────────────────
-
-    /// <summary>
-    /// 닫히는 프로세스가 보내는 "closed" 는 <b>배지 재검사만</b> 일으킨다. 여기에 창 올리기가
-    /// 딸려 오면, 워크스페이스를 닫을 때마다 런처가 앞으로 튀어나온다.
-    /// </summary>
-    [Fact]
-    public void AClosedNoticeRefreshesTheBadgeWithoutRaisingTheWindow()
-    {
-        var pipe = UniquePipeName();
-        using var activated = new ManualResetEventSlim();
-        using var refreshed = new ManualResetEventSlim();
-        using var listener = new ActivationListener(pipe, activated.Set, refreshed.Set);
-
-        Assert.True(listener.IsListening);
-        Assert.True(ActivationSignal.TryNotifyClosed(pipe));
-
-        Assert.True(refreshed.Wait(SignalWait));
-        Assert.False(activated.IsSet);
-    }
-
-    /// <summary>그리고 "앞으로" 신호는 반대로 재검사 콜백을 부르지 않는다.</summary>
-    [Fact]
-    public void AnActivateSignalDoesNotLookLikeAClosedNotice()
-    {
-        var pipe = UniquePipeName();
-        using var activated = new ManualResetEventSlim();
-        using var refreshed = new ManualResetEventSlim();
-        using var listener = new ActivationListener(pipe, activated.Set, refreshed.Set);
-
-        Assert.True(ActivationSignal.TrySend(pipe));
-
-        Assert.True(activated.Wait(SignalWait));
-        Assert.False(refreshed.IsSet);
-    }
-
-    /// <summary>
-    /// 워크스페이스 창은 이 콜백을 달지 않는다(런처만 쓴다). 달지 않아도 터지지 않아야 한다.
-    /// </summary>
-    [Fact]
-    public void AListenerWithoutTheRefreshCallbackIgnoresAClosedNotice()
-    {
-        var pipe = UniquePipeName();
-        using var activated = new ManualResetEventSlim();
-        using var listener = new ActivationListener(pipe, activated.Set);
-
-        Assert.True(ActivationSignal.TryNotifyClosed(pipe));
-        Assert.False(activated.Wait(TimeSpan.FromMilliseconds(400)));
-
-        // 그리고 진짜 신호는 여전히 통한다 — 서버가 살아서 다음 연결을 기다린다.
-        Assert.True(ActivationSignal.TrySend(pipe));
-        Assert.True(activated.Wait(SignalWait));
-    }
-
-    /// <summary>받을 사람이 없으면 조용히 false — 종료 경로가 여기서 막히면 안 된다.</summary>
-    [Fact]
-    public void NotifyingNobodyFailsQuietly()
-    {
-        var elapsed = Stopwatch.StartNew();
-
-        Assert.False(ActivationSignal.TryNotifyClosed(UniquePipeName()));
-
-        Assert.True(elapsed.Elapsed < SignalWait, $"{elapsed.Elapsed.TotalSeconds:F1}초 걸렸다");
-    }
+    // ── 존재 확인 (배지 판정 수단) ───────────────────────────────────────────
 
     [Fact]
     public void IsLiveSeesAListenerAndDoesNotSeeAMissingOne()
