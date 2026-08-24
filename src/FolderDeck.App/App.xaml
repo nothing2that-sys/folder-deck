@@ -116,6 +116,12 @@
             보이는 쪽이 빨간 글리프보다 정확하다.
             AncestorType=Button 은 이 버튼이 아니라 <b>행 버튼</b>을 잡는다(FindAncestor 는 부모부터
             올라간다). 겹쳐 두었으므로 그 행 위 어디에 손이 있어도 조건이 선다.
+            <b>배치 편집 중에는 아예 뜨지 않는다</b> (D39). 그때 행은 끌어다 놓는 물건이지 지우는
+            물건이 아니다. 실물에서도 둘이 어긋났다 — 드래그가 마우스를 캡처해 커서가 떠나도
+            IsMouseOver 가 true 로 남고, PreviewMouseMove 가 터널링이라 「✕」를 잡아 끌면 행
+            드래그가 시작된다. 표시 조건 하나로 둘 다 닫힌다.
+            AncestorType=Window 의 DataContext 는 MainViewModel 이다 — 같은 「✕」가
+            RemoveFolderCommand 를 잡을 때 쓰는 경로와 같다.
         -->
         <Style x:Key="RowActionButton" TargetType="Button" BasedOn="{StaticResource NavButton}">
             <Setter Property="Width" Value="18" />
@@ -124,16 +130,28 @@
             <Setter Property="Foreground" Value="{StaticResource Brush.TextSecondary}" />
             <Setter Property="Visibility" Value="Collapsed" />
             <Style.Triggers>
-                <DataTrigger Value="True"
-                             Binding="{Binding IsMouseOver,
-                                       RelativeSource={RelativeSource AncestorType=Button}}">
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Value="True"
+                                   Binding="{Binding IsMouseOver,
+                                             RelativeSource={RelativeSource AncestorType=Button}}" />
+                        <Condition Value="False"
+                                   Binding="{Binding DataContext.IsEditingLayout,
+                                             RelativeSource={RelativeSource AncestorType=Window}}" />
+                    </MultiDataTrigger.Conditions>
                     <Setter Property="Visibility" Value="Visible" />
-                </DataTrigger>
-                <DataTrigger Value="True"
-                             Binding="{Binding IsKeyboardFocusWithin,
-                                       RelativeSource={RelativeSource AncestorType=Button}}">
+                </MultiDataTrigger>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Value="True"
+                                   Binding="{Binding IsKeyboardFocusWithin,
+                                             RelativeSource={RelativeSource AncestorType=Button}}" />
+                        <Condition Value="False"
+                                   Binding="{Binding DataContext.IsEditingLayout,
+                                             RelativeSource={RelativeSource AncestorType=Window}}" />
+                    </MultiDataTrigger.Conditions>
                     <Setter Property="Visibility" Value="Visible" />
-                </DataTrigger>
+                </MultiDataTrigger>
             </Style.Triggers>
         </Style>
 
