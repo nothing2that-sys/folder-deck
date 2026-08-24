@@ -10,7 +10,7 @@ using FolderDeck.Core.Storage;
 
 namespace FolderDeck.App;
 
-public partial class App : Application
+public partial class App : Application, IWorkspaceHost
 {
     private WorkspaceStore? _store;
     private AppSettings _settings = new();
@@ -21,6 +21,9 @@ public partial class App : Application
 
     /// <summary>"앞으로" 신호를 받는 파이프 서버 (§3.3).</summary>
     private ActivationListener? _listener;
+
+    /// <summary>떠 있는 선택 창 (§3.1). 워크스페이스를 열 때 이 창을 닫고 갈아끼운다.</summary>
+    private LauncherWindow? _launcherWindow;
 
     /// <summary>
     /// 이 프로세스가 워크스페이스 창을 들고 있는가. 끝나면서 런처에게 알릴지를 여기서 가른다 —
@@ -34,10 +37,7 @@ public partial class App : Application
         /// <summary>창을 띄웠다. 이 프로세스가 그 워크스페이스를 든다.</summary>
         Shown,
 
-        /// <summary>이미 열려 있는 창에 넘겼다. 이 프로세스는 할 일이 없다 (§3.2-3).</summary>
-        HandedOff,
-
-        /// <summary>열지 못했다(파일이 없거나 손상). 런처로 떨어진다.</summary>
+        /// <summary>열지 않았다(이미 열려 있거나, 파일이 없거나 손상). 선택 창으로 떨어진다.</summary>
         Failed,
     }
 
@@ -67,58 +67,45 @@ public partial class App : Application
 
         LoadSettings(store);
 
-        // ① 인자로 워크스페이스를 지정했다 — 런처를 거치지 않는다 (§3.1).
+        string? message = options.Error;
+
+        // ① 인자로 워크스페이스를 지정했다 — 선택 창을 거치지 않는다 (§3.1).
         if (options.WorkspaceId is { } requested)
         {
-            switch (OpenWorkspace(requested))
+            switch (OpenWorkspace(requested, ref message))
             {
                 case OpenOutcome.Shown:
-                    return;
-                case OpenOutcome.HandedOff:
-                    Shutdown(0);
                     return;
                 default:
                     break;
             }
         }
 
-        // ② 자동 열기가 켜져 있고 대상이 유효하면 런처를 건너뛴다 (§3.1).
+        // ② 자동 열기가 켜져 있고 대상이 유효하면 선택 창을 건너뛴다 (§3.1).
         //    --launcher 는 이 건너뛰기를 무시하라는 요청이다.
         else if (!options.ForceLauncher && _settings.SkipLauncher && _settings.LastWorkspaceId is { } last)
         {
-            switch (OpenWorkspace(last))
+            switch (OpenWorkspace(last, ref message))
             {
                 case OpenOutcome.Shown:
-                    return;
-                case OpenOutcome.HandedOff:
-                    Shutdown(0);
                     return;
                 default:
                     break;
             }
         }
 
-        ShowLauncher(options.Error);
+        ShowLauncher(message);
     }
 
     /// <summary>
-    /// 런처를 띄운다. 런처도 하나뿐이다 (§4.3) — 두 벌이 뜨면 카드 배지가 서로 달라져
-    /// "힌트"가 신뢰를 잃는다.
+    /// 워크스페이스 선택 창을 띄운다 (§3.1). 하나를 고르면 이 창이 그대로 그 워크스페이스
+    /// 창이 되므로(<see cref="Open"/>) 상주하지 않는다 — 인스턴스 하나 규칙은 워크스페이스
+    /// 쪽에만 남는다 (§6.2).
     /// </summary>
     /// <param name="message">잘못된 인자 등 시작 시점의 알릴 것. 없으면 null.</param>
     private void ShowLauncher(string? message)
     {
-        var launcherLock = InstanceLock.TryAcquire(InstanceNames.LauncherMutex());
-        if (launcherLock is null && ActivationSignal.TrySend(InstanceNames.LauncherPipe()))
-        {
-            // 기존 런처가 앞으로 나왔다. 사용자가 요청한 결과가 화면에 있으므로 조용히 끝낸다.
-            Shutdown(0);
-            return;
-        }
-
-        _instanceLock = launcherLock;
-
-        // 워크스페이스가 0개여도 런처는 뜬다 — 여기서 첫 묶음을 만들 수 있어야 하므로.
+        // 워크스페이스가 0개여도 선택 창은 뜬다 — 여기서 첫 묶음을 만들 수 있어야 하므로.
         var viewModel = new LauncherViewModel(
             _store!,
             _settings,
@@ -126,29 +113,13 @@ public partial class App : Application
             new UserPrompt(),
             new ShellLauncher(),
             new InstanceSignals(),
-            new SelfLauncher(),
+            this,
             _settingsWritable);
 
         var window = new LauncherWindow(viewModel);
+        _launcherWindow = window;
         MainWindow = window;
         window.Show();
-
-        // 런처는 "앞으로" 신호 말고 "누가 닫혔다"도 받는다 — 그때 배지를 다시 잰다.
-        // 창 활성화만으로는 배지가 낡은 채 남는 경로가 둘 있다(ActivationSignal.ClosedPayload).
-        StartListener(
-            InstanceNames.LauncherPipe(),
-            window,
-            onPeerClosed: () => window.Dispatcher.BeginInvoke(viewModel.RefreshOpenState));
-
-        // 좀비 런처(뮤텍스는 잡혀 있는데 응답이 없다)여서 두 벌이 됐다면 조용히 넘기지 않는다 (§5).
-        if (launcherLock is null)
-        {
-            message = LauncherViewModel.DuplicateLauncherWarning;
-        }
-        else if (_listener?.Failure is { } failure)
-        {
-            message = LauncherViewModel.NoSignalWarning(failure);
-        }
 
         if (message is not null)
         {
@@ -157,23 +128,34 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// 워크스페이스 창을 이 프로세스에서 연다. 이미 열려 있으면 그 창을 앞으로 보내고
-    /// <see cref="OpenOutcome.HandedOff"/> 를 돌려준다 (§3.2).
+    /// 시작하자마자 워크스페이스를 연다 (§3.1). 열지 않았으면 이유를
+    /// <paramref name="message"/> 에 담아 선택 창으로 떨어뜨린다 — 아무 창도 안 뜨고
+    /// 끝나는 것이 §5 위반이기 때문이다.
     /// </summary>
-    private OpenOutcome OpenWorkspace(Guid workspaceId)
+    private OpenOutcome OpenWorkspace(Guid workspaceId, ref string? message)
+    {
+        var result = Open(workspaceId);
+        if (result.Outcome == WorkspaceOpenOutcome.Opened)
+        {
+            return OpenOutcome.Shown;
+        }
+
+        message = result.Outcome == WorkspaceOpenOutcome.AlreadyOpen
+            ? "그 작업 관리는 이미 열려 있어 열지 않았다."
+            : $"열려던 작업 관리를 읽지 못해 목록을 띄운다: {result.Message}";
+
+        return OpenOutcome.Failed;
+    }
+
+    /// <inheritdoc/>
+    public WorkspaceOpenResult Open(Guid workspaceId)
     {
         var result = _store!.LoadWorkspace(workspaceId);
         if (result.Value is null)
         {
-            // 대상이 사라졌거나 손상됐다. 조용히 넘기지 않고 알린 뒤 런처로 떨어진다 (§5).
-            MessageBox.Show(
-                "열려던 작업 관리를 읽지 못해 목록을 띄운다.\n\n" +
-                $"{result.Failure!.Path}\n{result.Failure.Message}",
-                "FolderDeck",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-
-            return OpenOutcome.Failed;
+            // 대상이 사라졌거나 손상됐다. 선택 창이 살아 있으므로 창을 띄우지 않고 Message 로
+            // 알린다 (§5).
+            return WorkspaceOpenResult.Failed($"{result.Failure!.Path} — {result.Failure.Message}");
         }
 
         var workspace = result.Value;
@@ -182,18 +164,24 @@ public partial class App : Application
         _instanceLock = InstanceLock.TryAcquire(InstanceNames.WorkspaceMutex(workspaceId));
 
         var pipeName = InstanceNames.WorkspacePipe(workspaceId);
-        if (_instanceLock is null && ActivationSignal.TrySend(pipeName))
+        if (_instanceLock is null && InstanceSignals.IsLive(pipeName))
         {
-            return OpenOutcome.HandedOff;
+            // 이미 열려 있다 — 아무 일도 하지 않는다 (§6.2).
+            return WorkspaceOpenResult.AlreadyOpen();
         }
 
-        // 뮤텍스는 잡혀 있는데 신호가 안 통한다(좀비) → 막지 않고 연다. 못 열게 하면 사용자에게
-        // 빠져나갈 길이 없다. 대신 §5.1 "실패·경고"로 남긴다 (§3.2-3).
+        // 뮤텍스는 잡혀 있는데 파이프 이름이 없다(좀비) → 막지 않고 연다. 못 열게 하면 사용자에게
+        // 빠져나갈 길이 없다. 대신 §5.1 "실패·경고"로 남긴다 (§6.2).
         var duplicate = _instanceLock is null;
 
         var window = ShowWorkspaceWindow(workspace);
         _holdsWorkspace = true;
         StartListener(pipeName, window);
+
+        // 새 창을 띄운 뒤에 선택 창을 닫는다. App.xaml 에 ShutdownMode 가 없어 기본값
+        // OnLastWindowClose 이므로, 먼저 닫으면 창이 0개가 되어 앱이 그대로 끝난다.
+        _launcherWindow?.Close();
+        _launcherWindow = null;
 
         if (duplicate)
         {
@@ -204,7 +192,7 @@ public partial class App : Application
             window.ViewModel.ReportNoSignal(failure);
         }
 
-        return OpenOutcome.Shown;
+        return WorkspaceOpenResult.Opened();
     }
 
     /// <summary>워크스페이스 창을 실제로 만든다.</summary>

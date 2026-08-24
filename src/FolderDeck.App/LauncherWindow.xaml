@@ -271,7 +271,7 @@
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0"
                                                     Visibility="{Binding IsUsable,
                                                         Converter={StaticResource BoolToVisibility}}">
-                                            <!-- 글씨가 곧 동작이다 (§4.1): 떠 있으면 "창 보이기", 아니면 "열기". -->
+                                            <!-- 글씨가 곧 동작이다 (§3.1): 떠 있으면 "열려 있음", 아니면 "열기". -->
                                             <Button Content="{Binding OpenButtonText}" Padding="20,5" FontWeight="SemiBold"
                                                     AutomationProperties.Name="{Binding OpenButtonText}"
                                                     Command="{Binding DataContext.OpenCommand,
@@ -279,11 +279,11 @@
                                                     CommandParameter="{Binding}">
                                                 <Button.Style>
                                                     <Style TargetType="Button">
-                                                        <Setter Property="ToolTip" Value="새 창으로 이 작업 관리를 연다." />
+                                                        <Setter Property="ToolTip" Value="이 작업 관리를 연다. 이 창이 그 창이 된다." />
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding IsOpen}" Value="True">
                                                                 <Setter Property="ToolTip"
-                                                                        Value="이미 떠 있는 창을 앞으로 가져온다 (닫혀 있었으면 새로 연다)." />
+                                                                        Value="이미 열려 있다. 눌러도 아무 일도 일어나지 않는다." />
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>

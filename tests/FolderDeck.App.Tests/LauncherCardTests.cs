@@ -1,3 +1,4 @@
+using FolderDeck.App.Services;
 using FolderDeck.App.ViewModels;
 using FolderDeck.Core.Models;
 using FolderDeck.Core.Storage;
@@ -140,7 +141,7 @@ public sealed class LauncherCardTests
     }
 
     [Fact]
-    public void AnOpenWorkspaceGetsTheBadgeAndTheShowButton()
+    public void AnOpenWorkspaceGetsTheBadgeAndTheAlreadyOpenLabel()
     {
         using var f = new LauncherFixture();
         var seeded = SeedMixed(f, "열림", pinned: 1, rotating: 0);
@@ -150,7 +151,7 @@ public sealed class LauncherCardTests
 
         var card = Assert.Single(f.ViewModel.Cards);
         Assert.True(card.IsOpen);
-        Assert.Equal("창 보이기", card.OpenButtonText);
+        Assert.Equal("열려 있음", card.OpenButtonText);
     }
 
     /// <summary>닫히면 배지가 사라지고 버튼이 "열기" 로 돌아온다 — 재검사는 활성화 때 돈다.</summary>
@@ -170,54 +171,54 @@ public sealed class LauncherCardTests
         Assert.Equal("열기", f.ViewModel.Cards[0].OpenButtonText);
     }
 
-    /// <summary>"창 보이기" 는 새 프로세스를 띄우지 않는다 — 신호만 보낸다 (§4.2).</summary>
+    /// <summary>이미 열린 것을 누르면 아무 일도 일어나지 않는다 (§6.2).</summary>
     [Fact]
-    public void ShowWindowSignalsInsteadOfStartingAProcess()
+    public void PressingAnAlreadyOpenWorkspaceDoesNothing()
     {
         using var f = new LauncherFixture();
         var seeded = SeedMixed(f, "앞으로", pinned: 1, rotating: 0);
         f.Signals.Listening.Add(seeded.Id);
         f.ViewModel.RefreshOpenState();
+        f.Host.NextResult = WorkspaceOpenResult.AlreadyOpen();
 
         f.ViewModel.Open(f.ViewModel.Cards[0]);
 
-        Assert.Equal(seeded.Id, Assert.Single(f.Signals.Sent));
         Assert.Empty(f.Opened);
         Assert.True(f.ViewModel.Cards[0].IsOpen);
+        Assert.Equal("열려 있음", f.ViewModel.Cards[0].OpenButtonText);
     }
 
     /// <summary>
-    /// 배지가 낡아 "열려 있음" 인데 실제로 닫혀 있었다 → 누르면 그냥 새로 연다
-    /// (§4.2 "판정은 누를 때").
+    /// 배지가 낡아 "열려 있음" 인데 실제로 닫혀 있었다 → host 가 실제 상태를 보고 연다 (§6.2).
     /// </summary>
     [Fact]
-    public void AStaleOpenBadgeStillOpensANewWindow()
+    public void AStaleOpenBadgeStillOpensTheWorkspace()
     {
         using var f = new LauncherFixture();
         var seeded = SeedMixed(f, "낡은 배지", pinned: 1, rotating: 0);
         f.Signals.Listening.Add(seeded.Id);
         f.ViewModel.RefreshOpenState();
-        Assert.Equal("창 보이기", f.ViewModel.Cards[0].OpenButtonText);
+        Assert.Equal("열려 있음", f.ViewModel.Cards[0].OpenButtonText);
 
-        // 재검사 없이 창이 닫혔다.
+        // 재검사 없이 창이 닫혔다. 배지는 낡았지만 판정은 host 가 한다.
         f.Signals.Listening.Remove(seeded.Id);
 
         f.ViewModel.Open(f.ViewModel.Cards[0]);
 
-        Assert.Equal(seeded.Id, Assert.Single(f.Signals.Sent));   // 먼저 신호를 시도했고
-        Assert.Equal(seeded.Id, Assert.Single(f.Opened));         // 실패해서 새로 열었다
+        Assert.Equal(seeded.Id, Assert.Single(f.Opened));
+        Assert.True(f.ViewModel.Cards[0].IsOpen);
     }
 
-    /// <summary>배지가 비었는데 실제로 열려 있었다 → 기존 창이 앞으로 온다 (§4.2).</summary>
+    /// <summary>배지가 비었는데 실제로 열려 있었다 → 열리지 않고 배지가 켜진다 (§6.2).</summary>
     [Fact]
-    public void AStaleEmptyBadgeStillActivatesTheExistingWindow()
+    public void AStaleEmptyBadgeStillDoesNothingWhenAlreadyOpen()
     {
         using var f = new LauncherFixture();
-        var seeded = SeedMixed(f, "몰랐던 창", pinned: 1, rotating: 0);
+        SeedMixed(f, "몰랐던 창", pinned: 1, rotating: 0);
         Assert.False(f.ViewModel.Cards[0].IsOpen);
 
-        // 재검사 없이 창이 떴다.
-        f.Signals.Listening.Add(seeded.Id);
+        // 재검사 없이 창이 떴다. 그것을 아는 것은 host 뿐이다.
+        f.Host.NextResult = WorkspaceOpenResult.AlreadyOpen();
 
         f.ViewModel.Open(f.ViewModel.Cards[0]);
 
@@ -247,7 +248,7 @@ public sealed class LauncherCardTests
     {
         using var f = new LauncherFixture();
         SeedMixed(f, "실패", pinned: 1, rotating: 0);
-        f.SelfLauncher.Error = "실행 파일을 찾을 수 없다";
+        f.Host.NextResult = WorkspaceOpenResult.Failed("실행 파일을 찾을 수 없다");
 
         f.ViewModel.Open(f.ViewModel.Cards[0]);
 
@@ -256,16 +257,24 @@ public sealed class LauncherCardTests
         Assert.False(f.ViewModel.Cards[0].IsOpen);
     }
 
-    /// <summary>런처가 여는 워크스페이스는 다음 실행의 자동 열기 대상이 된다.</summary>
+    /// <summary>
+    /// 여는 것은 host 몫이다 (§6.2 · Phase 6). `lastWorkspaceId` 는 워크스페이스를 연 그
+    /// 프로세스가 적고, 뷰모델은 <b>스스로 적지 않는다</b> — 두 곳에서 적던 분기가 없어졌다.
+    /// </summary>
+    /// <remarks>
+    /// 실제로 적는 자리는 <c>App.ShowWorkspaceWindow</c> 라 이 시험이 닿지 못한다(MTA 제약).
+    /// 그래서 여기서는 <b>뷰모델이 적지 않는다</b>는 음의 단언만 문다.
+    /// </remarks>
     [Fact]
-    public void OpeningRemembersTheLastWorkspace()
+    public void OpeningDelegatesToTheHostInsteadOfWritingTheLastWorkspace()
     {
         using var f = new LauncherFixture();
         var seeded = SeedMixed(f, "마지막", pinned: 1, rotating: 0);
 
         f.ViewModel.Open(f.ViewModel.Cards[0]);
 
-        Assert.Equal(seeded.Id, f.Settings.LastWorkspaceId);
+        Assert.Equal(seeded.Id, Assert.Single(f.Opened));
+        Assert.Null(f.Settings.LastWorkspaceId);
     }
 
     // ── 필터 ─────────────────────────────────────────────────────────────────

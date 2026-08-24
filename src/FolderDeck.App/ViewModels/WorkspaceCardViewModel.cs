@@ -68,10 +68,11 @@ public sealed partial class WorkspaceCardViewModel : ObservableObject
     private bool isOpen;
 
     /// <summary>
-    /// 버튼 글씨가 곧 동작이다 (§4.1) — "열기를 눌렀는데 새 창이 안 떴다"를 없애려는 것이다.
+    /// 버튼 글씨가 곧 동작이다 (§3.1) — 이미 열린 것을 눌러도 아무 일도 일어나지 않으므로
+    /// (§6.2), 누르기 전에 화면이 그것을 말해 "눌렀는데 아무 반응이 없다"는 순간을 없앤다.
     /// 배지의 색만으로 구분하지 않는다는 결(§3.2)도 여기서 지켜진다.
     /// </summary>
-    public string OpenButtonText => IsOpen ? "창 보이기" : "열기";
+    public string OpenButtonText => IsOpen ? "열려 있음" : "열기";
 
     /// <summary>
     /// 대표 경로 — 개발자는 경로로 워크스페이스를 알아본다. 첫 폴더가 있으면 그것,

@@ -26,7 +26,7 @@ public sealed partial class LauncherViewModel : ObservableObject
     private readonly IUserPrompt _prompt;
     private readonly IShellLauncher _shell;
     private readonly IInstanceSignals _signals;
-    private readonly ISelfLauncher _selfLauncher;
+    private readonly IWorkspaceHost _host;
     private readonly bool _settingsWritable;
 
     public LauncherViewModel(
@@ -36,7 +36,7 @@ public sealed partial class LauncherViewModel : ObservableObject
         IUserPrompt prompt,
         IShellLauncher shell,
         IInstanceSignals signals,
-        ISelfLauncher selfLauncher,
+        IWorkspaceHost host,
         bool settingsWritable = true)
     {
         _store = store;
@@ -44,7 +44,7 @@ public sealed partial class LauncherViewModel : ObservableObject
         _prompt = prompt;
         _shell = shell;
         _signals = signals;
-        _selfLauncher = selfLauncher;
+        _host = host;
         _settingsWritable = settingsWritable;
         Settings = settings;
         skipLauncher = settings.SkipLauncher;
@@ -211,14 +211,13 @@ public sealed partial class LauncherViewModel : ObservableObject
     }
 
     /// <summary>
-    /// "열기" / "창 보이기" — 버튼 글씨는 배지를 따르지만 <b>판정은 누를 때 한다</b> (§4.2).
-    /// 먼저 신호를 보내 보고, 받는 창이 있으면 그 창이 앞으로 온다. 없으면 새 프로세스를 띄운다.
+    /// "열기" — 고른 워크스페이스를 <b>이 프로세스에서</b> 연다 (§3.1). 이 창이 그대로 그
+    /// 워크스페이스 창이 되므로 새 프로세스를 띄우지 않는다.
     /// </summary>
     /// <remarks>
-    /// 이 순서라서 배지가 낡아도 맞는 동작이 나온다 — 배지가 "열려 있음"인데 실제로 닫혀
-    /// 있었으면 신호가 실패해 새로 열고, 배지가 비었는데 열려 있었으면 신호가 성공해 앞으로 온다.
-    /// 신호를 보내는 코드는 §3.4 의 공용 helper 하나뿐이다(런처는 프로세스를 띄워 곧 죽이는
-    /// 방식을 쓰지 않는다).
+    /// <b>이미 열려 있으면 아무 일도 하지 않는다</b> (§6.2). 판정은 <see cref="IWorkspaceHost"/>
+    /// 가 뮤텍스와 파이프 이름으로 하고, 여기서는 그 결과로 배지만 맞춘다 — 그래서 배지가
+    /// 낡아 있어도(§4.2 "힌트다") 동작은 어긋나지 않는다.
     /// </remarks>
     [RelayCommand]
     public void Open(WorkspaceCardViewModel? card)
@@ -228,40 +227,21 @@ public sealed partial class LauncherViewModel : ObservableObject
             return;
         }
 
-        var id = card.Workspace.Id;
-
-        if (_signals.TrySendActivate(id))
+        var result = _host.Open(card.Workspace.Id);
+        switch (result.Outcome)
         {
-            card.IsOpen = true;
-            Message = null;
-            return;
-        }
-
-        var error = _selfLauncher.OpenWorkspace(id);
-        if (error is not null)
-        {
-            card.IsOpen = false;
-            Message = $"열지 못했다: {error}";
-            return;
-        }
-
-        // 방금 띄운 프로세스가 자리를 잡기 전이라 아직 신호를 받을 수 없다. 배지는 힌트이므로
-        // 여기서 켜 둔다 — 다음 활성화 때 실제 상태로 다시 맞춰진다.
-        card.IsOpen = true;
-        Message = null;
-        RememberLastWorkspace(id);
-    }
-
-    /// <summary>
-    /// 다음 실행의 자동 열기 대상. 워크스페이스 프로세스도 자기 시작 때 같은 값을 쓰지만,
-    /// 여는 쪽에서 먼저 적어 둬야 런처가 나중에 설정을 저장할 때 낡은 값으로 덮지 않는다.
-    /// </summary>
-    private void RememberLastWorkspace(Guid id)
-    {
-        if (_settingsWritable && Settings.LastWorkspaceId != id)
-        {
-            Settings.LastWorkspaceId = id;
-            _store.SaveSettingsDebounced(Settings);
+            case WorkspaceOpenOutcome.Opened:
+                card.IsOpen = true;
+                Message = null;
+                break;
+            case WorkspaceOpenOutcome.AlreadyOpen:
+                card.IsOpen = true;
+                Message = "그 작업 관리는 이미 열려 있다.";
+                break;
+            default:
+                card.IsOpen = false;
+                Message = $"열지 못했다: {result.Message}";
+                break;
         }
     }
 

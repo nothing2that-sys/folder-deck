@@ -180,6 +180,29 @@ internal sealed class FakeSelfLauncher : ISelfLauncher
     }
 }
 
+/// <summary>
+/// 창을 띄우지 않고 무엇을 열려 했는지만 적는다 (§6.2). 실제 뮤텍스·파이프를 건드리지 않고
+/// "여는 시도가 어디로 갈라지는가"를 시험이 정해 준다.
+/// </summary>
+internal sealed class FakeWorkspaceHost : IWorkspaceHost
+{
+    /// <summary>실제로 연 워크스페이스 — 순서대로. 아무 일도 안 한 경우는 담기지 않는다.</summary>
+    public List<Guid> Opened { get; } = [];
+
+    /// <summary>다음에 돌려줄 결과. 기본은 "열었다".</summary>
+    public WorkspaceOpenResult NextResult { get; set; } = WorkspaceOpenResult.Opened();
+
+    public WorkspaceOpenResult Open(Guid workspaceId)
+    {
+        if (NextResult.Outcome == WorkspaceOpenOutcome.Opened)
+        {
+            Opened.Add(workspaceId);
+        }
+
+        return NextResult;
+    }
+}
+
 /// <summary>런처 뷰모델 + 격리된 <c>%APPDATA%</c> 대체 폴더.</summary>
 internal sealed class LauncherFixture : IDisposable
 {
@@ -196,9 +219,9 @@ internal sealed class LauncherFixture : IDisposable
         Prompt = new FakeUserPrompt();
         Shell = new FakeShellLauncher();
         Signals = new FakeInstanceSignals();
-        SelfLauncher = new FakeSelfLauncher();
+        Host = new FakeWorkspaceHost();
         ViewModel = new LauncherViewModel(
-            Store, Settings, Picker, Prompt, Shell, Signals, SelfLauncher, settingsWritable);
+            Store, Settings, Picker, Prompt, Shell, Signals, Host, settingsWritable);
     }
 
     public FolderDeckPaths Paths { get; }
@@ -215,10 +238,10 @@ internal sealed class LauncherFixture : IDisposable
 
     public FakeInstanceSignals Signals { get; }
 
-    public FakeSelfLauncher SelfLauncher { get; }
+    public FakeWorkspaceHost Host { get; }
 
-    /// <summary>새 프로세스로 열린 워크스페이스 — 워크스페이스당 프로세스 구조의 관찰점.</summary>
-    public List<Guid> Opened => SelfLauncher.Workspaces;
+    /// <summary>이 프로세스에서 열린 워크스페이스 — 창 갈아끼우기 구조의 관찰점 (§3.1).</summary>
+    public List<Guid> Opened => Host.Opened;
 
     public LauncherViewModel ViewModel { get; }
 
