@@ -236,12 +236,13 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         "이 작업 관리를 다시 열면 창이 하나 더 뜬다.");
 
     /// <summary>
-    /// 런처를 띄운다 (§5). 자동 열기(<c>skipLauncher</c>)가 켜져 있으면 인자 없는 실행이
-    /// 곧바로 워크스페이스로 가버리므로, 다른 작업 관리로 가는 길이 이 버튼이다.
+    /// 워크스페이스 선택 창을 새 프로세스로 띄운다 (§3.2 · Phase 6). 자동 열기
+    /// (<c>skipLauncher</c>)가 켜져 있으면 인자 없는 실행이 곧바로 이 창으로 가버리므로,
+    /// 다른 작업 관리로 가는 길이 이 버튼이다.
     /// </summary>
     /// <remarks>
-    /// <c>--launcher</c> 로 자기 자신을 띄운다. 런처가 이미 떠 있으면 그 프로세스가 §4.3 대로
-    /// 기존 런처를 앞으로 보내고 스스로 사라진다 — 여기서 따로 판단하지 않는다.
+    /// <c>--launcher</c> 로 자기 자신을 띄운다. 선택 창은 단일화하지 않으므로(§6.2) 누를 때마다
+    /// 새로 뜬다 — 여기서 따로 판단하지 않는다.
     /// </remarks>
     [RelayCommand]
     public void OpenLauncher()
@@ -249,11 +250,11 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         var error = _selfLauncher.OpenLauncher();
         if (error is not null)
         {
-            Warn($"런처를 띄우지 못했다: {error}");
+            Warn($"선택 창을 띄우지 못했다: {error}");
             return;
         }
 
-        Inform("런처를 띄웠다.");
+        Inform("선택 창을 띄웠다.");
     }
 
     // ── 창 위치 (§6.1 · Phase 4 Stage 2) ─────────────────────────────────────
