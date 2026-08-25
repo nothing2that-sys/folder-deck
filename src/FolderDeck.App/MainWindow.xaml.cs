@@ -40,6 +40,11 @@ public partial class MainWindow : Window
     private GridLength _foldersHeight = new(2, GridUnitType.Star);
     private GridLength _lowerHeight = new(1, GridUnitType.Star);
 
+    /// <summary>왼쪽 컬럼을 접기 전 모습 — 폭·하한·스플리터 칸. XAML 값을 그대로 받아 둔다.</summary>
+    private GridLength _leftColumnWidth;
+    private GridLength _leftSplitterWidth;
+    private double _leftColumnMinWidth;
+
     /// <summary>폴더 고르기 대화상자. 창이 든다 — 뷰모델로 새지 않는다 (D38).</summary>
     private readonly IFolderPicker _picker;
 
@@ -53,6 +58,11 @@ public partial class MainWindow : Window
         _messageTimer = new DispatcherTimer { Interval = TransientMessageLife };
         _messageTimer.Tick += OnMessageExpired;
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+
+        // 접기가 되돌릴 "펴진 모습"은 XAML 이 정한 값이다. 숫자를 여기 또 적지 않는다.
+        _leftColumnWidth = LeftColumn.Width;
+        _leftSplitterWidth = LeftSplitterColumn.Width;
+        _leftColumnMinWidth = LeftColumn.MinWidth;
 
         // 저장된 접힘 상태를 처음부터 반영한다.
         ApplyLeftRowHeights();
@@ -188,6 +198,44 @@ public partial class MainWindow : Window
             case nameof(MainViewModel.LowerCollapsed):
                 ApplyLeftRowHeights();
                 break;
+
+            case nameof(MainViewModel.LeftPanelCollapsed):
+                ApplyLeftPanelWidth();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// 왼쪽 컬럼 통째 접기 (Phase 8-A ⑦) — 컬럼 폭과 스플리터 칸을 0 으로 만든다.
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="ColumnDefinition.MinWidth"/> 도 같이 내려야 한다.</b> 폭만 0 으로 두면
+    /// 하한(220)이 이겨 접어도 빈 칸이 그대로 남는다. 스플리터 칸(6)도 같이 접지 않으면
+    /// 패널이 사라진 자리에 잡을 것 없는 띠만 남는다.
+    /// <para>
+    /// 바인딩이 아니라 여기서 정하는 이유는 <see cref="ApplyLeftRowHeights"/> 와 같다 —
+    /// <see cref="GridSplitter"/> 가 끌릴 때 로컬 값을 써서 바인딩을 지워 버린다. 그래서
+    /// 스플리터로 맞춰 둔 폭은 접기 직전에 기억했다가 펼 때 되돌린다.
+    /// </para>
+    /// </remarks>
+    private void ApplyLeftPanelWidth()
+    {
+        if (ViewModel.LeftPanelCollapsed)
+        {
+            if (LeftColumn.Width.IsStar)
+            {
+                _leftColumnWidth = LeftColumn.Width;
+            }
+
+            LeftColumn.MinWidth = 0;
+            LeftColumn.Width = new GridLength(0);
+            LeftSplitterColumn.Width = new GridLength(0);
+        }
+        else
+        {
+            LeftColumn.MinWidth = _leftColumnMinWidth;
+            LeftColumn.Width = _leftColumnWidth;
+            LeftSplitterColumn.Width = _leftSplitterWidth;
         }
     }
 

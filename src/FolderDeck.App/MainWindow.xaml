@@ -38,6 +38,15 @@
         <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{StaticResource Brush.Border}"
                 Background="{StaticResource Brush.Chrome}" Padding="8,5">
             <DockPanel>
+                <!-- 왼쪽 패널 통째 접기 (Phase 8-A ⑦). 패널 안 두 헤더의 접기와 별개다 —
+                     이쪽은 컬럼 자체를 없애 그리드가 창을 다 쓰게 한다. -->
+                <Button DockPanel.Dock="Left" Style="{StaticResource NavButton}"
+                        Margin="0,0,6,0"
+                        Command="{Binding ToggleLeftPanelCommand}"
+                        Content="{Binding LeftPanelToggleText}"
+                        ToolTip="{Binding LeftPanelToggleTip}"
+                        AutomationProperties.Name="왼쪽 패널 접기/펴기" />
+
                 <Button DockPanel.Dock="Left" Style="{StaticResource EditModeButton}"
                         Command="{Binding ToggleLayoutEditCommand}"
                         Content="{Binding EditToggleText}"
@@ -125,13 +134,18 @@
                      MaxWidth 는 넓은 모니터에서 폴더 리스트가 한없이 넓어지는 것만 막는
                      안전선이다 — 낮게 잡으면 그 폭부터는 다시 오른쪽만 변해서 고정 px 과
                      같아지므로, 손으로 넓히는 데 걸리지 않을 만큼 넉넉히 둔다. -->
-                <ColumnDefinition Width="1*" MinWidth="220" MaxWidth="520" />
-                <ColumnDefinition Width="6" />
+                <!-- 접을 때 폭을 0 으로 만드는 것은 코드 비하인드다(ApplyLeftPanelWidth) —
+                     행 높이와 같은 이유로 바인딩을 쓰지 않는다. GridSplitter 가 로컬 값을
+                     써 버려 바인딩이 지워지기 때문이다(아래 ApplyLeftRowHeights 주석). -->
+                <ColumnDefinition x:Name="LeftColumn" Width="1*" MinWidth="220" MaxWidth="520" />
+                <ColumnDefinition x:Name="LeftSplitterColumn" Width="6" />
                 <ColumnDefinition Width="3*" MinWidth="380" />
             </Grid.ColumnDefinitions>
 
             <!-- ══ 왼쪽 컬럼 — 상하 2분할 ══ -->
-            <Grid Grid.Column="0">
+            <Grid Grid.Column="0"
+                  Visibility="{Binding LeftPanelCollapsed,
+                               Converter={StaticResource InverseBoolToVisibility}}">
                 <!-- 접으면 본문만 숨기는 게 아니라 행 높이도 Auto 로 줄인다 — 안 그러면
                      접힌 영역이 빈 공간을 계속 차지한다. 접힘은 워크스페이스에 저장된다.
                      높이는 코드 비하인드가 정한다(ApplyLeftRowHeights). 바인딩으로 두면
@@ -589,7 +603,9 @@
             <GridSplitter Grid.Column="1" Width="6" VerticalAlignment="Stretch"
                           HorizontalAlignment="Stretch"
                           Style="{StaticResource ColumnSplitter}"
-                          ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" />
+                          ResizeDirection="Columns" ResizeBehavior="PreviousAndNext"
+                          Visibility="{Binding LeftPanelCollapsed,
+                                       Converter={StaticResource InverseBoolToVisibility}}" />
 
             <!-- ══ 오른쪽 컬럼 — 4x4 그리드 + 배치 편집 (§3.2 · Phase 2) ══ -->
             <views:TileGridView Grid.Column="2" Margin="2,4,6,4" />

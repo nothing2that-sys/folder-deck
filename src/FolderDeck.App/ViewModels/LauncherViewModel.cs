@@ -174,6 +174,20 @@ public sealed partial class LauncherViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowFilter));
     }
 
+    /// <summary>
+    /// 한 번 클릭 = 선택 (Phase 8-A ④). <b>고르는 것만으로는 아무 일도 하지 않는다</b> —
+    /// 여는 것은 더블클릭이거나 "열기" 버튼이다. 저장하지 않는 런타임 상태이며,
+    /// <see cref="Refresh"/> 가 카드를 다시 만들면 선택도 함께 사라진다.
+    /// </summary>
+    [RelayCommand]
+    public void Select(WorkspaceCardViewModel? card)
+    {
+        foreach (var other in _allCards)
+        {
+            other.IsSelected = ReferenceEquals(other, card);
+        }
+    }
+
     /// <summary>"수정" — 카드를 편집 모드로. 값은 바뀔 때마다 저장되므로 따로 커밋하지 않는다.</summary>
     [RelayCommand]
     public void ToggleEdit(WorkspaceCardViewModel? card)

@@ -1986,6 +1986,32 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     /// <summary>둘 중 하나라도 접히면 사이 스플리터는 의미가 없다.</summary>
     public bool ShowLeftSplitter => !FoldersCollapsed && !LowerCollapsed;
 
+    /// <summary>
+    /// 왼쪽 컬럼(폴더 · 대상함 · 매크로) 통째로 접힘 (Phase 8-A ⑦).
+    /// </summary>
+    /// <remarks>
+    /// <b>저장하지 않는다.</b> 위의 <see cref="FoldersCollapsed"/> · <see cref="LowerCollapsed"/>
+    /// 와 달리 <see cref="LeftLayoutSpec"/> 에 슬롯을 만들지 않았다 — 이 회차는 저장 스키마를
+    /// 건드리지 않기로 했고, 저장할지 말지는 아직 정해지지 않았다. 창을 다시 열면 펴진 상태다.
+    /// <para>
+    /// 안쪽 두 접힘 상태는 건드리지 않는다. 통째로 접었다 펴면 접기 전 모습 그대로 돌아온다.
+    /// </para>
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LeftPanelToggleText))]
+    [NotifyPropertyChangedFor(nameof(LeftPanelToggleTip))]
+    private bool leftPanelCollapsed;
+
+    /// <summary>글씨가 곧 동작이다 (§3.1) — 지금 누르면 무엇이 되는지를 적는다.</summary>
+    public string LeftPanelToggleText => LeftPanelCollapsed ? "▶" : "◀";
+
+    public string LeftPanelToggleTip => LeftPanelCollapsed
+        ? "왼쪽 패널(폴더 · 대상함 · 매크로) 펴기"
+        : "왼쪽 패널(폴더 · 대상함 · 매크로) 접기 — 그리드가 창을 다 쓴다";
+
+    [RelayCommand]
+    public void ToggleLeftPanel() => LeftPanelCollapsed = !LeftPanelCollapsed;
+
     [RelayCommand]
     public void ToggleFolders() => FoldersCollapsed = !FoldersCollapsed;
 

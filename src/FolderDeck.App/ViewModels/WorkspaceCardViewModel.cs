@@ -60,6 +60,13 @@ public sealed partial class WorkspaceCardViewModel : ObservableObject
     private bool isEditing;
 
     /// <summary>
+    /// 한 번 클릭으로 고른 카드 (Phase 8-A ④). <b>저장하지 않는 런타임 상태다</b> —
+    /// 고르는 것 자체는 아무 일도 하지 않고, 여는 것은 더블클릭이나 "열기" 버튼이다.
+    /// </summary>
+    [ObservableProperty]
+    private bool isSelected;
+
+    /// <summary>
     /// 이 워크스페이스 창이 지금 떠 있는가 (§4.2). <b>힌트다</b> — 런처 활성화 때 다시 재고,
     /// 실제 판정은 버튼을 누를 때 한다. 저장하지 않는 런타임 상태다.
     /// </summary>
@@ -125,7 +132,11 @@ public sealed partial class WorkspaceCardViewModel : ObservableObject
     /// <summary>폴더가 하나도 없는 워크스페이스 — 칩이 아무것도 없으면 그렇게 말한다.</summary>
     public bool HasNoFolders => Workspace is not null && Workspace.Folders.Count == 0;
 
-    public string MetaText
+    /// <summary>
+    /// 상시 폴더 이름을 한 줄로 (Phase 8-A ⑥ 3줄째). <see cref="PinnedChips"/> 와 같은 재료를
+    /// 같은 상한으로 자르되, 칩 여러 개가 줄바꿈해 카드를 늘리지 않도록 문자열 하나로 준다.
+    /// </summary>
+    public string PinnedNamesText
     {
         get
         {
@@ -134,13 +145,33 @@ public sealed partial class WorkspaceCardViewModel : ObservableObject
                 return string.Empty;
             }
 
-            var used = Workspace.LastUsed == default
-                ? "사용 기록 없음"
-                : $"마지막 사용 {Workspace.LastUsed.LocalDateTime:yyyy-MM-dd HH:mm}";
+            var pinned = Workspace.Folders.Where(f => f.Pinned).ToList();
+            if (pinned.Count == 0)
+            {
+                return string.Empty;
+            }
 
-            return $"폴더 {Workspace.Folders.Count} · {used}";
+            var shown = string.Join(" · ", pinned.Take(MaxPinnedChips).Select(NameOf));
+            var extra = pinned.Count - MaxPinnedChips;
+            return extra > 0 ? $"{shown} +{extra}" : shown;
         }
     }
+
+    public bool HasPinnedNames => PinnedNamesText.Length > 0;
+
+    /// <summary>마지막 사용 시각 한 조각 (⑥ 2줄째).</summary>
+    public string LastUsedText => Workspace is null
+        ? string.Empty
+        : Workspace.LastUsed == default
+            ? "사용 기록 없음"
+            : $"마지막 사용 {Workspace.LastUsed.LocalDateTime:yyyy-MM-dd HH:mm}";
+
+    /// <summary>폴더 개수 한 조각 (⑥ 2줄째).</summary>
+    public string FolderCountText => Workspace is null ? string.Empty : $"폴더 {Workspace.Folders.Count}";
+
+    /// <summary>두 조각을 합친 한 줄. 화면은 ⑥ 이후 조각을 따로 쓰지만 뜻은 같다.</summary>
+    public string MetaText =>
+        Workspace is null ? string.Empty : $"{FolderCountText} · {LastUsedText}";
 
     public string CorruptText =>
         "이 작업 관리 파일을 읽지 못했습니다. 다른 항목은 정상입니다.";

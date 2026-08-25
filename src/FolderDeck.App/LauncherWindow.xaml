@@ -21,8 +21,9 @@
         MinWidth/MinHeight 의 하한은 카드 하나가 온전히 보이는 크기다: 창 여백 28 +
         카드 테두리 2 + 패딩 24 + 버튼열 ≈ 94 + 버튼 여백 12 + 스크롤바 ≈ 17 = 177 이 고정이고,
         제목·설명·경로가 읽히려면 왼쪽에 300 은 있어야 한다. 520 은 거기에 여유를 둔 값이다.
-        높이 420 = 머리(제목·설명·필터) ≈ 100 + 카드 하나 ≈ 104 + 새로 만들기 폼 ≈ 52 +
-        발(자동 열기 토글) ≈ 30 + 창 여백 28 + 창 크롬 31 ≈ 345 에 여유.
+        높이 420 = 머리(제목·설명·필터) ≈ 100 + 카드 하나 + 새로 만들기 폼 ≈ 52 +
+        발(＋ 새 작업 공간 버튼 · 자동 열기 토글 한 줄) ≈ 32 + 창 여백 28 + 창 크롬 31 에 여유.
+        카드 하나는 Phase 8-A ⑥ 로 세 줄이 되어 전보다 낮아졌다 — 하한이 더 넉넉해졌다.
         런처는 창 위치를 저장하지 않으므로(§6.1) 값을 여기 직접 둔다 — 클램프하는 코드가 없다.
     -->
     <DockPanel Margin="14">
@@ -42,15 +43,27 @@
                      Visibility="{Binding ShowFilter, Converter={StaticResource BoolToVisibility}}" />
         </StackPanel>
 
-        <!-- ── 발: 자동 열기 토글 + 메시지 ── -->
+        <!-- ── 발: 하단 고정 바 (Phase 8-A ①②) ──
+                 만들기와 자동 열기 토글은 목록이 아무리 길어도 늘 같은 자리에 있어야 하므로
+                 스크롤 영역 밖 여기에 둔다. 버튼이 맨 왼쪽, 토글이 그 오른쪽이다. -->
         <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
             <TextBlock Text="{Binding Message}" Foreground="{StaticResource Brush.Danger}"
                        TextWrapping="Wrap" Margin="0,0,0,6"
                        Visibility="{Binding HasMessage, Converter={StaticResource BoolToVisibility}}" />
-            <CheckBox IsChecked="{Binding SkipLauncher}"
-                      IsEnabled="{Binding CanChangeSkipLauncher}"
-                      Content="마지막 작업을 자동으로 열기 (이 화면 건너뛰기)"
-                      ToolTip="켜면 다음 실행부터 곧바로 마지막 작업 관리가 열린다. 여기서 다시 끌 수 있다." />
+            <DockPanel>
+                <Button DockPanel.Dock="Left" Content="＋ 새 작업 공간" Padding="14,5"
+                        Margin="0,0,12,0" FontWeight="SemiBold"
+                        Command="{Binding StartCreateCommand}"
+                        AutomationProperties.Name="새 작업 공간 만들기"
+                        ToolTip="새 작업 공간을 만든다 — 목록과 이 줄 사이에 폼이 열린다."
+                        Visibility="{Binding IsCreating,
+                                     Converter={StaticResource InverseBoolToVisibility}}" />
+                <CheckBox IsChecked="{Binding SkipLauncher}"
+                          IsEnabled="{Binding CanChangeSkipLauncher}"
+                          VerticalAlignment="Center"
+                          Content="마지막 작업을 자동으로 열기 (이 화면 건너뛰기)"
+                          ToolTip="켜면 다음 실행부터 곧바로 마지막 작업 관리가 열린다. 여기서 다시 끌 수 있다." />
+            </DockPanel>
         </StackPanel>
 
         <!-- ── 새로 만들기 (인라인 폼) ── -->
@@ -106,7 +119,7 @@
         <Grid>
             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource Brush.TextSecondary}"
                        HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
-                       Text="저장된 작업 관리가 없다.&#x0a;아래 점선 타일로 첫 묶음을 만들면 된다."
+                       Text="저장된 작업 관리가 없다.&#x0a;아래 &#x0027;＋ 새 작업 공간&#x0027; 으로 첫 묶음을 만들면 된다."
                        Visibility="{Binding HasNoWorkspaces, Converter={StaticResource BoolToVisibility}}" />
 
             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource Brush.TextSecondary}"
@@ -119,13 +132,29 @@
                     <ItemsControl ItemsSource="{Binding Cards}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:WorkspaceCardViewModel}">
-                                <Border Margin="0,0,0,8" Padding="12" CornerRadius="4"
+                                <!-- 한 번 = 선택, 두 번 = 열기 (Phase 8-A ④). 안쪽 버튼·입력칸은
+                                     자기 클릭을 스스로 처리하므로 여기까지 올라오지 않는다 —
+                                     "열기"를 누르는 것이 곧 선택이 되어 버리지 않는다. -->
+                                <Border Margin="0,0,0,6" Padding="10" CornerRadius="4"
                                         Background="{StaticResource Brush.Surface}"
-                                        BorderThickness="1">
+                                        BorderThickness="1"
+                                        MouseLeftButtonDown="OnCardMouseDown">
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="BorderBrush" Value="{StaticResource Brush.Border}" />
                                             <Style.Triggers>
+                                                <!-- 고른 카드. 색만으로 구분하지 않는 결(§3.2)은 여기서
+                                                     테두리 두께가 함께 바뀌는 것으로 지킨다. -->
+                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                    <Setter Property="BorderBrush"
+                                                            Value="{StaticResource Brush.Accent}" />
+                                                    <Setter Property="BorderThickness" Value="2" />
+                                                    <Setter Property="Padding" Value="9" />
+                                                    <Setter Property="Background"
+                                                            Value="{StaticResource Brush.AccentSurface}" />
+                                                </DataTrigger>
+
+                                                <!-- 손상은 선택보다 세다 — 뒤에 두어 이긴다. -->
                                                 <DataTrigger Binding="{Binding IsCorrupt}" Value="True">
                                                     <Setter Property="BorderBrush"
                                                             Value="{StaticResource Brush.Danger}" />
@@ -147,14 +176,26 @@
                                                     Visibility="{Binding IsUsable,
                                                         Converter={StaticResource BoolToVisibility}}">
 
-                                            <!-- 제목 + "열려 있음" 배지 (§4.1 — 색만으로 구분하지 않으므로 글자가 있다) -->
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold"
+                                            <!-- ⑥ 1줄: 제목 + 설명 (+ "열려 있음" 배지).
+                                                 §4.1 — 색만으로 구분하지 않으므로 배지에 글자가 있다.
+                                                 제목 칸은 Auto 이되 상한을 둔다: 상한이 없으면 긴 제목이
+                                                 줄을 다 먹어 설명이 한 글자도 안 남는다. 240 은 창
+                                                 MinWidth(520)에서 왼쪽에 남는 ~300 을 기준으로 잡은 값이다. -->
+                                            <Grid Visibility="{Binding IsEditing,
+                                                      Converter={StaticResource InverseBoolToVisibility}}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" MaxWidth="240" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="{Binding Title}"
+                                                           FontSize="14" FontWeight="SemiBold"
                                                            TextTrimming="CharacterEllipsis"
-                                                           Visibility="{Binding IsEditing,
-                                                               Converter={StaticResource InverseBoolToVisibility}}" />
-                                                <Border Style="{StaticResource ChipBorder}" Margin="8,0,0,0"
-                                                        VerticalAlignment="Center"
+                                                           ToolTip="{Binding Title}" />
+
+                                                <Border Grid.Column="1" Style="{StaticResource ChipBorder}"
+                                                        Margin="6,0,0,0" VerticalAlignment="Center"
                                                         Background="{StaticResource Brush.RotatingSurface}"
                                                         BorderBrush="{StaticResource Brush.Rotating}"
                                                         Visibility="{Binding IsOpen,
@@ -162,7 +203,15 @@
                                                     <TextBlock Text="열려 있음" FontSize="10"
                                                                Foreground="{StaticResource Brush.Rotating}" />
                                                 </Border>
-                                            </StackPanel>
+
+                                                <TextBlock Grid.Column="2" Text="{Binding Description}"
+                                                           Margin="8,0,0,0" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding Description}"
+                                                           Foreground="{StaticResource Brush.TextSecondary}"
+                                                           Visibility="{Binding HasDescription,
+                                                               Converter={StaticResource BoolToVisibility}}" />
+                                            </Grid>
 
                                             <!-- 편집 모드: 제목·설명 인라인 수정 -->
                                             <StackPanel Visibility="{Binding IsEditing,
@@ -177,61 +226,37 @@
                                                          AutomationProperties.Name="설명 수정" />
                                             </StackPanel>
 
-                                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
-                                                       Margin="0,3,0,0"
-                                                       Foreground="{StaticResource Brush.TextSecondary}">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsEditing}" Value="True">
-                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding HasDescription}" Value="False">
-                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
+                                            <!-- ⑥ 2줄: 마지막 사용 시각 · 대표 폴더 경로 · 폴더 개수.
+                                                 경로가 가운데에서 남는 폭을 다 먹고 줄어들 때 먼저 잘린다 —
+                                                 양 끝의 두 조각은 짧고 길이가 거의 변하지 않기 때문이다. -->
+                                            <DockPanel Margin="0,4,0,0"
+                                                       Visibility="{Binding IsEditing,
+                                                           Converter={StaticResource InverseBoolToVisibility}}">
+                                                <TextBlock DockPanel.Dock="Left" Text="{Binding LastUsedText}"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource Brush.TextSecondary}" />
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding FolderCountText}"
+                                                           FontSize="11" Margin="8,0,0,0"
+                                                           Foreground="{StaticResource Brush.TextSecondary}" />
 
-                                            <!-- 경로는 1급 요소 — 개발자는 경로로 워크스페이스를 알아본다. -->
-                                            <TextBlock Text="{Binding PrimaryPath}" FontFamily="Consolas"
-                                                       FontSize="11" Margin="0,6,0,0"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       ToolTip="{Binding PrimaryPath}"
-                                                       Foreground="{StaticResource Brush.TextPrimary}" />
+                                                <!-- 경로는 1급 요소 — 개발자는 경로로 워크스페이스를 알아본다. -->
+                                                <TextBlock Text="{Binding PrimaryPath}" FontFamily="Consolas"
+                                                           FontSize="11" Margin="8,0,0,0"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding PrimaryPath}"
+                                                           Foreground="{StaticResource Brush.TextPrimary}" />
+                                            </DockPanel>
 
-                                            <!-- 폴더 구성 스트립: 상시 칩 + "+ 순환 N" -->
-                                            <ItemsControl ItemsSource="{Binding PinnedChips}" Margin="0,7,0,0">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate>
-                                                        <WrapPanel />
-                                                    </ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Border Style="{StaticResource ChipBorder}" Margin="0,0,4,4"
-                                                                Background="{StaticResource Brush.PinnedSurface}"
-                                                                BorderBrush="{StaticResource Brush.Pinned}"
-                                                                ToolTip="상시 표시 폴더">
-                                                            <TextBlock Text="{Binding}" FontSize="11" />
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                                <Border Style="{StaticResource ChipBorder}"
-                                                        Background="{StaticResource Brush.PinnedSurface}"
-                                                        BorderBrush="{StaticResource Brush.Pinned}"
-                                                        Visibility="{Binding HasMorePinned,
-                                                            Converter={StaticResource BoolToVisibility}}">
-                                                    <TextBlock Text="{Binding MorePinnedText}" FontSize="11" />
-                                                </Border>
-
-                                                <!-- 순환 칩은 점선 테두리 — 메인 창의 순환 칸과 같은 감각 -->
-                                                <Border Style="{StaticResource ChipBorder}"
+                                            <!-- ⑥ 3줄: 상시 폴더 이름 + 순환 개수.
+                                                 상시는 칩을 여러 개 늘어놓지 않고 한 줄 글로 접는다 —
+                                                 칩이 줄바꿈하면 카드가 다시 높아져 ⑥ 의 목적이 사라진다.
+                                                 순환만 칩으로 남긴다: 점선 테두리가 메인 창 순환 칸과
+                                                 같은 감각이고, 한 개뿐이라 줄을 넘기지 않는다. -->
+                                            <DockPanel Margin="0,4,0,0"
+                                                       Visibility="{Binding IsEditing,
+                                                           Converter={StaticResource InverseBoolToVisibility}}">
+                                                <Border DockPanel.Dock="Right" Style="{StaticResource ChipBorder}"
+                                                        Margin="8,0,0,0" VerticalAlignment="Center"
                                                         Background="{StaticResource Brush.RotatingSurface}"
                                                         BorderBrush="{StaticResource Brush.Rotating}"
                                                         ToolTip="상시로 지정되지 않은 폴더 — 순환 칸에서 번갈아 본다"
@@ -241,14 +266,18 @@
                                                                Foreground="{StaticResource Brush.Rotating}" />
                                                 </Border>
 
-                                                <TextBlock Text="등록된 폴더 없음" FontSize="11"
+                                                <TextBlock DockPanel.Dock="Left" Text="등록된 폴더 없음" FontSize="11"
                                                            Foreground="{StaticResource Brush.TextSecondary}"
                                                            Visibility="{Binding HasNoFolders,
                                                                Converter={StaticResource BoolToVisibility}}" />
-                                            </StackPanel>
 
-                                            <TextBlock Text="{Binding MetaText}" FontSize="11" Margin="0,4,0,0"
-                                                       Foreground="{StaticResource Brush.TextSecondary}" />
+                                                <TextBlock Text="{Binding PinnedNamesText}" FontSize="11"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding PinnedNamesText}"
+                                                           Foreground="{StaticResource Brush.Pinned}"
+                                                           Visibility="{Binding HasPinnedNames,
+                                                               Converter={StaticResource BoolToVisibility}}" />
+                                            </DockPanel>
                                         </StackPanel>
 
                                         <!-- ══ 읽지 못한 파일 — 열기/수정 없음 (§5) ══ -->
@@ -268,11 +297,14 @@
                                         </StackPanel>
 
                                         <!-- ══ 오른쪽: 액션 ══ -->
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0"
+                                        <!-- ⑤ 세로 → 가로. 세로로 쌓으면 버튼 셋의 높이가 카드 높이의
+                                             하한이 되어 ⑥ 으로 줄인 본문이 도로 벌어진다. -->
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                    VerticalAlignment="Center" Margin="12,0,0,0"
                                                     Visibility="{Binding IsUsable,
                                                         Converter={StaticResource BoolToVisibility}}">
                                             <!-- 글씨가 곧 동작이다 (§3.1): 떠 있으면 "열려 있음", 아니면 "열기". -->
-                                            <Button Content="{Binding OpenButtonText}" Padding="20,5" FontWeight="SemiBold"
+                                            <Button Content="{Binding OpenButtonText}" Padding="16,4" FontWeight="SemiBold"
                                                     AutomationProperties.Name="{Binding OpenButtonText}"
                                                     Command="{Binding DataContext.OpenCommand,
                                                                       RelativeSource={RelativeSource AncestorType=Window}}"
@@ -289,7 +321,7 @@
                                                     </Style>
                                                 </Button.Style>
                                             </Button>
-                                            <Button Padding="20,3" Margin="0,6,0,0"
+                                            <Button Padding="16,4" Margin="6,0,0,0"
                                                     Command="{Binding DataContext.ToggleEditCommand,
                                                                       RelativeSource={RelativeSource AncestorType=Window}}"
                                                     CommandParameter="{Binding}">
@@ -304,7 +336,7 @@
                                                     </Style>
                                                 </Button.Style>
                                             </Button>
-                                            <Button Content="삭제" Padding="20,3" Margin="0,6,0,0"
+                                            <Button Content="삭제" Padding="16,4" Margin="6,0,0,0"
                                                     ToolTip="작업 관리만 삭제 — 실제 폴더는 그대로"
                                                     Command="{Binding DataContext.DeleteCommand,
                                                                       RelativeSource={RelativeSource AncestorType=Window}}"
@@ -324,38 +356,6 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-
-                    <!-- 목록 끝의 점선 타일 = 새로 만들기 -->
-                    <Button Command="{Binding StartCreateCommand}" Cursor="Hand"
-                            HorizontalContentAlignment="Stretch" Margin="0,0,0,8"
-                            AutomationProperties.Name="새 작업 관리 만들기">
-                        <Button.Style>
-                            <Style TargetType="Button">
-                                <Setter Property="Background" Value="Transparent" />
-                                <Setter Property="BorderThickness" Value="0" />
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                            <Grid>
-                                                <Rectangle RadiusX="4" RadiusY="4" StrokeThickness="1"
-                                                           StrokeDashArray="4 3"
-                                                           Stroke="{StaticResource Brush.Border}"
-                                                           Fill="Transparent" />
-                                                <ContentPresenter Margin="12,14" HorizontalAlignment="Center" />
-                                            </Grid>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsCreating}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                        <TextBlock Text="＋ 새 작업 관리 만들기"
-                                   Foreground="{StaticResource Brush.TextSecondary}" />
-                    </Button>
                 </StackPanel>
             </ScrollViewer>
         </Grid>
