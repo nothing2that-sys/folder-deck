@@ -54,6 +54,11 @@ FolderDeck는 **한 프로젝트에 속한 여러 폴더를 위한 탐색기 여
 - 셸 아이콘은 **쓰지 않는다** — 후순위가 아니라 결정이다. 형제 앱과의 정합 조사에서 양쪽 다
   셸 아이콘·아이콘 폰트·이미지 리소스를 쓰지 않고 유니코드 글리프만 쓴다는 것이 확인됐고,
   그 어휘를 공통 규약으로 못박았다(`doc/FolderDeck_familylook_spec.md` §6).
+- **예외 하나 — 앱 아이콘(exe·창)은 이미지 리소스를 쓴다**(Phase 7 · D46).
+  `src/FolderDeck.App/Assets/FolderDeck.ico` 가 이 앱의 유일한 이미지 리소스다. 위 두 줄이
+  막는 것은 **창 안에 그리는** 아이콘이고 exe 자원은 그 범위가 아니다 — 설치본·작업 표시줄·
+  창 제목줄에 기본 아이콘으로 뜨는 것을 막을 다른 수단이 없다. **창 안은 여전히 글리프만 쓴다.**
+  (→ §12)
 - 별도 탐색기 창 제어(창 배치 복원): 자체 UI 방향으로 전환하며 폐기.
 - 매크로 소스의 패턴 매칭(`*.tmp` 등)은 v1에서 제외(§4.7).
 
@@ -1003,6 +1008,9 @@ Phase 4 착수 논의에서 추가했다. §4.2-2 의 드래그는 앱 안에서
   워크스페이스 창이 된다. 이미 열린 것을 고르면 아무 일도 하지 않는다. 워크스페이스당 프로세스
   하나·서로 다른 워크스페이스 동시 다중·배지·중복 방지는 그대로 살고, 파이프는 신호 통로에서
   **「열려 있다」는 표식**으로 뜻이 바뀐다 — **구현이 끝났다**(D40~D43).
+- **Phase 7 — 배포**: 자체 포함 게시 + 앱 아이콘 + 사용자별 설치 프로그램(§12) —
+  **구현이 끝났다**(D45~D47). 앱 동작은 한 줄도 바뀌지 않았다. 바뀐 것은 산출물 이름·
+  파일 속성·설치 수단뿐이다.
 
 > **Phase 3 진행 이력** — Stage 0(폴리시) → Stage 1(Core 엔진) → Stage 2(대상함 + 다중
 > 복사/이동) → Stage 3(드래그앤드롭 + 휴지통 + 폴더 재귀·진행·취소) → Stage 4(동일 이름
@@ -1146,3 +1154,87 @@ Phase 1을 한 번에 지시하지 말고 **10.2의 1 → 2 → 3 순서로 끊�
 - **최소 크기가 작업영역 축소보다 우선하는 경로** — 작업영역이 최소 크기(`640 x 480`)보다 작으면
   창을 최소 크기로 띄우고 화면 밖으로 넘긴다(§6.1). 이렇게 구현돼 있으나 작업영역을 그보다 작게
   만들 수 없어 이 경로에 도달하지 못했다. 우선순위 낮음.
+
+---
+
+## 12. 배포 & 설치 (Phase 7)
+
+> 이 절은 **앱 동작이 아니라 산출물**을 정한다. 코드 동작은 §1~§8 이 정한다.
+
+### 12.1 게시 산출물
+
+```
+dotnet publish src/FolderDeck.App/FolderDeck.App.csproj -c Release -r win-x64 \
+  --self-contained true -p:PublishSingleFile=false -p:DebugType=none \
+  -o artifacts/publish/win-x64
+```
+
+- **자체 포함(self-contained) · `win-x64`.** 배포 대상 PC 에 .NET 10 데스크톱 런타임이 있다는
+  보장이 없다. 프레임워크 의존으로 두면 설치 프로그램이 런타임 설치를 유도해야 하고 그것이
+  설치 실패의 가장 흔한 자리가 된다.
+- **`PublishSingleFile` 은 쓰지 않는다.** 설치 프로그램이 폴더째 놓으므로 파일 개수가 사용자
+  눈에 안 보인다. 대신 첫 실행 추출 지연과 `AppContext.BaseDirectory` 의미 변화를 떠안게 된다.
+- **`DebugType=none` 으로 `.pdb` 를 뺀다.** 사용자 PC 에 갈 이유가 없다.
+- **RID·자체 포함 설정을 `.csproj` 에 넣지 않는다.** 넣으면 `dotnet build` · `dotnet test` 까지
+  RID 별로 돌아 산출 경로가 바뀐다. 위 명령이 유일한 게시 수단이다.
+
+실측(D47) — **401 개 파일 · 146,514,031 바이트**.
+
+### 12.2 어셈블리 이름과 파일 속성
+
+`FolderDeck.App.csproj` 가 정한다 —
+
+| 속성 | 값 | 왜 |
+|---|---|---|
+| `AssemblyName` | `FolderDeck` | 없으면 산출물이 `FolderDeck.App.exe` 가 된다 |
+| `RootNamespace` | `FolderDeck.App` | `AssemblyName` 과 다르므로 명시해 둔다 |
+| `ApplicationIcon` | `Assets\FolderDeck.ico` | §1.2 의 예외. 창 아이콘도 이것을 따라간다(실측) |
+| `Company` · `Product` | `JH` · `Folder Deck` | exe 속성 창·작업 관리자 표시 |
+| `Version` | `1.0.0` | |
+
+**인스턴스 이름은 어셈블리 이름과 무관하다.** `InstanceNames.cs` 가 뮤텍스
+`Local\FolderDeck.{id}` · 파이프 `FolderDeck.s{세션}.{id}` 를 문자열 리터럴로 박아 둔다(§6.2).
+`AssemblyName` 을 바꿔도 §6.2 의 판정은 흔들리지 않는다. **바꾼다면 손댈 자리는 그 파일이다.**
+
+`global.json` 이 SDK 를 `10.0.204` · `rollForward: latestFeature` 로 고정한다.
+
+### 12.3 설치 프로그램
+
+`installer/FolderDeck.iss` — Inno Setup 7 로 컴파일한다.
+
+```
+& "C:\Program Files\Inno Setup 7\ISCC.exe" installer\FolderDeck.iss
+```
+
+- **사용자별 설치.** `DefaultDirName={localappdata}\FolderDeck\app` ·
+  `PrivilegesRequired=lowest` — UAC 승격이 없다(실측 확인). 형제 앱(TerminalDeck, Squirrel)도
+  사용자별로 깔린다.
+- 시작 메뉴 `{group}\Folder Deck`, 산출물 `artifacts/installer/FolderDeck-Setup.exe`.
+  실측 **46,485,750 바이트**.
+- **`.iss` 는 순수 ASCII 로 쓴다.** Inno Setup 7 이 BOM 없는 파일을 어떤 코드페이지로 읽는지
+  확인된 바 없다. 비ASCII 를 안 넣으면 그 문제가 생기지 않는다.
+- **예제에 실물로 나온 지시자만 쓴다.** `Examples\Example1.iss` 기준이다. 7 의 문법은 확인된
+  범위 밖이라 기억으로 지시자를 늘리지 않는다.
+
+**설치 위치는 앱 동작에 영향이 없다.** 데이터는 `%APPDATA%\FolderDeck`(§7) 이고 그 경로는
+`Environment.GetFolderPath` 로 만든다. exe 옆에 쓰는 코드가 저장소에 **0 건**이다(D45 실측).
+
+### 12.4 라이선스 판정
+
+Inno Setup 7.1.0 컴파일러가 배너에 `Non-commercial use only` 를 찍는다. 그러나 같은 사본의
+`LICENSE.TXT` 는 이렇게 적고 있다(실물 확인) —
+
+> Permission is granted to anyone to use this software for any purpose, including commercial
+> applications, and to alter and redistribute it
+
+**판정 — 상업 사용 허가됨. 유료 구매는 벤더의 요청이며 의무가 아니다.** 배너는 구매 요청
+표시로 본다. 남는 위험은 법이 아니라 사내 심사 기준이며 그것은 이 문서가 정할 것이 아니다.
+버전을 내려도 그 위험은 줄지 않는다 — 요청이 버전 불문이기 때문이다.
+
+### 12.5 하지 않은 것
+
+- **자동 갱신이 없다.** 새 판을 깔려면 설치본을 다시 받아 실행한다.
+- **코드 서명이 없다.** 처음 실행에 SmartScreen 경고가 뜰 수 있다.
+- **앱이 실행 중일 때 덮어쓰기가 어떻게 되는지 확인하지 않았다.** 401 개 중 `FolderDeck.exe`
+  가 잠긴 상태의 재설치는 밟아 본 적이 없다.
+- 설치본이 마법사 화면에 `Non-commercial` 문구를 보이는지 확인하지 않았다.
