@@ -226,7 +226,6 @@ public sealed class FolderCrudTests
 
         var reopened = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
 
-        Assert.Equal(5, reopened.SchemaVersion);
         Assert.Equal(Workspace.CurrentSchemaVersion, reopened.SchemaVersion);
 
         // 셋 다 파일까지 갔다 (5 - 1 + 1).

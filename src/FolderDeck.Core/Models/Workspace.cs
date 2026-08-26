@@ -24,9 +24,13 @@ public sealed class Workspace
     /// <c>window</c> 슬롯 자체는 v1 부터 있던 예약 자리라 채우는 것만으로는 버전이 오르지
     /// 않았고, 필드가 하나 는 것이 5 의 이유다. 없으면 <c>false</c>(최대화 아님) — v4 까지의
     /// 실제 동작 그대로다.
+    /// 6 — <c>leftLayout.leftPanelCollapsed</c>·<c>folders[].foldersFirst</c> 추가(Phase 8-E ①).
+    /// 2~5 와 같은 이유로 올린다: <b>필드가 늘었다</b>. 둘 다 없으면 기본값(펼침 · 폴더 먼저)이
+    /// 되고 그것이 8-E 전의 실제 동작이라 <b>구파일에 마이그레이션이 필요 없다</b> —
+    /// v1~v5 를 그대로 읽고 저장할 때 6 으로 승격한다.
     /// </para>
     /// </summary>
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 6;
 
     /// <summary>
     /// 스키마 버전은 저장소 소유다. 저장할 때 <see cref="CurrentSchemaVersion"/> 이 찍히고,

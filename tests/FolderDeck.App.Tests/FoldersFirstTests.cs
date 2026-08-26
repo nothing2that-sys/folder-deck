@@ -10,8 +10,8 @@ namespace FolderDeck.App.Tests;
 /// <b>기본값은 예전 동작이다</b> — 켜져 있고, 폴더가 위에 뭉친다. 끄는 길은
 /// <see cref="FolderPanelViewModel.ToggleFoldersFirstCommand"/> 하나이고 그것이 목록을 다시 읽는다.
 /// <para>
-/// <b>저장하지 않는다.</b> 워크스페이스 스키마에 슬롯을 새로 파지 않기로 했으므로 창을 다시
-/// 열면 켜진 상태로 돌아온다 — 아래 마지막 판이 그것을 못박는다.
+/// <b>폴더마다이고 저장된다</b> (Phase 8-E ① · <c>folders[].foldersFirst</c>). 8-B~8-D 동안에는
+/// 런타임 상태였다 — <see cref="TheChoiceSurvivesAReopen"/> 이 그 왕복이 없어진 것을 못박는다.
 /// </para>
 /// </remarks>
 public sealed class FoldersFirstTests
@@ -62,7 +62,7 @@ public sealed class FoldersFirstTests
     }
 
     /// <summary>
-    /// 저장되지 않는 상태라 화면이 말해 주지 않으면 알 길이 없다 — 메타 문구에 "통합"이 붙는다.
+    /// 화면이 말해 준다 — 메타 문구에 "통합"이 붙는다(헤더 1줄에서는 정렬 아이콘의 <c>∪</c>).
     /// </summary>
     [Fact]
     public async Task TheMetaLineSaysWhenItIsOff()
@@ -110,10 +110,14 @@ public sealed class FoldersFirstTests
     }
 
     /// <summary>
-    /// <b>저장하지 않는다.</b> 스키마에 슬롯이 없다 — 파일에는 정렬 기준·방향만 남는다.
+    /// <b>저장된다</b> (Phase 8-E ①). 8-B~8-D 동안에는 런타임 상태라 창을 다시 열면 켜진 채로
+    /// 돌아왔다 — <c>folders[].foldersFirst</c> 슬롯이 생기면서 그 왕복이 없어졌다.
     /// </summary>
+    /// <remarks>
+    /// 저장 통로는 정렬이 이미 쓰던 것 그대로다 — 새 경로를 만들지 않았다.
+    /// </remarks>
     [Fact]
-    public async Task TheChoiceIsNotWrittenToTheWorkspaceFile()
+    public async Task TheChoiceSurvivesAReopen()
     {
         using var f = new MainWindowFixture();
         await f.ViewModel.InitializeAsync();
@@ -130,13 +134,16 @@ public sealed class FoldersFirstTests
 
         await code.ToggleFoldersFirstCommand.ExecuteAsync(null);
 
-        Assert.Equal(0, saves);
+        // 정렬 변경과 같은 규칙 — 한 번 바꾸면 저장도 한 번이다.
+        Assert.Equal(1, saves);
 
         f.Store.Flush();
         var reloaded = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
         var entry = reloaded.Folders.Single(e => e.Path == f.CodePath);
 
-        // 이 폴더의 정렬 슬롯은 그대로다 — 통합 여부를 적은 자리가 없다.
+        Assert.False(entry.FoldersFirst);
+
+        // 옆 슬롯은 건드리지 않았다.
         Assert.Equal(SortBy.Name, entry.SortBy);
         Assert.False(entry.SortDesc);
     }

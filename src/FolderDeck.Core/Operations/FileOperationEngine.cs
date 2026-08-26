@@ -183,7 +183,9 @@ public sealed class FileOperationEngine(IRecycleBin recycleBin) : IFileOperation
     {
         var target = TargetOf(source, destination);
 
-        if (SamePath(source.Path, target))
+        // 제자리 복제(§4.3 「둘 다 두기」)만 이 관문을 지나간다 — 아래 Rename 가지가
+        // 새 이름을 지어 준다. 나머지는 지금 그대로 할 일이 없다.
+        if (!IsInPlaceDuplicate(request, source.Path, target) && SamePath(source.Path, target))
         {
             return skip("원본과 목적지가 같다");
         }
@@ -227,7 +229,10 @@ public sealed class FileOperationEngine(IRecycleBin recycleBin) : IFileOperation
     {
         var target = TargetOf(source, destination);
 
-        if (SamePath(source.Path, target))
+        // 파일 쪽과 같은 관문이다. 지나가면 아래 Rename 가지가 `sub` 를 `sub (2)` 로 만들고,
+        // 그 새 이름은 원본 <b>바깥</b>이라 아래 재귀 복사가 자기 꼬리를 먹지 않는다
+        // (CopyTree 는 원본 폴더만 훑는다).
+        if (!IsInPlaceDuplicate(request, source.Path, target) && SamePath(source.Path, target))
         {
             return skip("원본과 목적지가 같다");
         }
@@ -401,6 +406,29 @@ public sealed class FileOperationEngine(IRecycleBin recycleBin) : IFileOperation
     private static bool SamePath(string a, string b) =>
         string.Equals(Normalize(a), Normalize(b), StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// <b>제자리 복제</b>인가 — 원본이 목적지 폴더에 이미 있고, 복사이고, 「둘 다 두기」인가
+    /// (Phase 8-D ②).
+    /// </summary>
+    /// <remarks>
+    /// 이 셋이 다 맞을 때만 "원본과 목적지가 같다"는 건너뛰기를 지나간다. 지나가고 나면
+    /// <see cref="ConflictPolicy.Rename"/> 가 평소처럼 <see cref="UniqueName"/> 을 불러
+    /// <c>a.txt</c> 를 <c>a (2).txt</c> 로 만든다 — <b>새 이름 규칙을 만들지 않았다</b>.
+    /// <para>
+    /// <b>이동은 여기 들지 않는다.</b> 같은 폴더로 옮기면서 이름만 바꾸는 것은 이동이 아니라
+    /// 이름 바꾸기다(§4.6 이 따로 갖고 있다). 그래서 이동은 지금처럼 건너뛴다.
+    /// </para>
+    /// <para>
+    /// <b>덮어쓰기·건너뛰기도 들지 않는다.</b> 덮어쓰기는 자기를 자기로 덮는 것이라 할 일이
+    /// 없고, 건너뛰기는 이름이 겹칠 때 안 하겠다는 뜻이라 결론이 같다. 둘 다 지금 그대로다.
+    /// </para>
+    /// </remarks>
+    private static bool IsInPlaceDuplicate(FileOperationRequest request, string sourcePath, string target) =>
+        request.Op == FileOperationKind.Copy
+        && request.OnConflict == ConflictPolicy.Rename
+        && SamePath(sourcePath, target);
+
+
     private static bool SameVolume(string a, string b) =>
         string.Equals(Path.GetPathRoot(Path.GetFullPath(a)), Path.GetPathRoot(Path.GetFullPath(b)),
             StringComparison.OrdinalIgnoreCase);
@@ -418,6 +446,21 @@ public sealed class FileOperationEngine(IRecycleBin recycleBin) : IFileOperation
 
     private static string Normalize(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    /// <summary>
+    /// 「둘 다 두기」가 지을 이름을 <b>미리</b> 알려준다 (Phase 8-E ②).
+    /// </summary>
+    /// <remarks>
+    /// 확인창이 "a.txt → a (2).txt" 를 적으려면 그 이름을 알아야 하는데, <b>형식을 화면 쪽에
+    /// 다시 쓰면 두 곳이 어긋난다</b>. 그래서 실제로 쓰는 <see cref="UniqueName"/> 를 그대로
+    /// 연다 — 여는 것은 이 하나뿐이고 셈은 한 글자도 바뀌지 않았다.
+    /// <para>
+    /// <b>지금 파일 시스템을 본다.</b> 부른 시점에 비어 있는 첫 이름을 돌려주므로, 창을 띄운
+    /// 뒤 밖에서 같은 이름이 생기면 실제 결과가 달라질 수 있다. 한 뭉치 안의 항목들끼리는
+    /// 어긋나지 않는다 — 같은 폴더의 항목은 이름이 서로 달라 지어지는 이름도 겹치지 않는다.
+    /// </para>
+    /// </remarks>
+    public static string PreviewUniqueName(string target) => UniqueName(target);
 
     /// <summary>"a.txt" 가 있으면 "a (2).txt" — 탐색기와 같은 감각.</summary>
     private static string UniqueName(string target)

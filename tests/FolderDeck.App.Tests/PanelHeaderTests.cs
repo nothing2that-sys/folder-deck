@@ -60,6 +60,96 @@ public sealed class PanelHeaderTests
         Assert.Equal("1개", code.ItemCountText);
     }
 
+    // ── 선택 조각 (Phase 8-D ①) ──────────────────────────────────────────────
+
+    /// <summary>안 골랐으면 빈 문자열이다 — 구분점만 뜬 꼬리가 남지 않게.</summary>
+    [Fact]
+    public async Task NothingSelectedMeansNoSuffix()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var code = f.ViewModel.Panels[0];
+
+        Assert.False(code.HasSelection);
+        Assert.Equal(string.Empty, code.SelectionSuffix);
+    }
+
+    /// <summary>
+    /// 구분점은 이 조각이 들고 온다 — 앞의 개수와 한 줄로 붙기 때문이다.
+    /// 문구 자체는 <see cref="FolderPanelViewModel.SelectionText"/> 그대로다(새로 만들지 않았다).
+    /// </summary>
+    [Fact]
+    public async Task TheSuffixCarriesItsOwnSeparator()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var code = f.ViewModel.Panels[0];
+        code.SelectedItems = [.. code.Items.Take(2)];
+
+        Assert.Equal("2개 선택", code.SelectionText);
+        Assert.Equal(" · 2개 선택", code.SelectionSuffix);
+
+        // 화면에 그려지는 줄 = 개수 + 이 조각.
+        Assert.Equal("3개 · 2개 선택", code.ItemCountText + code.SelectionSuffix);
+    }
+
+    [Fact]
+    public async Task TheSuffixIsAnnouncedWhenTheSelectionChanges()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var code = f.ViewModel.Panels[0];
+        var seen = new List<string?>();
+        code.PropertyChanged += (_, e) => seen.Add(e.PropertyName);
+
+        code.SelectedItems = [code.Items[0]];
+
+        Assert.Contains(nameof(FolderPanelViewModel.SelectionSuffix), seen);
+    }
+
+    /// <summary>
+    /// 선택을 풀면 조각도 사라진다 — 줄이 생겼다 없어지는 것이 아니라 글자만 짧아진다.
+    /// </summary>
+    [Fact]
+    public async Task ClearingTheSelectionShortensTheLineInsteadOfRemovingIt()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var code = f.ViewModel.Panels[0];
+        code.SelectedItems = [code.Items[0]];
+        Assert.NotEqual(string.Empty, code.SelectionSuffix);
+        Assert.False(code.HasStatusLine);
+
+        code.ClearSelection();
+
+        Assert.Equal(string.Empty, code.SelectionSuffix);
+        Assert.False(code.HasStatusLine);
+    }
+
+    /// <summary>
+    /// 앵커 밖은 2줄에 그대로 남는다 — 고르는 동작과 무관하게 바뀌므로 손 아래에서 뛰지 않는다.
+    /// </summary>
+    [Fact]
+    public async Task LeavingTheAnchorStillUsesTheSecondLine()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var code = f.ViewModel.Panels[0];
+        await code.NavigateToCommand.ExecuteAsync(System.IO.Path.Combine(f.CodePath, "Recipe"));
+
+        Assert.True(code.IsAwayFromAnchor);
+        Assert.True(code.HasStatusLine);
+
+        // 거기서 골라도 줄 수는 그대로다.
+        code.SelectedItems = [code.Items[0]];
+        Assert.True(code.HasStatusLine);
+    }
+
     // ── 뷰 방식 아이콘 ───────────────────────────────────────────────────────
 
     /// <summary>list 는 줄 셋, details 는 격자. 유니코드 글리프만 쓴다 (§1.2).</summary>
@@ -258,20 +348,24 @@ public sealed class PanelHeaderTests
         Assert.False(code.HasStatusLine);
     }
 
+    /// <summary>
+    /// <b>고른다고 2줄이 생기지 않는다</b> (Phase 8-D ①). 이 줄은 있다 없다 하는 줄이라,
+    /// 고르는 순간 헤더가 한 줄 자라고 풀면 줄어 <b>목록이 손 아래에서 뛰었다</b>.
+    /// 선택은 늘 있는 1줄로 올라갔다 — <see cref="FolderPanelViewModel.SelectionSuffix"/>.
+    /// </summary>
     [Fact]
-    public async Task SelectingSomethingBringsTheStatusLineBack()
+    public async Task SelectingSomethingDoesNotChangeTheHeaderHeight()
     {
         using var f = new MainWindowFixture();
         await f.ViewModel.InitializeAsync();
 
         var code = f.ViewModel.Panels[0];
-        var seen = new List<string?>();
-        code.PropertyChanged += (_, e) => seen.Add(e.PropertyName);
+        Assert.False(code.HasStatusLine);
 
         code.SelectedItems = [code.Items[0]];
 
-        Assert.True(code.HasStatusLine);
-        Assert.Contains(nameof(FolderPanelViewModel.HasStatusLine), seen);
+        Assert.True(code.HasSelection);
+        Assert.False(code.HasStatusLine);
 
         code.SelectedItems = [];
         Assert.False(code.HasStatusLine);

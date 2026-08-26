@@ -64,8 +64,10 @@ public partial class MainWindow : Window
         _leftSplitterWidth = LeftSplitterColumn.Width;
         _leftColumnMinWidth = LeftColumn.MinWidth;
 
-        // 저장된 접힘 상태를 처음부터 반영한다.
+        // 저장된 접힘 상태를 처음부터 반영한다. 통째 접기는 8-E ① 에서 저장 대상이 되면서
+        // 여기 같이 붙었다 — 그 전에는 시작할 때 늘 펴져 있어 되돌릴 것이 없었다.
         ApplyLeftRowHeights();
+        ApplyLeftPanelWidth();
 
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }

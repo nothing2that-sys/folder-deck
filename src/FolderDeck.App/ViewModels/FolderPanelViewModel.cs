@@ -106,6 +106,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(SortTip))]
     [NotifyPropertyChangedFor(nameof(HasStatusLine))]
     [NotifyPropertyChangedFor(nameof(MetaSortText))]
+    [NotifyPropertyChangedFor(nameof(FoldersFirst))]
     [NotifyPropertyChangedFor(nameof(SortLabel))]
     [NotifyPropertyChangedFor(nameof(SortArrow))]
     // 컬럼 머리글도 Entry 를 읽는다 (Phase 8-B ①) — 순환 칸이 다른 폴더로 갈아탈 때
@@ -197,13 +198,27 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// </remarks>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection))]
-    [NotifyPropertyChangedFor(nameof(HasStatusLine))]
     [NotifyPropertyChangedFor(nameof(SelectionText))]
+    [NotifyPropertyChangedFor(nameof(SelectionSuffix))]
     private IReadOnlyList<FileItemViewModel> selectedItems = [];
 
     public bool HasSelection => SelectedItems.Count > 0;
 
     public string? SelectionText => HasSelection ? $"{SelectedItems.Count}개 선택" : null;
+
+    /// <summary>
+    /// 개수 뒤에 이어 붙는 선택 조각 — " · 2개 선택" (Phase 8-D ①).
+    /// </summary>
+    /// <remarks>
+    /// <b>구분점을 이 조각이 들고 온다.</b> 앞의 <see cref="ItemCountText"/> 와 한 줄로 붙으므로
+    /// 구분점을 XAML 에 두면 선택이 없을 때 점만 뜬 꼬리가 남는다(런처 카드 3줄째와 같은 규칙).
+    /// <para>
+    /// 이 조각이 생기는 자리는 헤더 <b>1줄</b>이다. 8-C 까지는 2줄째에 있었는데, 그 줄이
+    /// 있을 때만 뜨는 줄이라 <b>고르는 순간 헤더가 한 줄 자라고 풀면 다시 줄었다</b> —
+    /// 목록을 고르는 손 아래에서 목록이 위아래로 뛰었다. 1줄은 늘 있으므로 글자만 길어진다.
+    /// </para>
+    /// </remarks>
+    public string SelectionSuffix => HasSelection ? $" · {SelectionText}" : string.Empty;
 
     /// <summary>선택을 푼다. 뷰가 목록에서 실제로 풀도록 이벤트로도 알린다.</summary>
     public void ClearSelection()
@@ -478,13 +493,18 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         + " — 눌러서 기준 변경. 재귀 검색 중에는 잠긴다(결과가 찾은 순서대로 나온다).";
 
     /// <summary>
-    /// 헤더 2줄째를 띄울 것이 있는가 (Phase 8-C ③).
+    /// 헤더 2줄째를 띄울 것이 있는가 (Phase 8-C ③ · 8-D ①).
     /// </summary>
     /// <remarks>
-    /// 셋 다 <b>지금 벌어지고 있는 일</b>이라 평소에는 하나도 없다 — 그때 줄을 통째로 접어
+    /// 둘 다 <b>지금 벌어지고 있는 일</b>이라 평소에는 하나도 없다 — 그때 줄을 통째로 접어
     /// 헤더 높이를 돌려준다. 1x1 타일에서는 그 한 줄이 목록 두 행쯤 된다.
+    /// <para>
+    /// <b>선택은 8-D ① 에서 빠졌다.</b> 그것만 1줄로 올라갔기 때문이고, 이유는 이 줄이
+    /// <b>있다 없다 하는 줄</b>이라서다 — 고르는 순간 헤더가 자라 목록이 손 아래에서 뛰었다.
+    /// 남은 둘은 고르는 동작과 무관하게 바뀌므로 그 자리에 둔다.
+    /// </para>
     /// </remarks>
-    public bool HasStatusLine => IsAwayFromAnchor || HasSelection || IsLoading;
+    public bool HasStatusLine => IsAwayFromAnchor || IsLoading;
 
     /// <summary>
     /// 메타의 가운데 조각 — 뷰 방식. <b>눌러서 뒤집는 글자</b>다(§3.2 · Stage 3D).
@@ -521,32 +541,35 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public string ModifiedHeaderText => HeaderTextFor(SortBy.Modified, "수정");
 
     /// <summary>
-    /// 폴더를 파일보다 항상 위에 둘지 (Phase 8-B ②). <b>저장하지 않는 런타임 상태다</b> —
-    /// 워크스페이스 스키마에 슬롯을 새로 파지 않기로 했으므로 창을 다시 열면 기본값으로 돌아온다.
+    /// 폴더를 파일보다 항상 위에 둘지 (Phase 8-B ② · §7.1 <c>folders[].foldersFirst</c>).
     /// </summary>
     /// <remarks>
     /// 기본값 <c>true</c> 가 이 앱이 원래 하던 동작이다(탐색기 감각). 끄면 폴더와 파일이 한
     /// 덩어리로 정렬된다 — "오늘 건드린 것"을 수정 기준으로 볼 때 폴더가 위에 뭉쳐 있으면
     /// 방해가 된다는 것이 끄는 이유다.
     /// <para>
+    /// <b>8-E ① 에서 저장 대상이 됐다.</b> 그 전에는 런타임 상태라 창을 다시 열면 켜진 채로
+    /// 돌아왔다. 지금은 <see cref="SortBy"/>·<c>SortDesc</c>·<c>ViewMode</c> 와 같은 자리
+    /// (<see cref="Entry"/>)에 있고 같은 통로로 저장된다 — <b>폴더마다</b>다.
+    /// </para>
+    /// <para>
     /// 값을 바꾸는 길은 <see cref="ToggleFoldersFirstCommand"/> 하나다 — 그것이 목록을 다시
-    /// 읽는다. 이 프로퍼티에 직접 쓰면 문구만 바뀌고 목록은 옛 순서로 남는다.
+    /// 읽는다. <see cref="Entry"/> 에 직접 쓰면 문구만 바뀌고 목록은 옛 순서로 남는다.
     /// </para>
     /// </remarks>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MetaSortText))]
-    [NotifyPropertyChangedFor(nameof(MetaText))]
-    [NotifyPropertyChangedFor(nameof(SortIcon))]
-    [NotifyPropertyChangedFor(nameof(SortTip))]
-    private bool foldersFirst = true;
+    public bool FoldersFirst => Entry?.FoldersFirst ?? true;
 
     /// <summary>
     /// "폴더 먼저"를 끄고 켠다 (Phase 8-B ② · 정렬 메뉴 아래칸).
     /// </summary>
     /// <remarks>
-    /// <see cref="SetSortAsync"/> 와 <b>같은 결</b>이다 — 값을 바꾸고, 문구를 알리고, 목록을 다시
-    /// 읽는다. 다른 점은 저장하지 않는다는 것뿐이다(스키마에 슬롯이 없다). 선택도 비우지 않는다:
+    /// <see cref="SetSortAsync"/> 와 <b>같은 결</b>이다 — 값을 바꾸고, 문구를 알리고, 저장하고,
+    /// 목록을 다시 읽는다(8-E ① 에서 저장이 붙어 이제 다른 점이 없다). 선택도 비우지 않는다:
     /// 갈리는 것은 순서뿐이고 <see cref="RefreshAsync"/> 가 고른 것을 경로로 다시 잡아 준다(§4.8).
+    /// <para>
+    /// <b>저장은 <c>await</c> 앞이다</b> — <see cref="SetSortAsync"/> 와 같은 이유로, 고른 값은
+    /// 열거가 취소되거나 폴더를 못 읽어도 남아야 한다.
+    /// </para>
     /// </remarks>
     [RelayCommand(AllowConcurrentExecutions = true)]
     public async Task ToggleFoldersFirstAsync()
@@ -556,10 +579,10 @@ public sealed partial class FolderPanelViewModel : ObservableObject
             return;
         }
 
-        // [NotifyPropertyChangedFor] 가 MetaSortText·MetaText 는 챙기지만 컬럼 머리글은
-        // Entry 를 읽으므로 여기서 같이 알린다 — 정렬 컬럼이 안 바뀌어도 통지는 값싸다.
-        FoldersFirst = !FoldersFirst;
+        Entry.FoldersFirst = !Entry.FoldersFirst;
         NotifySortChanged();
+
+        SaveFolderEntry?.Invoke();
 
         await RefreshAsync().ConfigureAwait(true);
     }
@@ -574,6 +597,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// </remarks>
     private void NotifySortChanged()
     {
+        OnPropertyChanged(nameof(FoldersFirst));
         OnPropertyChanged(nameof(SortLabel));
         OnPropertyChanged(nameof(SortArrow));
         OnPropertyChanged(nameof(MetaSortText));

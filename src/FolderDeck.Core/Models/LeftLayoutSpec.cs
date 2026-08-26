@@ -17,4 +17,18 @@ public sealed class LeftLayoutSpec
 
     /// <summary>아래쪽 대상함/매크로 탭 영역이 접혀 있는가.</summary>
     public bool LowerCollapsed { get; set; }
+
+    /// <summary>
+    /// 왼쪽 컬럼이 <b>통째로</b> 접혀 있는가 (schemaVersion 6 · Phase 8-A ⑦ → 8-E ①).
+    /// </summary>
+    /// <remarks>
+    /// 위 둘은 이 컬럼 <b>안</b>의 두 칸을 접고, 이것은 컬럼 자체를 없애 그리드가 창을 다 쓰게
+    /// 한다. 셋 다 사용자가 손으로 접은 것이라 성격이 같은데 <b>바깥 하나만 저장되지 않았다</b> —
+    /// 8-A 가 저장 스키마를 열지 않기로 해서 남은 자리이고, 여기서 같은 칸에 넣는다.
+    /// <para>
+    /// 키가 없는 구파일은 <c>false</c>(펼침)로 읽힌다 — 8-E 전의 동작 그대로다(창을 열면
+    /// 늘 펴져 있었다). 안쪽 두 값과 독립이라, 통째로 접었다 펴면 접기 전 모습이 그대로 돌아온다.
+    /// </para>
+    /// </remarks>
+    public bool LeftPanelCollapsed { get; set; }
 }

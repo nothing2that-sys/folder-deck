@@ -427,10 +427,24 @@
                          Auto 열을 새로 만들지 않은 이유도 같다: 열을 만들면 개수가 이름 칸의
                          MinWidth 를 밀어 내비 아이콘이 잘리는 옛 사고로 돌아간다. -->
                     <DockPanel Grid.Column="0">
-                        <TextBlock DockPanel.Dock="Right" Text="{Binding ItemCountText}"
+                        <!-- 개수 + 선택 (Phase 8-C ③ · 8-D ①).
+
+                             선택 조각이 2줄째에서 여기로 붙었다. 저쪽은 <b>있다 없다 하는 줄</b>
+                             이라 고르는 순간 헤더가 한 줄 자라고 풀면 줄었다 — 목록을 고르는
+                             손 아래에서 목록이 뛰었다. 이 줄은 늘 있으므로 글자만 길어진다.
+                             굵기만 바꾸는 것은 줄 높이를 건드리지 않는다(글자 크기가 같다).
+
+                             Run 사이에 줄바꿈을 두지 않는다: TextBlock 안에서 요소 사이의
+                             공백은 공백 한 칸으로 살아남아 점 앞이 벌어진다. 그래서 /><Run 이
+                             붙어 있고, 구분점은 SelectionSuffix 가 들고 온다. -->
+                        <TextBlock DockPanel.Dock="Right"
                                    Margin="6,0,4,0" VerticalAlignment="Center" FontSize="11"
                                    Foreground="{StaticResource Brush.TextSecondary}"
-                                   ToolTip="{Binding MetaText}" />
+                                   ToolTip="{Binding MetaText}"><Run
+                                       Text="{Binding ItemCountText, Mode=OneWay}" /><Run
+                                       Text="{Binding SelectionSuffix, Mode=OneWay}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource Brush.Accent}" /></TextBlock>
 
                     <!-- breadcrumb: 첫 조각(앵커) 클릭 = 앵커 복귀. 우클릭 = 현재 경로 복사. -->
                     <ItemsControl ItemsSource="{Binding Breadcrumbs}"
@@ -511,11 +525,6 @@
                     <TextBlock Text="앵커 밖" Foreground="{StaticResource Brush.Rotating}"
                                FontSize="11" VerticalAlignment="Center"
                                Visibility="{Binding IsAwayFromAnchor,
-                                                    Converter={StaticResource BoolToVisibility}}" />
-                    <TextBlock Text="{Binding SelectionText}" FontSize="11" Margin="6,0,0,0"
-                               VerticalAlignment="Center" FontWeight="SemiBold"
-                               Foreground="{StaticResource Brush.Accent}"
-                               Visibility="{Binding HasSelection,
                                                     Converter={StaticResource BoolToVisibility}}" />
                     <TextBlock Text="읽는 중…" Foreground="{StaticResource Brush.TextSecondary}"
                                FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"

@@ -1508,15 +1508,58 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         string destinationPath, IReadOnlyList<OperationItem> items)
     {
         // ② 폴더를 자기 자신이나 자기 하위로 넣으면 무한히 자란다.
-        if (items.Any(i => i.IsDirectory
-                           && (SamePath(destinationPath, i.Path) || IsUnder(destinationPath, i.Path))))
+        if (WouldSwallowDestination(destinationPath, items))
         {
             return [];
         }
 
         // ① 항목이 온 곳이 목적지와 같으면 무동작이다 — 그 항목만 뺀다.
-        return [.. items.Where(i => !SamePath(destinationPath, ParentFolder(i.Path)))];
+        return [.. items.Where(i => !CameFrom(destinationPath, i))];
     }
+
+    /// <summary>
+    /// ② 목적지를 삼키는 폴더가 섞여 있는가 — <b>뭉치째 거절</b>이다.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="AcceptedForDrop"/> 안에 있던 판정을 <b>이름만 붙여</b> 꺼냈다 (Phase 8-D ②).
+    /// 같은 폴더 붙여넣기는 ① 을 일부러 지나가야 하지만 ② 는 여전히 막아야 하는데,
+    /// <see cref="AcceptedForDrop"/> 은 둘 다 빈 목록으로 돌려주어 갈라 볼 수 없다.
+    /// 셈은 한 글자도 바뀌지 않았다.
+    /// </remarks>
+    private static bool WouldSwallowDestination(
+        string destinationPath, IReadOnlyList<OperationItem> items) =>
+        items.Any(i => i.IsDirectory
+                       && (SamePath(destinationPath, i.Path) || IsUnder(destinationPath, i.Path)));
+
+    /// <summary>① 이 항목이 온 곳이 목적지와 같은가.</summary>
+    private static bool CameFrom(string destinationPath, OperationItem item) =>
+        SamePath(destinationPath, ParentFolder(item.Path));
+
+    /// <summary>
+    /// <b>같은 폴더 붙여넣기</b>인가 — 클립보드의 <b>모든</b> 항목이 목적지에서 왔는가
+    /// (Phase 8-D ②).
+    /// </summary>
+    /// <remarks>
+    /// <b>판정 단위는 항목이 아니라 뭉치다.</b> ①(<see cref="AcceptedForDrop"/>)은 항목 단위인데
+    /// 여기서 그것을 따르지 않는 이유가 있다: <b>정책은 조작 하나에 하나</b>다
+    /// (<see cref="Core.Operations.FileOperationRequest.OnConflict"/> 가 하나다). 항목마다 정책을
+    /// 갈라 붙이려면 한 번의 붙여넣기가 두 번의 조작이 되고 결과 보고도 둘이 되어 뒤가 앞을
+    /// 덮는다 — 한 번 누른 것이 두 번 일어난 것처럼 보인다.
+    /// <para>
+    /// <b>혼합 뭉치(일부만 같은 폴더)는 지금 동작 그대로다.</b> 이 판정이 <c>false</c> 라
+    /// 아래 기존 경로로 내려가고, 거기서 ① 이 같은 폴더 항목만 빼고 나머지를 §4.3 규칙으로
+    /// 붙여넣는다. 빠진 건수는 <c>sameFolderSkipped</c> 로 세어 결과에 적히므로 조용히
+    /// 사라지지 않는다. 혼합은 재귀 검색 결과를 골라 복사했을 때 생긴다(§4.10) — 드문 자리다.
+    /// </para>
+    /// <para>
+    /// 경로 비교는 새로 만들지 않았다 — ① 이 쓰는 <see cref="SamePath"/> ·
+    /// <see cref="ParentFolder"/> 그대로다(대소문자 무시 · 전체 경로 · 꼬리 구분자 무시).
+    /// 그래서 두 판정이 어긋날 수 없다.
+    /// </para>
+    /// </remarks>
+    private static bool IsSameFolderPaste(
+        string destinationPath, IReadOnlyList<OperationItem> items) =>
+        items.Count > 0 && items.All(i => CameFrom(destinationPath, i));
 
     /// <summary>
     /// 항목이 온 폴더. 부모가 없는 루트면 자기 자신을 돌려준다 — 루트에 놓는 경우는
@@ -1616,6 +1659,40 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             return;
         }
 
+        // ── 같은 폴더 붙여넣기 = 제자리 복제 (Phase 8-D ②) ────────────────────
+        //
+        // 여기까지 온 뭉치가 <b>전부</b> 목적지에서 왔으면 ① 이 그것을 다 빼서 아래
+        // CanDropOnto 가 거절한다 — 8-D 전에는 그 자리에서 "붙여넣을 것이 없다"로 끝났다.
+        // 탐색기는 그때 사본을 만든다. 그것을 §4.3 의 「둘 다 두기」로 그대로 준다.
+        //
+        // <b>묻지 않고, 저장된 정책도 보지 않는다.</b> 「다음부터 묻지 않기」로 남긴
+        // ConflictPolicy 는 <i>다른</i> 폴더로 붙여넣을 때 겹치는 것을 어떻게 할지에 대한
+        // 답이다. 제자리 복제에는 덮어쓸 상대도 건너뛸 이유도 없다 — 답이 하나뿐이라
+        // 물어볼 것도 없다. 그래서 StartOperationAsync(정책·확인창을 다루는 자리)를 타지
+        // 않고 실행 껍데기로 곧장 간다.
+        //
+        // <b>이동은 오지 않는다.</b> 같은 폴더로 옮기면서 이름만 바꾸는 것은 이동이 아니라
+        // 이름 바꾸기다(§4.6 이 따로 갖고 있다) — 아래 기존 경로가 지금처럼 거절한다.
+        if (!move
+            && !IsOperationRunning && !IsEditingLayout
+            && !WouldSwallowDestination(destinationPath, items)
+            && IsSameFolderPaste(destinationPath, items))
+        {
+            // 한 번 묻는다 (Phase 8-E ②). §4.3 충돌창이 아니다 — 여기는 고를 것이 없다.
+            // 결과를 미리 적고 진행/취소만 받는다.
+            if (!_prompt.Confirm("같은 폴더에 붙여넣기", InPlaceDuplicatePreview(items)))
+            {
+                Inform("붙여넣기를 취소했다.");
+                return;
+            }
+
+            await RunGuardedAsync(
+                new FileOperationRequest(
+                    FileOperationKind.Copy, items, [destinationPath], ConflictPolicy.Rename),
+                "붙여넣기").ConfigureAwait(true);
+            return;
+        }
+
         if (!CanDropOnto(destinationPath, items))
         {
             // 드롭 판정과 <b>같은 답</b>이다. 드래그는 과녁을 안 켜는 것으로 끝나지만 키는
@@ -1634,6 +1711,57 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             confirmMove: false,
             sameFolderSkipped: items.Count - accepted.Count,
             verbOverride: "붙여넣기").ConfigureAwait(true);
+    }
+
+    /// <summary>제자리 복제 확인창에 이름을 몇 줄까지 적을지. 넘치면 "외 N개"로 접는다.</summary>
+    private const int MaxDuplicatePreviewLines = 5;
+
+    /// <summary>
+    /// 제자리 복제 확인창의 본문 — <b>무엇이 어떤 이름으로 생기는지</b> (Phase 8-E ②).
+    /// </summary>
+    /// <remarks>
+    /// §4.3 충돌창과 <b>성격이 다르다</b>: 저쪽은 셋 중 하나를 고르는 창이고 여기는 고를 것이
+    /// 없다 — 결과가 하나뿐이라 미리 보여 주고 진행/취소만 받는다. 그래서 그 창을 재사용하지
+    /// 않고 평범한 확인창(<see cref="IUserPrompt.Confirm"/>)을 쓴다. 「다음부터 묻지 않기」도
+    /// 없다 — 정책을 저장하는 자리가 아니다.
+    /// <para>
+    /// <b>새 이름을 여기서 짓지 않는다.</b> 실제로 이름을 짓는 엔진의
+    /// <see cref="FileOperationEngine.PreviewUniqueName"/> 를 그대로 부른다 — 창이 적은 이름과
+    /// 실제로 생기는 이름이 어긋날 수 없다.
+    /// </para>
+    /// <para>
+    /// 목적지가 항목의 부모와 같다는 것은 부르는 쪽이 이미 확인했다
+    /// (<see cref="IsSameFolderPaste"/>) — 그래서 항목 경로가 곧 목표 경로다.
+    /// </para>
+    /// <para>
+    /// 여럿이면 앞 <see cref="MaxDuplicatePreviewLines"/> 개만 적고 나머지는 "외 N개"로 접는다.
+    /// 전부 적으면 200개짜리 폴더를 붙여넣을 때 창이 화면을 넘어가 <b>버튼이 안 보인다</b> —
+    /// 진행/취소를 못 누르는 확인창은 확인창이 아니다.
+    /// </para>
+    /// </remarks>
+    private static string InPlaceDuplicatePreview(IReadOnlyList<OperationItem> items)
+    {
+        var lines = new List<string>
+        {
+            items.Count == 1
+                ? "온 곳과 같은 폴더입니다 — 사본을 하나 만듭니다."
+                : $"온 곳과 같은 폴더입니다 — 사본 {items.Count}개를 만듭니다.",
+            string.Empty,
+        };
+
+        lines.AddRange(items.Take(MaxDuplicatePreviewLines).Select(
+            i => $"  {System.IO.Path.GetFileName(i.Path)} → " +
+                 $"{System.IO.Path.GetFileName(FileOperationEngine.PreviewUniqueName(i.Path))}"));
+
+        if (items.Count > MaxDuplicatePreviewLines)
+        {
+            lines.Add($"  … 외 {items.Count - MaxDuplicatePreviewLines}개");
+        }
+
+        lines.Add(string.Empty);
+        lines.Add("원본은 그대로 남습니다.");
+
+        return string.Join(Environment.NewLine, lines);
     }
 
     /// <summary>
@@ -2023,20 +2151,34 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     public bool ShowLeftSplitter => !FoldersCollapsed && !LowerCollapsed;
 
     /// <summary>
-    /// 왼쪽 컬럼(폴더 · 대상함 · 매크로) 통째로 접힘 (Phase 8-A ⑦).
+    /// 왼쪽 컬럼(폴더 · 대상함 · 매크로) 통째로 접힘 (Phase 8-A ⑦ · 8-E ①).
     /// </summary>
     /// <remarks>
-    /// <b>저장하지 않는다.</b> 위의 <see cref="FoldersCollapsed"/> · <see cref="LowerCollapsed"/>
-    /// 와 달리 <see cref="LeftLayoutSpec"/> 에 슬롯을 만들지 않았다 — 이 회차는 저장 스키마를
-    /// 건드리지 않기로 했고, 저장할지 말지는 아직 정해지지 않았다. 창을 다시 열면 펴진 상태다.
+    /// <b>이제 저장한다.</b> 8-A 때는 <see cref="LeftLayoutSpec"/> 에 슬롯을 만들지 않아
+    /// 창을 다시 열면 늘 펴져 있었다 — 안쪽 두 접힘(<see cref="FoldersCollapsed"/> ·
+    /// <see cref="LowerCollapsed"/>)만 저장되고 바깥 하나만 안 되는 것이 어색했다.
+    /// 8-E ① 이 같은 칸에 넣었고, 이 셋은 이제 같은 통로로 저장된다.
     /// <para>
     /// 안쪽 두 접힘 상태는 건드리지 않는다. 통째로 접었다 펴면 접기 전 모습 그대로 돌아온다.
     /// </para>
     /// </remarks>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(LeftPanelToggleText))]
-    [NotifyPropertyChangedFor(nameof(LeftPanelToggleTip))]
-    private bool leftPanelCollapsed;
+    public bool LeftPanelCollapsed
+    {
+        get => Workspace.LeftLayout?.LeftPanelCollapsed ?? false;
+        set
+        {
+            if (LeftPanelCollapsed == value)
+            {
+                return;
+            }
+
+            LeftLayout().LeftPanelCollapsed = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(LeftPanelToggleText));
+            OnPropertyChanged(nameof(LeftPanelToggleTip));
+            SaveLeftLayout();
+        }
+    }
 
     /// <summary>글씨가 곧 동작이다 (§3.1) — 지금 누르면 무엇이 되는지를 적는다.</summary>
     public string LeftPanelToggleText => LeftPanelCollapsed ? "▶" : "◀";

@@ -98,10 +98,44 @@ public sealed class SchemaMigrationTests : IDisposable
         return id;
     }
 
-    [Fact]
-    public void CurrentSchemaVersionIsFive()
+    /// <summary>
+    /// 6 이 여는 두 슬롯(<c>leftLayout.leftPanelCollapsed</c> · <c>folders[].foldersFirst</c>)만
+    /// 없는 <b>바로 앞 버전</b> 파일. <c>leftLayout</c> 은 안쪽 둘만 들고 있다.
+    /// </summary>
+    private Guid WriteV5File()
     {
-        Assert.Equal(5, Workspace.CurrentSchemaVersion);
+        var id = Guid.NewGuid();
+        var json = $$"""
+        {
+          "schemaVersion": 5,
+          "id": "{{id}}",
+          "title": "v5 워크스페이스",
+          "lastUsed": "2026-06-07T08:09:10+09:00",
+          "folders": [
+            {
+              "id": "{{Guid.NewGuid()}}",
+              "path": "D:\\work\\src",
+              "displayName": "src",
+              "viewMode": "details",
+              "sortBy": "modified",
+              "sortDesc": true,
+              "pinned": true
+            }
+          ],
+          "leftLayout": { "foldersCollapsed": true, "lowerCollapsed": false },
+          "grid": { "cols": 4, "rows": 4 },
+          "window": { "x": 10, "y": 20, "width": 800, "height": 600, "maximized": false }
+        }
+        """;
+
+        File.WriteAllText(_paths.WorkspaceFile(id), json);
+        return id;
+    }
+
+    [Fact]
+    public void CurrentSchemaVersionIsSix()
+    {
+        Assert.Equal(6, Workspace.CurrentSchemaVersion);
     }
 
     [Fact]
@@ -334,7 +368,7 @@ public sealed class SchemaMigrationTests : IDisposable
 
     /// <summary>창을 옮겨 저장하면 그 파일이 v5 로 승격된다 (§7.1 스키마 규칙).</summary>
     [Fact]
-    public void SavingAV4FilePromotesItToFiveAndWritesTheWindowSlot()
+    public void SavingAV4FilePromotesItToTheCurrentVersionAndWritesTheWindowSlot()
     {
         var id = WriteV4File();
         var workspace = _store.LoadWorkspace(id).ValueOrThrow();
@@ -343,13 +377,13 @@ public sealed class SchemaMigrationTests : IDisposable
         Assert.Null(_store.SaveWorkspace(workspace));
 
         var json = File.ReadAllText(_paths.WorkspaceFile(id));
-        Assert.Contains("\"schemaVersion\": 5", json);
+        Assert.Contains($"\"schemaVersion\": {Workspace.CurrentSchemaVersion}", json);
         Assert.Contains("\"window\"", json);
         Assert.Contains("\"x\": -1340", json);
         Assert.Contains("\"maximized\": false", json);
 
         var reloaded = _store.LoadWorkspace(id).ValueOrThrow();
-        Assert.Equal(5, reloaded.SchemaVersion);
+        Assert.Equal(Workspace.CurrentSchemaVersion, reloaded.SchemaVersion);
         Assert.Equal(-1340, reloaded.Window!.X);
         Assert.Equal(2000, reloaded.Window.Height);
         Assert.False(reloaded.Window.Maximized);
@@ -525,5 +559,128 @@ public sealed class SchemaMigrationTests : IDisposable
 
         Assert.Empty(listing.Failures);
         Assert.NotEmpty(listing.Workspaces);
+    }
+
+    // ── schemaVersion 6 (Phase 8-E ①) ────────────────────────────────────────
+    //
+    // 두 슬롯이 늘었다: leftLayout.leftPanelCollapsed · folders[].foldersFirst.
+    // 둘 다 <b>필드 추가뿐</b>이라 구파일을 거부하지 않는다 — 없으면 기본값으로 읽히고
+    // 그 기본값이 8-E 전의 실제 동작이다. 그래서 마이그레이션 코드가 없다.
+
+    [Fact]
+    public void AV5FileWithoutTheNewSlotsStillLoads()
+    {
+        var id = WriteV5File();
+
+        var result = _store.LoadWorkspace(id);
+
+        Assert.True(result.IsSuccess, result.Failure?.Message);
+        Assert.Equal(5, result.Value!.SchemaVersion);
+        Assert.Equal("v5 워크스페이스", result.Value.Title);
+    }
+
+    /// <summary>
+    /// 왼쪽 패널 통째 접힘이 없으면 <b>펼침</b>으로 읽힌다 — 8-E 전에는 늘 펴진 채로 열렸다.
+    /// 같은 칸의 안쪽 두 값은 파일에 적힌 그대로다.
+    /// </summary>
+    [Fact]
+    public void AMissingLeftPanelCollapsedReadsAsExpanded()
+    {
+        var id = WriteV5File();
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        Assert.False(workspace.LeftLayout!.LeftPanelCollapsed);
+        Assert.True(workspace.LeftLayout.FoldersCollapsed);
+        Assert.False(workspace.LeftLayout.LowerCollapsed);
+    }
+
+    /// <summary>
+    /// <b>「폴더 먼저」가 없으면 켜진 것으로 읽힌다.</b> 여기가 이 회차에서 가장 조심할 자리다 —
+    /// 그냥 <c>bool</c> 이면 <c>false</c>(통합 정렬)로 읽혀 구파일의 목록 순서가 조용히 바뀐다.
+    /// 모델의 초기화자(<c>= true</c>)가 그것을 막는다.
+    /// </summary>
+    [Fact]
+    public void AMissingFoldersFirstReadsAsOn()
+    {
+        var id = WriteV5File();
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        Assert.True(Assert.Single(workspace.Folders).FoldersFirst);
+    }
+
+    /// <summary>v1 파일도 마찬가지다 — 슬롯이 없던 시절이 더 길다.</summary>
+    [Fact]
+    public void AV1FileAlsoReadsTheNewSlotsAsDefaults()
+    {
+        var id = WriteV1File();
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        Assert.Null(workspace.LeftLayout);
+        Assert.True(Assert.Single(workspace.Folders).FoldersFirst);
+    }
+
+    /// <summary>저장하면 6 으로 승격되고 두 슬롯이 파일에 적힌다.</summary>
+    [Fact]
+    public void SavingAV5FilePromotesItToSixAndWritesTheNewSlots()
+    {
+        var id = WriteV5File();
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        workspace.LeftLayout!.LeftPanelCollapsed = true;
+        workspace.Folders[0].FoldersFirst = false;
+        Assert.Null(_store.SaveWorkspace(workspace));
+
+        var json = File.ReadAllText(_paths.WorkspaceFile(id));
+        Assert.Contains("\"schemaVersion\": 6", json);
+        Assert.Contains("\"leftPanelCollapsed\": true", json);
+        Assert.Contains("\"foldersFirst\": false", json);
+
+        var reloaded = _store.LoadWorkspace(id).ValueOrThrow();
+        Assert.Equal(6, reloaded.SchemaVersion);
+        Assert.True(reloaded.LeftLayout!.LeftPanelCollapsed);
+        Assert.False(reloaded.Folders[0].FoldersFirst);
+
+        // 안쪽 두 접힘은 건드리지 않았다.
+        Assert.True(reloaded.LeftLayout.FoldersCollapsed);
+        Assert.False(reloaded.LeftLayout.LowerCollapsed);
+    }
+
+    /// <summary>기본값 그대로여도 파일에는 적힌다 — 형제 슬롯(sortDesc 등)과 같은 규칙이다.</summary>
+    [Fact]
+    public void TheNewSlotsAreWrittenEvenAtTheirDefaults()
+    {
+        var id = WriteV5File();
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        Assert.Null(_store.SaveWorkspace(workspace));
+
+        var json = File.ReadAllText(_paths.WorkspaceFile(id));
+        Assert.Contains("\"leftPanelCollapsed\": false", json);
+        Assert.Contains("\"foldersFirst\": true", json);
+    }
+
+    /// <summary>
+    /// 6 보다 큰 버전은 여전히 거절이다 — 앞으로 늘 슬롯을 모르는 채로 열면 안 된다.
+    /// </summary>
+    [Fact]
+    public void AVersionAboveSixIsStillRejected()
+    {
+        var id = Guid.NewGuid();
+        File.WriteAllText(_paths.WorkspaceFile(id), $$"""
+        {
+          "schemaVersion": 7,
+          "id": "{{id}}",
+          "title": "미래 파일",
+          "folders": []
+        }
+        """);
+
+        var result = _store.LoadWorkspace(id);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(StorageFailureKind.UnsupportedSchemaVersion, result.Failure!.Kind);
     }
 }

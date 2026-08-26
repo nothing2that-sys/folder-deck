@@ -24,6 +24,23 @@ public sealed class FolderEntry
 
     public bool SortDesc { get; set; }
 
+    /// <summary>
+    /// 폴더를 파일보다 항상 위에 둘지 (schemaVersion 6 · Phase 8-B ② → 8-E ①).
+    /// </summary>
+    /// <remarks>
+    /// <b>정렬 슬롯 셋과 같은 층이다</b> — <see cref="ViewMode"/>·<see cref="SortBy"/>·
+    /// <see cref="SortDesc"/> 가 이미 폴더마다인 것과 같은 이유로 폴더마다다: 로그 폴더는
+    /// 수정 시각으로 섞어 보고 싶고 소스 폴더는 폴더가 위에 뭉쳐 있는 편이 낫다. 워크스페이스
+    /// 하나로 묶으면 그 둘을 같이 만족시킬 수 없다.
+    /// <para>
+    /// <b>기본값이 <c>true</c> 라 초기화자로 준다.</b> 키가 없는 구파일은 이 값이 그대로 남아
+    /// 「폴더 먼저」로 읽힌다 — 8-E 전의 동작이다. <c>bool?</c> 로 두지 않은 이유는 형제 셋이
+    /// 전부 값 타입이고 파일에 늘 적히기 때문이다(<c>rotationSlot</c> 처럼 뜻 없는 슬롯을
+    /// 감추는 자리가 아니다).
+    /// </para>
+    /// </remarks>
+    public bool FoldersFirst { get; set; } = true;
+
     /// <summary>상시(고정) 칸 대상인지 (§2.3).</summary>
     public bool Pinned { get; set; }
 

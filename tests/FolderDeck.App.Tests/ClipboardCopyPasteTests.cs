@@ -323,14 +323,16 @@ public sealed class ClipboardCopyPasteTests
     }
 
     /// <summary>
-    /// <b>온 곳과 같은 폴더</b>에 붙여넣으면 거절이다 — 드롭 판정(①)이 이미 그렇게 답한다.
+    /// <b>온 곳과 같은 폴더</b>에 붙여넣으면 사본이 생긴다 (Phase 8-D ②).
     /// </summary>
     /// <remarks>
-    /// 새 규칙이 아니다: <see cref="MainViewModel.AcceptedForDrop"/> 가 항목마다 부모를 보고
-    /// 목적지와 같은 것을 빼는데, 같은 폴더면 전부 빠져 0개가 되고 받을 것이 없어진다.
+    /// 8-D 전에는 거절이었다 — 드롭 판정 ①(<see cref="MainViewModel.AcceptedForDrop"/>)이 온 곳이
+    /// 목적지와 같은 항목을 빼는데 같은 폴더면 전부 빠져 0개가 됐다. 지금은 그 앞에서 갈라져
+    /// §4.3 의 「둘 다 두기」로 간다. <b>새 이름 형식을 만들지 않았다</b> —
+    /// <c>FileOperationEngine.UniqueName</c> 이 쓰던 그 형식이다.
     /// </remarks>
     [Fact]
-    public async Task PastingBackIntoTheFolderTheItemsCameFromIsRejected()
+    public async Task PastingBackIntoTheFolderTheItemsCameFromMakesACopy()
     {
         using var f = await ReadyAsync();
         var code = Tile(f, f.CodePath);
@@ -339,9 +341,15 @@ public sealed class ClipboardCopyPasteTests
 
         await code.PasteIntoCurrentCommand.ExecuteAsync(null);
 
-        // "Main - 복사본.cs" 같은 것이 생기지 않는다.
-        Assert.Equal(["Main.cs"], Directory.GetFiles(f.CodePath).Select(Path.GetFileName).Order());
-        Assert.Contains("붙여넣을 것이 없다", f.ViewModel.Message);
+        Assert.Equal(
+            ["Main (2).cs", "Main.cs"],
+            Directory.GetFiles(f.CodePath).Select(Path.GetFileName).Order());
+
+        // 원본은 그대로다 — 덮어쓴 것이 아니라 옆에 하나 더 둔 것이다.
+        Assert.Equal(
+            File.ReadAllText(Path.Combine(f.CodePath, "Main.cs")),
+            File.ReadAllText(Path.Combine(f.CodePath, "Main (2).cs")));
+        Assert.False(f.ViewModel.MessageIsWarning);
     }
 
     /// <summary>겹치면 충돌창이 뜬다 (§4.3 · D21 — <c>StartOperationAsync</c> 에 얹은 값이다).</summary>

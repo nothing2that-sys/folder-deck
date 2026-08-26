@@ -255,6 +255,80 @@ public sealed class FileOperationEngineTests : IDisposable
         Assert.Equal("x", File.ReadAllText(a));
     }
 
+    // ── 제자리 복제 (Phase 8-D ②) ────────────────────────────────────────────
+    //
+    // 위 판이 못박은 "원본과 목적지가 같으면 건너뛴다"에 <b>구멍 하나</b>가 났다:
+    // 복사이면서 「둘 다 두기」일 때만이다. 그때는 할 일이 있다 — 옆에 사본을 둔다.
+
+    /// <summary>
+    /// 같은 폴더로 복사 + <see cref="ConflictPolicy.Rename"/> = 제자리 복제.
+    /// 새 이름 형식은 <b>이미 있던 것</b>이다 — 다른 폴더에서 겹칠 때 쓰던 그 형식.
+    /// </summary>
+    [Fact]
+    public async Task CopyingAFileOntoItselfWithRenameMakesACopy()
+    {
+        var src = Dir("src");
+        var a = File_("src/a.txt");
+
+        var report = await Run(FileOperationKind.Copy, [a], [src], ConflictPolicy.Rename);
+
+        Assert.Equal(OperationItemStatus.Succeeded, Assert.Single(report.Results).Status);
+        Assert.Equal("x", File.ReadAllText(a));
+        Assert.Equal("x", File.ReadAllText(Path.Combine(src, "a (2).txt")));
+    }
+
+    /// <summary>폴더도 같다. 새 이름은 원본 바깥이라 재귀 복사가 자기 꼬리를 먹지 않는다.</summary>
+    [Fact]
+    public async Task CopyingAFolderOntoItselfWithRenameMakesACopy()
+    {
+        var src = Dir("src");
+        var sub = Dir("src/sub");
+        File_("src/sub/a.txt");
+
+        var report = await Run(FileOperationKind.Copy, [sub], [src], ConflictPolicy.Rename);
+
+        Assert.Equal(OperationItemStatus.Succeeded, Assert.Single(report.Results).Status);
+        Assert.Equal("x", File.ReadAllText(Path.Combine(src, "sub (2)", "a.txt")));
+
+        // 복제본 안에 또 복제본이 생기지 않았다.
+        Assert.False(Directory.Exists(Path.Combine(src, "sub (2)", "sub (2)")));
+        Assert.Equal(["a.txt"], Directory.GetFiles(sub).Select(Path.GetFileName).Order());
+    }
+
+    /// <summary>
+    /// <b>이동은 이 구멍에 들지 않는다.</b> 같은 폴더로 옮기면서 이름만 바꾸는 것은 이동이
+    /// 아니라 이름 바꾸기다 — 정책이 「둘 다 두기」여도 건너뛴다.
+    /// </summary>
+    [Fact]
+    public async Task MovingAFileOntoItselfWithRenameIsStillSkipped()
+    {
+        var src = Dir("src");
+        var a = File_("src/a.txt");
+
+        var report = await Run(FileOperationKind.Move, [a], [src], ConflictPolicy.Rename);
+
+        Assert.Equal(OperationItemStatus.Skipped, Assert.Single(report.Results).Status);
+        Assert.Equal("원본과 목적지가 같다", report.Results[0].Reason);
+        Assert.True(File.Exists(a));
+        Assert.False(File.Exists(Path.Combine(src, "a (2).txt")));
+    }
+
+    /// <summary>덮어쓰기·건너뛰기는 지금 그대로다 — 구멍은 「둘 다 두기」 하나뿐이다.</summary>
+    [Theory]
+    [InlineData(ConflictPolicy.Overwrite)]
+    [InlineData(ConflictPolicy.Skip)]
+    public async Task CopyingOntoItselfStaysSkippedForTheOtherPolicies(ConflictPolicy policy)
+    {
+        var src = Dir("src");
+        var a = File_("src/a.txt");
+
+        var report = await Run(FileOperationKind.Copy, [a], [src], policy);
+
+        Assert.Equal(OperationItemStatus.Skipped, Assert.Single(report.Results).Status);
+        Assert.Single(Directory.GetFiles(src));
+        Assert.Equal("x", File.ReadAllText(a));
+    }
+
     // ── 휴지통 (§4.4) ────────────────────────────────────────────────────────
 
     [Fact]
