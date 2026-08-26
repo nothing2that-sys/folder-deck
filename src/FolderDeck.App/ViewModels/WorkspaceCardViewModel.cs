@@ -16,7 +16,10 @@ namespace FolderDeck.App.ViewModels;
 /// </remarks>
 public sealed partial class WorkspaceCardViewModel : ObservableObject
 {
-    /// <summary>칩이 카드를 잡아먹지 않게 상시 폴더는 이만큼만 보여준다.</summary>
+    /// <summary>
+    /// 이름을 이만큼만 늘어놓고 나머지는 개수로 접는다 — 상시도 순환도 같은 상한이다.
+    /// 줄이 길어지면 카드가 높아지거나 잘려서 이름을 늘어놓은 뜻이 사라진다.
+    /// </summary>
     private const int MaxPinnedChips = 4;
 
     private readonly IWorkspaceStore? _store;
@@ -159,6 +162,52 @@ public sealed partial class WorkspaceCardViewModel : ObservableObject
 
     public bool HasPinnedNames => PinnedNamesText.Length > 0;
 
+    /// <summary>
+    /// 순환 폴더 이름을 한 줄로 (Phase 8-B 4). <see cref="PinnedNamesText"/> 와 <b>같은 규칙·같은
+    /// 상한</b>이다 — 갈리는 것은 화면에서 쓰는 색뿐이다(상시=Brush.Pinned / 순환=Brush.Rotating).
+    /// </summary>
+    /// <remarks>
+    /// 그 전까지 순환은 <see cref="RotatingChipText"/> 로 개수만 말했다("+ 순환 3"). 개수만으로는
+    /// 어느 워크스페이스인지 알아볼 수 없어서, 상시와 같이 이름을 적는다. 색이 갈리므로 이어서
+    /// 쭉 써도 어디까지가 상시인지 읽힌다 — <b>색만으로 나르지는 않는다</b>: 상시는 앞, 순환은
+    /// 뒤라는 순서가 같은 말을 하고, 툴팁(<see cref="FolderNamesText"/>)이 줄 전체를 다시 준다.
+    /// </remarks>
+    public string RotatingNamesText
+    {
+        get
+        {
+            if (Workspace is null)
+            {
+                return string.Empty;
+            }
+
+            var rotating = Workspace.Folders.Where(f => !f.Pinned).ToList();
+            if (rotating.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            var shown = string.Join(" · ", rotating.Take(MaxPinnedChips).Select(NameOf));
+            var extra = rotating.Count - MaxPinnedChips;
+            return extra > 0 ? $"{shown} +{extra}" : shown;
+        }
+    }
+
+    public bool HasRotatingNames => RotatingNamesText.Length > 0;
+
+    // 아래 둘은 화면이 그리는 <b>그대로</b>다 — 줄 맨 앞의 "폴더 N"(<see cref="FolderCountText"/>)
+    // 에 이어 붙으므로 앞 구분점을 각자 달고 온다. 구분점을 XAML 에 두면 앞 조각이 비었을 때
+    // 점만 뜬 줄이 생긴다(폴더가 전부 상시이거나 전부 순환인 워크스페이스에서 실제로 그렇다).
+
+    public string PinnedNamesRun => HasPinnedNames ? " · " + PinnedNamesText : string.Empty;
+
+    public string RotatingNamesRun => HasRotatingNames ? " · " + RotatingNamesText : string.Empty;
+
+    /// <summary>3줄째 전체 — 잘렸을 때 툴팁이 돌려주는 줄이다.</summary>
+    public string FolderNamesText => Workspace is null
+        ? string.Empty
+        : FolderCountText + PinnedNamesRun + RotatingNamesRun;
+
     /// <summary>마지막 사용 시각 한 조각 (⑥ 2줄째).</summary>
     public string LastUsedText => Workspace is null
         ? string.Empty
@@ -166,7 +215,10 @@ public sealed partial class WorkspaceCardViewModel : ObservableObject
             ? "사용 기록 없음"
             : $"마지막 사용 {Workspace.LastUsed.LocalDateTime:yyyy-MM-dd HH:mm}";
 
-    /// <summary>폴더 개수 한 조각 (⑥ 2줄째).</summary>
+    /// <summary>
+    /// 폴더 개수 한 조각. Phase 8-A ⑥ 에서는 2줄째 오른쪽 끝이었고, Phase 8-B 4 에서
+    /// <b>3줄째 맨 앞</b>으로 옮겼다 — 뒤에 오는 이름들이 무엇의 목록인지 먼저 말한다.
+    /// </summary>
     public string FolderCountText => Workspace is null ? string.Empty : $"폴더 {Workspace.Folders.Count}";
 
     /// <summary>두 조각을 합친 한 줄. 화면은 ⑥ 이후 조각을 따로 쓰지만 뜻은 같다.</summary>

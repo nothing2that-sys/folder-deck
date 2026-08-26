@@ -30,8 +30,27 @@ public sealed class FileItemViewModel(FolderItem item, string relativeFolder = "
 
     public bool IsDirectory => Item.IsDirectory;
 
-    /// <summary>v1 은 확장자 기반 단순 글리프다(셸 아이콘은 후순위, §1.2).</summary>
-    public string Glyph => Item.IsDirectory ? "📁" : "📄";
+    /// <summary>
+    /// 폴더 대 파일, 두 갈래뿐이다 — 확장자별로 늘리지 않는다(§1.2). 셸 아이콘·아이콘 폰트·
+    /// 이미지 리소스를 쓰지 않고 <b>유니코드 글리프만</b> 쓴다.
+    /// </summary>
+    /// <remarks>
+    /// <b>폴더 쪽을 <c>📁</c>(U+1F4C1) 에서 <c>▣</c>(U+25A3) 로 바꿨다</b> (Phase 8-B ③).
+    /// WPF 는 컬러 폰트를 그리지 않아 두 이모지가 <b>같은 굵기의 가는 윤곽선</b>으로 떨어진다 —
+    /// 목록 글자 크기에서 <c>📁</c> 와 <c>📄</c> 의 실루엣이 거의 갈리지 않았다.
+    /// <c>▣</c> 는 속이 찬 사각이라 <b>잉크의 무게</b>가 다르고, 파일 쪽 <c>📄</c> 는
+    /// 세로로 긴 종이 윤곽이라 <b>실루엣</b>도 다르다. 두 축이 함께 갈리므로 훑는 눈에
+    /// 폴더가 먼저 걸린다 — 목록에서 소수인 쪽이 튀어나오는 것이 맞다.
+    /// <para>
+    /// 색도 갈라 붙지만(폴더=본문색 / 파일=보조색) 그것은 뷰의 몫이고 <b>덤이다</b> —
+    /// 색만으로 뜻을 나르지 않는다는 규칙(§3.2)대로 글리프 자체가 이미 갈린다.
+    /// </para>
+    /// <para>
+    /// <c>doc/FolderDeck_familylook_spec.md</c> §6 어휘표는 폴더를 <c>📁</c> 로 못박고
+    /// 있다 — 이 변경은 그 한 칸과 어긋난다. 문서는 이 작업 범위 밖이라 고치지 않았다.
+    /// </para>
+    /// </remarks>
+    public string Glyph => Item.IsDirectory ? "▣" : "📄";
 
     /// <summary>폴더는 비워 둔다 — 재귀 계산하지 않는다.</summary>
     public string SizeText => Item.IsDirectory ? string.Empty : Humanize(Item.Size);

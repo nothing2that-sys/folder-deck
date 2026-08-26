@@ -10,13 +10,15 @@ public sealed class FolderEnumerator : IFolderEnumerator
         string path,
         SortBy sortBy = SortBy.Name,
         bool sortDesc = false,
+        bool foldersFirst = true,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         // 파일 시스템 열거는 블로킹 I/O 다. 네트워크 경로면 몇 초씩 걸리므로
         // UI 스레드 밖으로 밀어낸다(§8 — 폴더 열거는 async).
-        return Task.Run(() => List(path, sortBy, sortDesc, cancellationToken), cancellationToken);
+        return Task.Run(
+            () => List(path, sortBy, sortDesc, foldersFirst, cancellationToken), cancellationToken);
     }
 
     public Task<FolderAccessFailure?> ProbeAsync(string path, CancellationToken cancellationToken = default)
@@ -154,7 +156,8 @@ public sealed class FolderEnumerator : IFolderEnumerator
         return relative == "." ? string.Empty : relative;
     }
 
-    private static FolderListing List(string path, SortBy sortBy, bool sortDesc, CancellationToken ct)
+    private static FolderListing List(
+        string path, SortBy sortBy, bool sortDesc, bool foldersFirst, CancellationToken ct)
     {
         var items = new List<FolderItem>();
 
@@ -192,19 +195,26 @@ public sealed class FolderEnumerator : IFolderEnumerator
         }
 
         ct.ThrowIfCancellationRequested();
-        Sort(items, sortBy, sortDesc);
+        Sort(items, sortBy, sortDesc, foldersFirst);
         return FolderListing.Ok(path, items);
     }
 
     /// <summary>
-    /// 폴더를 항상 먼저 두고(탐색기와 같은 감각), 그 안에서 <paramref name="sortBy"/> 로 정렬한다.
-    /// <paramref name="sortDesc"/> 는 그룹 안의 순서만 뒤집는다 — 폴더가 파일 아래로 내려가지 않는다.
+    /// <paramref name="foldersFirst"/> 면 폴더를 항상 먼저 두고(탐색기와 같은 감각), 그 안에서
+    /// <paramref name="sortBy"/> 로 정렬한다. <paramref name="sortDesc"/> 는 그룹 안의 순서만
+    /// 뒤집는다 — 폴더가 파일 아래로 내려가지 않는다.
     /// </summary>
-    private static void Sort(List<FolderItem> items, SortBy sortBy, bool sortDesc)
+    /// <remarks>
+    /// <paramref name="foldersFirst"/> 가 <c>false</c> 면 그 앞머리 비교를 건너뛰어 폴더와 파일이
+    /// <b>한 덩어리</b>가 된다 (Phase 8-B ②). 그때 <c>크기</c> 기준에서 폴더는 <c>Size</c> 가
+    /// <c>null</c> 이라 <see cref="Nullable.Compare{T}"/> 규칙대로 <b>모든 파일보다 앞</b>에 선다 —
+    /// 폴더 크기를 재귀로 재지 않기 때문이고(§2.2), 통합 정렬을 켜도 크기만은 폴더가 뭉쳐 보인다.
+    /// </remarks>
+    private static void Sort(List<FolderItem> items, SortBy sortBy, bool sortDesc, bool foldersFirst)
     {
         items.Sort((a, b) =>
         {
-            if (a.IsDirectory != b.IsDirectory)
+            if (foldersFirst && a.IsDirectory != b.IsDirectory)
             {
                 return a.IsDirectory ? -1 : 1;
             }

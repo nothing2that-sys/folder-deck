@@ -78,6 +78,46 @@ public partial class FolderPanelView : UserControl
         menu.IsOpen = true;
     }
 
+    /// <summary>
+    /// 상세 뷰의 컬럼 머리를 눌렀다 — <b>정렬 글자 메뉴와 같은 커맨드로 보낸다</b> (Phase 8-B 1).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="OnSortTextClick"/> 과 같은 결이다: 여기서 <c>SortBy</c> 를 읽지도 쓰지도 않고,
+    /// 같은 기준을 다시 눌렀을 때 방향을 뒤집는 규칙도 여기 없다 — 전부
+    /// <c>SetSortCommand</c>(<c>FolderPanelViewModel.SetSortAsync</c>) 안에 이미 있던 것이다.
+    /// 이 핸들러가 하는 일은 <b>눌린 컬럼이 어느 기준인지</b> 골라 넘기는 것뿐이다.
+    /// <para>
+    /// 걸러야 하는 것이 셋이다.
+    /// <list type="bullet">
+    /// <item>폭 조절 손잡이와 오른쪽 남는 자리도 <c>GridViewColumnHeader</c> 다 —
+    /// <c>Role</c> 이 <c>Normal</c> 인 것만 받는다(<c>Padding</c>·<c>Floating</c> 은 버린다).</item>
+    /// <item>정렬 기준이 안 붙은 컬럼(검색 뷰의 「위치」)은 아무 일도 하지 않는다.</item>
+    /// <item>재귀 검색 중에는 잠근다 — 그 결과는 찾은 순서대로 흘러들고 정렬하지 않으므로(§4.10)
+    /// 기준을 바꿔도 순서가 안 바뀐다. 헤더 메타의 정렬 글자를 그동안 비활성으로 두는 것과
+    /// 같은 판정을 같은 이유로 여기서도 한다.</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    private void OnColumnHeaderClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } panel || panel.IsRecursiveSearch)
+        {
+            return;
+        }
+
+        if (e.OriginalSource is not GridViewColumnHeader { Role: GridViewColumnHeaderRole.Normal } header)
+        {
+            return;
+        }
+
+        if (header.Column is not { } column || ColumnSort.GetSortKey(column) is not { } sort)
+        {
+            return;
+        }
+
+        panel.SetSortCommand.Execute(sort);
+    }
+
     /// <summary>다른 타일이 선택을 가져갔다 — 목록에서도 실제로 풀어 준다.</summary>
     private void OnSelectionCleared(object? sender, EventArgs e)
     {

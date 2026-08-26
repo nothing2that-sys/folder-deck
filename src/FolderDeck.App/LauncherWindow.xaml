@@ -226,17 +226,16 @@
                                                          AutomationProperties.Name="설명 수정" />
                                             </StackPanel>
 
-                                            <!-- ⑥ 2줄: 마지막 사용 시각 · 대표 폴더 경로 · 폴더 개수.
-                                                 경로가 가운데에서 남는 폭을 다 먹고 줄어들 때 먼저 잘린다 —
-                                                 양 끝의 두 조각은 짧고 길이가 거의 변하지 않기 때문이다. -->
+                                            <!-- ⑥ 2줄: 마지막 사용 시각 · 대표 폴더 경로.
+                                                 경로가 오른쪽에서 남는 폭을 다 먹고 줄어들 때 먼저 잘린다 —
+                                                 왼쪽 조각은 짧고 길이가 거의 변하지 않기 때문이다.
+                                                 폴더 개수는 Phase 8-B 4 에서 3줄 맨 앞으로 내려갔다 —
+                                                 뒤에 오는 이름들이 무엇의 목록인지 거기서 말해야 한다. -->
                                             <DockPanel Margin="0,4,0,0"
                                                        Visibility="{Binding IsEditing,
                                                            Converter={StaticResource InverseBoolToVisibility}}">
                                                 <TextBlock DockPanel.Dock="Left" Text="{Binding LastUsedText}"
                                                            FontSize="11"
-                                                           Foreground="{StaticResource Brush.TextSecondary}" />
-                                                <TextBlock DockPanel.Dock="Right" Text="{Binding FolderCountText}"
-                                                           FontSize="11" Margin="8,0,0,0"
                                                            Foreground="{StaticResource Brush.TextSecondary}" />
 
                                                 <!-- 경로는 1급 요소 — 개발자는 경로로 워크스페이스를 알아본다. -->
@@ -247,36 +246,46 @@
                                                            Foreground="{StaticResource Brush.TextPrimary}" />
                                             </DockPanel>
 
-                                            <!-- ⑥ 3줄: 상시 폴더 이름 + 순환 개수.
-                                                 상시는 칩을 여러 개 늘어놓지 않고 한 줄 글로 접는다 —
-                                                 칩이 줄바꿈하면 카드가 다시 높아져 ⑥ 의 목적이 사라진다.
-                                                 순환만 칩으로 남긴다: 점선 테두리가 메인 창 순환 칸과
-                                                 같은 감각이고, 한 개뿐이라 줄을 넘기지 않는다. -->
+                                            <!-- 3줄: 폴더 개수 · 상시 이름 · 순환 이름 (Phase 8-B 4).
+
+                                                 순환도 이름으로 적는다. 그 전에는 "+ 순환 3" 이라는 개수
+                                                 칩이었는데, 개수만으로는 어느 워크스페이스인지 알아볼 수가
+                                                 없었다 — 상시가 하나도 없는 워크스페이스는 3줄이 통째로
+                                                 숫자 하나였다.
+
+                                                 <b>TextBlock 하나에 Run 셋</b>이다. 칩을 늘어놓거나
+                                                 TextBlock 을 나란히 두면 줄바꿈해 카드가 높아지고(⑥ 이
+                                                 없애려던 것이다) 줄 전체를 한 번에 자를 수도 없다.
+                                                 Run 은 한 흐름 안에 있어 색만 갈리고 잘림은 줄 단위다.
+
+                                                 색이 상시/순환을 갈라 주지만 <b>색만으로 나르지 않는다</b>
+                                                 (§3.2): 상시가 앞·순환이 뒤라는 순서가 같은 말을 하고,
+                                                 잘렸을 때는 툴팁이 줄 전체를 돌려준다.
+                                                 구분점은 Run 쪽이 달고 온다 — 여기 두면 앞 조각이 비었을 때
+                                                 점만 뜬다(폴더가 전부 상시이거나 전부 순환인 워크스페이스). -->
                                             <DockPanel Margin="0,4,0,0"
                                                        Visibility="{Binding IsEditing,
                                                            Converter={StaticResource InverseBoolToVisibility}}">
-                                                <Border DockPanel.Dock="Right" Style="{StaticResource ChipBorder}"
-                                                        Margin="8,0,0,0" VerticalAlignment="Center"
-                                                        Background="{StaticResource Brush.RotatingSurface}"
-                                                        BorderBrush="{StaticResource Brush.Rotating}"
-                                                        ToolTip="상시로 지정되지 않은 폴더 — 순환 칸에서 번갈아 본다"
-                                                        Visibility="{Binding HasRotatingChip,
-                                                            Converter={StaticResource BoolToVisibility}}">
-                                                    <TextBlock Text="{Binding RotatingChipText}" FontSize="11"
-                                                               Foreground="{StaticResource Brush.Rotating}" />
-                                                </Border>
-
                                                 <TextBlock DockPanel.Dock="Left" Text="등록된 폴더 없음" FontSize="11"
                                                            Foreground="{StaticResource Brush.TextSecondary}"
                                                            Visibility="{Binding HasNoFolders,
                                                                Converter={StaticResource BoolToVisibility}}" />
 
-                                                <TextBlock Text="{Binding PinnedNamesText}" FontSize="11"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           ToolTip="{Binding PinnedNamesText}"
-                                                           Foreground="{StaticResource Brush.Pinned}"
-                                                           Visibility="{Binding HasPinnedNames,
-                                                               Converter={StaticResource BoolToVisibility}}" />
+                                                <!-- Run 사이에 줄바꿈을 두지 않는다: TextBlock 안에서
+                                                     요소 사이의 공백은 공백 한 칸으로 살아남아
+                                                     "폴더 6  · 이름" 처럼 점 앞이 벌어진다.
+                                                     그래서 /><Run 이 붙어 있다 — 보기는 나쁘지만
+                                                     구분점을 문자열이 들고 오는 이유가 이것이다. -->
+                                                <TextBlock FontSize="11" TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding FolderNamesText}"
+                                                           Visibility="{Binding HasNoFolders,
+                                                               Converter={StaticResource InverseBoolToVisibility}}"><Run
+                                                         Text="{Binding FolderCountText, Mode=OneWay}"
+                                                         Foreground="{StaticResource Brush.TextSecondary}" /><Run
+                                                         Text="{Binding PinnedNamesRun, Mode=OneWay}"
+                                                         Foreground="{StaticResource Brush.Pinned}" /><Run
+                                                         Text="{Binding RotatingNamesRun, Mode=OneWay}"
+                                                         Foreground="{StaticResource Brush.Rotating}" /></TextBlock>
                                             </DockPanel>
                                         </StackPanel>
 

@@ -8,7 +8,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
-        Title="{Binding Title, StringFormat=FolderDeck — {0}}"
+        Title="{Binding WindowTitle}"
         Height="900" Width="1400"
         MinWidth="{x:Static layout:WindowPlacement.MinWindowWidth}"
         MinHeight="{x:Static layout:WindowPlacement.MinWindowHeight}"
@@ -33,8 +33,16 @@
 
     <DockPanel>
 
-        <!-- ── 상단 툴바: 배치 편집 토글 (Phase 2) ──
-                 평소(뷰 모드)엔 타일이 잠겨 파일 작업 중에 배치가 흔들리지 않는다. -->
+        <!-- ── 상단 툴바 ──
+                 Phase 8-B 6·7·8 에서 셋을 손봤다.
+
+                 6 「휴지통으로 삭제」를 뺐다. 기능은 그대로다 — 같은 곳으로 가는 길이 둘 더
+                   있다: 창의 Del 키(위 InputBindings)와 항목 우클릭 메뉴의 「휴지통으로 삭제」
+                   (Interop/ShellMenuPolicy.cs 의 AppItems). 툴바에만 없다.
+                 7 「배치 편집」·「다른 작업 관리 열기」를 오른쪽 끝으로 보냈다. 둘 다 자주
+                   누르는 것이 아니고, 왼쪽 자리는 8 이 쓴다.
+                 8 비워진 왼쪽에 순환 폴더 이름을 늘어놓는다. 왼쪽 패널을 접었을 때(위 첫
+                   버튼)의 우회로다 — 접으면 순환 칸에 폴더를 띄울 길이 없어진다. -->
         <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{StaticResource Brush.Border}"
                 Background="{StaticResource Brush.Chrome}" Padding="8,5">
             <DockPanel>
@@ -47,33 +55,91 @@
                         ToolTip="{Binding LeftPanelToggleTip}"
                         AutomationProperties.Name="왼쪽 패널 접기/펴기" />
 
-                <Button DockPanel.Dock="Left" Style="{StaticResource EditModeButton}"
-                        Command="{Binding ToggleLayoutEditCommand}"
-                        Content="{Binding EditToggleText}"
-                        AutomationProperties.Name="배치 편집"
-                        ToolTip="켜면 타일을 옮기고 크기를 바꿀 수 있다. 그동안 파일 목록은 잠긴다." />
-
-                <!-- 실행하면 선택 창이 뜨지만 고르는 순간 그 창이 워크스페이스 창이 되므로,
-                     다른 작업 관리로 가는 길이 여기 하나 있어야 한다 (§5 · Phase 6). -->
-                <Button DockPanel.Dock="Left" Padding="12,4" Margin="6,0,0,0"
+                <!-- 오른쪽 끝 둘 (7). 먼저 붙인 쪽이 더 바깥(오른쪽)이므로 이 순서가
+                     화면에서는 「배치 편집」 「다른 작업 관리 열기」로 읽힌다 — 옮기기 전의
+                     좌우 순서 그대로다. -->
+                <Button DockPanel.Dock="Right" Padding="12,4" Margin="6,0,0,0"
                         Command="{Binding OpenLauncherCommand}"
                         Content="다른 작업 관리 열기"
                         AutomationProperties.Name="다른 작업 관리 열기"
                         ToolTip="작업 관리 목록을 새 창으로 띄운다 — 거기서 다른 작업 관리를 열 수 있다. 이 창은 그대로 남는다." />
 
-                <!-- 휴지통은 목적지가 없으므로 대상함 탭이 아니라 여기다 (§4.4).
-                     확인창은 두지 않는다 — 되돌릴 수 있는 동작이고, 몇 개를 보냈는지 알린다. -->
-                <Button DockPanel.Dock="Right" Padding="12,4"
-                        Command="{Binding TrashSelectionCommand}"
-                        Content="휴지통으로 삭제"
-                        AutomationProperties.Name="휴지통으로 삭제"
-                        ToolTip="고른 것을 휴지통으로 보낸다 (Del) — 영구 삭제가 아니라 되돌릴 수 있다. 폴더는 통째로 간다." />
+                <Button DockPanel.Dock="Right" Style="{StaticResource EditModeButton}"
+                        Margin="6,0,0,0"
+                        Command="{Binding ToggleLayoutEditCommand}"
+                        Content="{Binding EditToggleText}"
+                        AutomationProperties.Name="배치 편집"
+                        ToolTip="켜면 타일을 옮기고 크기를 바꿀 수 있다. 그동안 파일 목록은 잠긴다." />
 
-                <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="11"
-                           TextTrimming="CharacterEllipsis"
-                           Foreground="{StaticResource Brush.EditChromeText}"
-                           Visibility="{Binding IsEditingLayout, Converter={StaticResource BoolToVisibility}}"
-                           Text="배치 편집 중 — 타일 끌어 이동 · 오른쪽 아래 ◢ 로 크기 · 우클릭으로 상시↔순환/제거 · 빈 칸 클릭이나 폴더 끌어놓기로 추가" />
+                <!-- 남는 가운데. 두 내용이 번갈아 들어서므로 Grid 로 겹쳐 둔다 —
+                     DockPanel 은 마지막 자식 하나만 남는 폭을 먹기 때문이다. -->
+                <Grid Margin="12,0,0,0">
+                    <!-- 8 — 순환으로 등록된 폴더 이름들.
+
+                         <b>새 동작을 만들지 않는다.</b> 왼쪽 폴더 목록의 행 버튼이 부르는 것과
+                         같은 커맨드(ShowFolderCommand)에 같은 인자(FolderRowViewModel)를 넘긴다.
+                         어느 순환 타일에 꽂히는지는 그 커맨드가 이미 정하고 있다 — 행의
+                         rotationSlot 이고, 그 번호의 칸이 없으면 폴백한다.
+
+                         목록은 MainViewModel.RotatingRows 다: Rows 에서 상시 칸에 못박힌 것을
+                         걸러낸 같은 객체들이다. 걸러내는 이유는 그 폴더를 누르면 순환이 아니라
+                         자기 상시 칸이 반응하기 때문이다 — 순환 줄에 세워 두면 거짓말이 된다.
+
+                         배치 편집 중에는 감춘다. 그때 ShowFolderAsync 는 첫머리에서 되돌아가
+                         아무 일도 하지 않으므로, 눌리는 것처럼 보이면 안 된다. -->
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  Visibility="{Binding IsEditingLayout,
+                                               Converter={StaticResource InverseBoolToVisibility}}">
+                        <ItemsControl ItemsSource="{Binding RotatingRows}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:FolderRowViewModel}">
+                                    <Button Margin="0,0,4,0" FontSize="11"
+                                            Content="{Binding DisplayName}"
+                                            Command="{Binding DataContext.ShowFolderCommand,
+                                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
+                                            AutomationProperties.Name="순환 칸에 표시"
+                                            ToolTip="{Binding PathText}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource LinkButton}">
+                                                <Setter Property="Foreground"
+                                                        Value="{StaticResource Brush.TextSecondary}" />
+                                                <Style.Triggers>
+                                                    <!-- 지금 순환 칸에 떠 있는 폴더 — 왼쪽 목록의
+                                                         행 강조와 같은 값을 읽는다. 글씨 굵기도
+                                                         같이 바꿔 색만으로 말하지 않는다 (§3.2). -->
+                                                    <DataTrigger Binding="{Binding IsShowingInRotating}"
+                                                                 Value="True">
+                                                        <Setter Property="Foreground"
+                                                                Value="{StaticResource Brush.Rotating}" />
+                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                    </DataTrigger>
+                                                    <!-- 접근 못 하는 경로도 목록에서 지우지 않는다 (§5). -->
+                                                    <DataTrigger Binding="{Binding IsInaccessible}" Value="True">
+                                                        <Setter Property="Foreground"
+                                                                Value="{StaticResource Brush.Danger}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <TextBlock VerticalAlignment="Center" FontSize="11"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{StaticResource Brush.EditChromeText}"
+                               Visibility="{Binding IsEditingLayout, Converter={StaticResource BoolToVisibility}}"
+                               Text="배치 편집 중 — 타일 끌어 이동 · 오른쪽 아래 ◢ 로 크기 · 우클릭으로 상시↔순환/제거 · 빈 칸 클릭이나 폴더 끌어놓기로 추가" />
+                </Grid>
             </DockPanel>
         </Border>
 

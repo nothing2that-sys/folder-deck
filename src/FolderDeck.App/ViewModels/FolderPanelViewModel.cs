@@ -100,6 +100,13 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(MetaCountText))]
     [NotifyPropertyChangedFor(nameof(ViewModeText))]
     [NotifyPropertyChangedFor(nameof(MetaSortText))]
+    [NotifyPropertyChangedFor(nameof(SortLabel))]
+    [NotifyPropertyChangedFor(nameof(SortArrow))]
+    // 컬럼 머리글도 Entry 를 읽는다 (Phase 8-B ①) — 순환 칸이 다른 폴더로 갈아탈 때
+    // 화살표가 옛 폴더의 정렬 컬럼에 남지 않게 한다.
+    [NotifyPropertyChangedFor(nameof(NameHeaderText))]
+    [NotifyPropertyChangedFor(nameof(SizeHeaderText))]
+    [NotifyPropertyChangedFor(nameof(ModifiedHeaderText))]
     [NotifyPropertyChangedFor(nameof(IsDetailsView))]
     [NotifyPropertyChangedFor(nameof(IsListView))]
     private FolderEntry? entry;
@@ -413,22 +420,107 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// </summary>
     public string ViewModeText => Entry?.ViewMode == FolderViewMode.Details ? "details" : "list";
 
-    /// <summary>메타의 뒤 조각 — 구분점과 정렬(" · 이름 ↑"). 정렬을 바꾸는 길은 아직 없다.</summary>
-    public string MetaSortText
-    {
-        get
-        {
-            var sort = Entry?.SortBy switch
-            {
-                SortBy.Modified => "수정",
-                SortBy.Size => "크기",
-                SortBy.Type => "종류",
-                _ => "이름",
-            };
+    /// <summary>
+    /// 메타의 뒤 조각 — 구분점과 정렬(" · 이름 ↑"). 통합 정렬이면 " · 통합"이 뒤에 붙는다
+    /// (Phase 8-B ②) — 저장되지 않는 상태라 화면이 말해 주지 않으면 알 길이 없다.
+    /// </summary>
+    public string MetaSortText =>
+        $" · {SortLabel}{SortArrow}{(FoldersFirst ? string.Empty : " · 통합")}";
 
-            return $" · {sort}{(Entry?.SortDesc == true ? " ↓" : " ↑")}";
+    /// <summary>지금 정렬 기준의 이름 한 단어. 메뉴 라벨·컬럼 머리글과 <b>같은 어휘</b>다.</summary>
+    public string SortLabel => LabelOf(Entry?.SortBy ?? SortBy.Name);
+
+    /// <summary>지금 정렬 방향 한 글자. 앞에 공백이 붙어 라벨에 그대로 이어 붙는다.</summary>
+    public string SortArrow => Entry?.SortDesc == true ? " ↓" : " ↑";
+
+    // ── 상세 뷰 컬럼 머리글 (Phase 8-B ①) ────────────────────────────────────
+    //
+    // 머리글은 누르는 자리이자 <b>보여 주는 자리</b>다. 지금 정렬 컬럼에만 화살표가 붙으므로
+    // "무엇으로 · 어느 방향" 이 목록 바로 위에서 읽힌다. 헤더 메타의 정렬 글자와 같은 사실을
+    // 두 곳이 말하지만 값을 만드는 자리는 SortLabel·SortArrow 하나뿐이라 어긋날 수 없다.
+    //
+    // <b>GridViewColumn 은 DataContext 를 물려받지 않는다</b> — 시각 트리 밖이라서다. 그래서
+    // 뷰는 이 문자열들을 HeaderTemplate 안에서 ListView 를 타고 올라와 읽는다(그 템플릿은
+    // 시각 트리 안이다). 자세한 것은 Views/FolderPanelView.xaml 의 `SortableHeader` 주석이다.
+
+    public string NameHeaderText => HeaderTextFor(SortBy.Name, "이름");
+
+    public string SizeHeaderText => HeaderTextFor(SortBy.Size, "크기");
+
+    public string ModifiedHeaderText => HeaderTextFor(SortBy.Modified, "수정");
+
+    /// <summary>
+    /// 폴더를 파일보다 항상 위에 둘지 (Phase 8-B ②). <b>저장하지 않는 런타임 상태다</b> —
+    /// 워크스페이스 스키마에 슬롯을 새로 파지 않기로 했으므로 창을 다시 열면 기본값으로 돌아온다.
+    /// </summary>
+    /// <remarks>
+    /// 기본값 <c>true</c> 가 이 앱이 원래 하던 동작이다(탐색기 감각). 끄면 폴더와 파일이 한
+    /// 덩어리로 정렬된다 — "오늘 건드린 것"을 수정 기준으로 볼 때 폴더가 위에 뭉쳐 있으면
+    /// 방해가 된다는 것이 끄는 이유다.
+    /// <para>
+    /// 값을 바꾸는 길은 <see cref="ToggleFoldersFirstCommand"/> 하나다 — 그것이 목록을 다시
+    /// 읽는다. 이 프로퍼티에 직접 쓰면 문구만 바뀌고 목록은 옛 순서로 남는다.
+    /// </para>
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MetaSortText))]
+    [NotifyPropertyChangedFor(nameof(MetaText))]
+    private bool foldersFirst = true;
+
+    /// <summary>
+    /// "폴더 먼저"를 끄고 켠다 (Phase 8-B ② · 정렬 메뉴 아래칸).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SetSortAsync"/> 와 <b>같은 결</b>이다 — 값을 바꾸고, 문구를 알리고, 목록을 다시
+    /// 읽는다. 다른 점은 저장하지 않는다는 것뿐이다(스키마에 슬롯이 없다). 선택도 비우지 않는다:
+    /// 갈리는 것은 순서뿐이고 <see cref="RefreshAsync"/> 가 고른 것을 경로로 다시 잡아 준다(§4.8).
+    /// </remarks>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    public async Task ToggleFoldersFirstAsync()
+    {
+        if (Entry is null)
+        {
+            return;
         }
+
+        // [NotifyPropertyChangedFor] 가 MetaSortText·MetaText 는 챙기지만 컬럼 머리글은
+        // Entry 를 읽으므로 여기서 같이 알린다 — 정렬 컬럼이 안 바뀌어도 통지는 값싸다.
+        FoldersFirst = !FoldersFirst;
+        NotifySortChanged();
+
+        await RefreshAsync().ConfigureAwait(true);
     }
+
+    /// <summary>
+    /// 정렬이 바뀌었다고 알린다 — <b>메타 두 조각과 컬럼 머리글 셋</b>.
+    /// </summary>
+    /// <remarks>
+    /// 한 자리에 모아 둔다. <c>[NotifyPropertyChangedFor]</c> 는 <c>entry</c> <b>필드</b>에 붙어
+    /// 있어서 같은 <see cref="Entry"/> 안의 값만 바꾸면 아무 통지도 나가지 않는다 — 빠뜨리면
+    /// 목록만 바뀌고 머리글 화살표가 옛 컬럼에 남는다.
+    /// </remarks>
+    private void NotifySortChanged()
+    {
+        OnPropertyChanged(nameof(SortLabel));
+        OnPropertyChanged(nameof(SortArrow));
+        OnPropertyChanged(nameof(MetaSortText));
+        OnPropertyChanged(nameof(MetaText));
+        OnPropertyChanged(nameof(NameHeaderText));
+        OnPropertyChanged(nameof(SizeHeaderText));
+        OnPropertyChanged(nameof(ModifiedHeaderText));
+    }
+
+    /// <summary>지금 정렬 컬럼이면 화살표를 붙이고, 아니면 라벨만.</summary>
+    private string HeaderTextFor(SortBy column, string label) =>
+        Entry?.SortBy == column ? label + SortArrow : label;
+
+    private static string LabelOf(SortBy sort) => sort switch
+    {
+        SortBy.Modified => "수정",
+        SortBy.Size => "크기",
+        SortBy.Type => "종류",
+        _ => "이름",
+    };
 
     /// <summary>
     /// 뷰 방식을 뒤집는다 — <c>list</c> ↔ <c>details</c> (§3.2 · §7.1 <c>folders[].viewMode</c>).
@@ -508,8 +600,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
             Entry.SortDesc = false;
         }
 
-        OnPropertyChanged(nameof(MetaSortText));
-        OnPropertyChanged(nameof(MetaText));
+        NotifySortChanged();
 
         SaveFolderEntry?.Invoke();
 
@@ -1229,7 +1320,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         try
         {
             var listing = await _enumerator
-                .ListAsync(path, Entry.SortBy, Entry.SortDesc, token)
+                .ListAsync(path, Entry.SortBy, Entry.SortDesc, FoldersFirst, token)
                 .ConfigureAwait(true);
 
             if (token.IsCancellationRequested || !ReferenceEquals(_cts, cts))

@@ -99,6 +99,47 @@
             </Style.Triggers>
         </Style>
 
+        <!-- 항목 앞 글리프 (Phase 8-B 3). 세 자리(상세·검색·list)가 같은 것을 그리므로
+             스타일 하나로 묶는다 — 글리프를 또 바꿀 때 고칠 자리가 하나다.
+             글리프 자체가 이미 갈리고(FileItemViewModel.Glyph), 색은 그 위에 얹는 덤이다:
+             파일은 보조색으로 물러나고 폴더는 본문색으로 남아 훑는 눈에 폴더가 먼저 걸린다. -->
+        <Style x:Key="ItemGlyph" TargetType="TextBlock">
+            <Setter Property="Text" Value="{Binding Glyph}" />
+            <Setter Property="Margin" Value="0,0,5,0" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextSecondary}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsDirectory}" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 정렬되는 컬럼 머리 (Phase 8-B 1).
+
+             GridViewColumn 은 시각 트리 밖이라 DataContext 를 물려받지 않는다 — 그래서
+             Header 에 바인딩을 걸 수 없다. HeaderTemplate 안은 다르다: 거기 그려지는 요소는
+             GridViewColumnHeader 밑이고 그것은 ListView 의 자손이라, ListView 를 타고 올라가면
+             패널 뷰모델에 닿는다. 컬럼마다 읽는 프로퍼티만 다르고 나머지는 같다.
+
+             화살표는 지금 정렬 중인 컬럼에만 붙는다 — 붙이고 떼는 판정은 전부 뷰모델
+             (HeaderTextFor)이 하고 여기서는 글자를 받아 그리기만 한다. 헤더 메타의 정렬
+             글자와 같은 재료(SortLabel·SortArrow)에서 나오므로 둘이 어긋날 수 없다.
+
+             누름은 여기가 아니라 ListView 의 GridViewColumnHeader.Click 하나가 받는다
+             (아래 DetailsList). 어느 기준인지는 컬럼에 붙은 v:ColumnSort.SortKey 가 말한다. -->
+        <DataTemplate x:Key="NameColumnHeader">
+            <TextBlock Text="{Binding DataContext.NameHeaderText,
+                              RelativeSource={RelativeSource AncestorType=ListView}}" />
+        </DataTemplate>
+        <DataTemplate x:Key="SizeColumnHeader">
+            <TextBlock Text="{Binding DataContext.SizeHeaderText,
+                              RelativeSource={RelativeSource AncestorType=ListView}}" />
+        </DataTemplate>
+        <DataTemplate x:Key="ModifiedColumnHeader">
+            <TextBlock Text="{Binding DataContext.ModifiedHeaderText,
+                              RelativeSource={RelativeSource AncestorType=ListView}}" />
+        </DataTemplate>
+
         <!-- 평소 details 뷰. GridView 는 여러 ListView 가 나눠 쓸 수 없어(런타임 InvalidOperationException)
              x:Shared="False" 로 조회마다 새 인스턴스를 받는다 — 패널이 3개고 검색 시 뷰를 갈아타므로.
 
@@ -107,17 +148,32 @@
              `크기`·`수정` 은 내용이 고정적이라 늘릴 이유가 없다. 오른쪽에는 여백을 남긴다 —
              꽉 맞추면 단계 C 가 만든 고무줄 시작 자리가 사라진다(ColumnLayout.RightMargin). -->
         <GridView x:Key="NormalGridView" x:Shared="False">
-            <GridViewColumn Header="이름" Width="260" v:ColumnLayout.IsFlexible="True">
+            <!-- 머리 셋 다 눌러서 정렬한다 (Phase 8-B 1). 같은 컬럼을 다시 누르면 방향이
+                 뒤집히는데, 그 규칙은 여기가 아니라 SetSortCommand 안에 이미 있던 것이다. -->
+            <GridView.ColumnHeaderContainerStyle>
+                <Style TargetType="GridViewColumnHeader"
+                       BasedOn="{StaticResource {x:Type GridViewColumnHeader}}">
+                    <Setter Property="HorizontalContentAlignment" Value="Left" />
+                    <Setter Property="ToolTip"
+                            Value="눌러서 이 열로 정렬 — 같은 열을 다시 누르면 오름/내림이 뒤집힌다" />
+                </Style>
+            </GridView.ColumnHeaderContainerStyle>
+
+            <GridViewColumn Header="이름" Width="260" v:ColumnLayout.IsFlexible="True"
+                            HeaderTemplate="{StaticResource NameColumnHeader}"
+                            v:ColumnSort.SortKey="{x:Static models:SortBy.Name}">
                 <GridViewColumn.CellTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding Glyph}" Margin="0,0,5,0" />
+                            <TextBlock Style="{StaticResource ItemGlyph}" />
                             <TextBlock Text="{Binding Name}" />
                         </StackPanel>
                     </DataTemplate>
                 </GridViewColumn.CellTemplate>
             </GridViewColumn>
-            <GridViewColumn Header="크기" Width="90">
+            <GridViewColumn Header="크기" Width="90"
+                            HeaderTemplate="{StaticResource SizeColumnHeader}"
+                            v:ColumnSort.SortKey="{x:Static models:SortBy.Size}">
                 <GridViewColumn.CellTemplate>
                     <DataTemplate>
                         <TextBlock Text="{Binding SizeText}" TextAlignment="Right"
@@ -125,17 +181,22 @@
                     </DataTemplate>
                 </GridViewColumn.CellTemplate>
             </GridViewColumn>
-            <GridViewColumn Header="수정" Width="130" DisplayMemberBinding="{Binding ModifiedText}" />
+            <GridViewColumn Header="수정" Width="130" DisplayMemberBinding="{Binding ModifiedText}"
+                            HeaderTemplate="{StaticResource ModifiedColumnHeader}"
+                            v:ColumnSort.SortKey="{x:Static models:SortBy.Modified}" />
         </GridView>
 
         <!-- 재귀 검색 중 details 뷰 — "위치" 열이 붙는다(탐색기 방식).
              여기서 늘리는 것은 `위치` 다 — 가장 긴 내용이 거기다(하위 폴더 상대 경로). -->
         <GridView x:Key="SearchGridView" x:Shared="False">
+            <!-- 여기 컬럼에는 v:ColumnSort.SortKey 를 붙이지 않는다 — 재귀 검색 결과는 찾은
+                 순서대로 흘러들고 정렬하지 않으므로(4.10) 눌러도 순서가 안 바뀐다.
+                 헤더 메타의 정렬 글자를 그동안 잠그는 것과 같은 이유다. -->
             <GridViewColumn Header="이름" Width="220">
                 <GridViewColumn.CellTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding Glyph}" Margin="0,0,5,0" />
+                            <TextBlock Style="{StaticResource ItemGlyph}" />
                             <TextBlock Text="{Binding Name}" />
                         </StackPanel>
                     </DataTemplate>
@@ -389,6 +450,20 @@
                                           Command="{Binding PlacementTarget.Tag.SetSortCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{x:Static models:SortBy.Type}" />
+                                <Separator />
+                                <!-- 폴더 먼저 끄기 = 통합 정렬 (Phase 8-B 2). 위 넷과 성격이
+                                     달라(무엇으로 대 어떻게 묶어) 구분선 아래에 둔다.
+                                     체크는 한쪽 방향이다 — 값을 바꾸는 길은 커맨드 하나뿐이고
+                                     그것이 목록을 다시 읽는다. 양방향으로 묶으면 메뉴가 값만
+                                     바꾸고 목록은 옛 순서로 남는 길이 생긴다.
+                                     저장하지 않는다: 워크스페이스 스키마에 슬롯이 없다. -->
+                                <MenuItem Header="폴더 먼저" IsCheckable="True"
+                                          IsChecked="{Binding PlacementTarget.Tag.FoldersFirst,
+                                                      RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                      Mode=OneWay}"
+                                          Command="{Binding PlacementTarget.Tag.ToggleFoldersFirstCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          ToolTip="끄면 폴더와 파일을 한 덩어리로 정렬한다 (창을 다시 열면 켜진 상태로 돌아온다)" />
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
@@ -468,6 +543,7 @@
                 <!-- ── 파일 목록 · 가상화 켬 (§8 — 로그 수천 개 폴더에서 UI 멈춤 방지) ──
                      View 는 Style 로만 정한다(로컬 값을 주면 검색 시 열 교체 트리거가 이기지 못한다). -->
                 <ListView x:Name="DetailsList" ItemsSource="{Binding DisplayItems}"
+                          GridViewColumnHeader.Click="OnColumnHeaderClick"
                           ItemContainerStyle="{StaticResource FileItemContainer}"
                           BorderThickness="0" Background="Transparent"
                           SelectionMode="Extended"
@@ -511,7 +587,7 @@
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding Glyph}" Margin="0,0,5,0" />
+                                <TextBlock Style="{StaticResource ItemGlyph}" />
                                 <!-- list 뷰의 검색 결과는 이름 앞에 상대 폴더를 흐리게 붙인다. -->
                                 <TextBlock Text="{Binding RelativeFolderPrefix}"
                                            Foreground="{StaticResource Brush.TextSecondary}"

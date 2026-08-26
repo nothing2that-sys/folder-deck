@@ -104,7 +104,43 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
     public string Title => string.IsNullOrWhiteSpace(Workspace.Title) ? "(제목 없음)" : Workspace.Title;
 
+    /// <summary>
+    /// 창 제목줄 전체 — 앱 이름 · 제목 · <b>설명</b> (Phase 8-B 5).
+    /// </summary>
+    /// <remarks>
+    /// 그 전에는 제목만 붙였다. 워크스페이스 창은 여러 개가 동시에 뜨고(§6.2) 작업 표시줄에서는
+    /// 제목줄 앞부분만 보이는데, 「검사 설비」 같은 짧은 제목 둘을 가르는 것이 설명뿐인 경우가
+    /// 있다 — 런처 카드는 제목과 설명을 나란히 보여 주면서 창은 안 보여 주는 것이 어긋났다.
+    /// <para>
+    /// <b>StringFormat 을 쓰지 않고 여기서 만든다.</b> 설명이 없으면 구분점째로 빠져야 하는데
+    /// XAML 의 <c>StringFormat</c> 으로는 "있으면 붙이고 없으면 뺀다"를 말할 수 없다.
+    /// </para>
+    /// <para>
+    /// 런타임에 바뀌지 않는다 — 제목·설명을 고치는 자리는 런처뿐이고 이 창에는 없다.
+    /// 그래서 통지를 걸지 않는다(<see cref="Title"/> 도 그렇다).
+    /// </para>
+    /// </remarks>
+    public string WindowTitle => string.IsNullOrWhiteSpace(Workspace.Description)
+        ? $"FolderDeck — {Title}"
+        : $"FolderDeck — {Title} · {Workspace.Description!.Trim()}";
+
     public ObservableCollection<FolderRowViewModel> Rows { get; }
+
+    /// <summary>
+    /// 순환 칸으로 가는 폴더 행들 — 툴바의 우회로가 읽는 목록 (Phase 8-B 8).
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="Rows"/> 를 걸러낸 것일 뿐이고 같은 객체를 담는다</b> — 새 상태가 아니다.
+    /// 그래서 표시 이름을 고치면 두 목록이 함께 따라온다(같은 <see cref="FolderRowViewModel"/> 이
+    /// 통지를 낸다). 거르는 기준은 왼쪽 리스트의 pin 글리프와 <b>같은 값</b>
+    /// (<see cref="FolderRowViewModel.HasPinnedTile"/>)이다: 상시 칸에 못박힌 폴더는 눌러도 순환
+    /// 칸으로 가지 않으므로(<see cref="ShowFolderAsync"/>) 순환 줄에 세워 두면 거짓말이 된다.
+    /// <para>
+    /// 다시 세는 자리는 <see cref="RefreshRotationChoices"/> 하나다 — 거기가 그 플래그를 쓰는
+    /// 자리이고, 폴더 등록·제거·배치 변경이 전부 그리로 모인다.
+    /// </para>
+    /// </remarks>
+    public ObservableCollection<FolderRowViewModel> RotatingRows { get; } = [];
 
     public int GridCols { get; }
 
@@ -2739,9 +2775,36 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             ];
         }
 
+        SyncRotatingRows();
+
         if (pinnedFlagChanged)
         {
             Save();
+        }
+    }
+
+    /// <summary>
+    /// <see cref="RotatingRows"/> 를 <see cref="Rows"/> 에서 다시 거른다 (Phase 8-B 8).
+    /// </summary>
+    /// <remarks>
+    /// <b>안 바뀌었으면 손대지 않는다.</b> 이 메서드는 배치가 움직일 때마다 불리는데,
+    /// 매번 <c>Clear</c> 하면 툴바의 버튼들이 통째로 다시 만들어져 손이 올라가 있던 버튼이
+    /// 사라졌다 나타난다. 대부분의 호출에서 결과는 같다.
+    /// </remarks>
+    private void SyncRotatingRows()
+    {
+        var wanted = Rows.Where(r => !r.HasPinnedTile).ToList();
+
+        if (RotatingRows.Count == wanted.Count
+            && RotatingRows.Zip(wanted).All(pair => ReferenceEquals(pair.First, pair.Second)))
+        {
+            return;
+        }
+
+        RotatingRows.Clear();
+        foreach (var row in wanted)
+        {
+            RotatingRows.Add(row);
         }
     }
 

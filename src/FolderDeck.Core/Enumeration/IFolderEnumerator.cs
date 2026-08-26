@@ -15,10 +15,16 @@ public interface IFolderEnumerator
     /// <summary>
     /// <paramref name="path"/> 의 파일과 하위 폴더를 읽어 정렬해 돌려준다(한 단계만, 재귀 아님).
     /// </summary>
+    /// <param name="foldersFirst">
+    /// 폴더를 파일보다 항상 위에 두는가 (탐색기 감각). <c>false</c> 면 폴더와 파일을
+    /// <b>한 덩어리로</b> 정렬한다 — 크기·수정 기준으로 폴더가 파일 사이에 섞여 든다.
+    /// 기본값 <c>true</c> 가 이 앱이 원래 하던 동작이다.
+    /// </param>
     Task<FolderListing> ListAsync(
         string path,
         SortBy sortBy = SortBy.Name,
         bool sortDesc = false,
+        bool foldersFirst = true,
         CancellationToken cancellationToken = default);
 
     /// <summary>
