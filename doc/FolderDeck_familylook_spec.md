@@ -156,6 +156,7 @@ Brush.RowHover        ↔   --row-hover
 | FolderDeck | `DropInvalidSurface` | `#55E9A8A8` | **배치 편집 중 타일 겹침 미리보기**(§4.3) |
 | FolderDeck | `GridLine` / `GridCellSurface` | `#C4C4C4` / `#F0F0F0` | 격자 |
 | FolderDeck | `SelectionSurface` | `#FFCCEFFE` | **파일 목록에서 고른 항목**(§4.3) |
+| FolderDeck | `FolderGlyph` / `FileGlyph` | `#B26A00` / `#9AA0A6` | **파일 목록의 폴더/파일 글리프 색**(§6) |
 | MSM | `StateRunning` | `#7ee787` | 세션 실행중 |
 | MSM | `StateComplete` | `#e3b341` | 세션 완료 |
 | MSM | `Attention` | `#d29922` | 주의·주목 |
@@ -221,7 +222,14 @@ Brush.RowHover        ↔   --row-hover
 | 닫기·지우기 | `✕` | FolderDeck |
 | 폴더 / 파일 | `📁` / `📄` | FolderDeck 만(MSM 에 파일 목록 없음) |
 | 이동·탐색 | `←` `→` `↑` `⌂` `⟳` `🔍` | FolderDeck 만 |
+| 목록 보기 방식 | `☰` 목록 / `▦` 상세 | FolderDeck 만(Phase 8-C) |
+| 정렬 방향 | `▴` 오름 / `▾` 내림 | FolderDeck 만(Phase 8-C) |
+| 폴더·파일 통합 정렬 | `∪` | FolderDeck 만(Phase 8-C). 「폴더 먼저」를 껐다는 표시 |
 | 세션 실행중 / 유휴 | `🟢` / `⚪` | MSM 만 |
+
+**Phase 8-C 에서 는 다섯(`☰` `▦` `▴` `▾` `∪`)은 지금 FolderDeck 만 쓴다.** MSM 에 「목록 보기
+방식」·「정렬」이라는 개념이 아직 없어 맞출 대상이 없다. 공통 코어로 올릴지는 그쪽에 같은
+개념이 생길 때 정한다 — 지금 올리면 안 쓰는 앱이 어휘만 떠안는다.
 
 **규칙**: 상태를 글리프로 표시할 때 **글자를 병기한다**(`🟢 실행중`). 색·글리프만으로 뜻을
 나르지 않는다 — 설계 §3.2 의 색맹 대비 규칙과 같은 결이다.
