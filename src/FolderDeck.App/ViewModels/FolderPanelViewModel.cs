@@ -98,7 +98,13 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(AnchorName))]
     [NotifyPropertyChangedFor(nameof(MetaText))]
     [NotifyPropertyChangedFor(nameof(MetaCountText))]
+    [NotifyPropertyChangedFor(nameof(ItemCountText))]
     [NotifyPropertyChangedFor(nameof(ViewModeText))]
+    [NotifyPropertyChangedFor(nameof(ViewModeIcon))]
+    [NotifyPropertyChangedFor(nameof(ViewModeTip))]
+    [NotifyPropertyChangedFor(nameof(SortIcon))]
+    [NotifyPropertyChangedFor(nameof(SortTip))]
+    [NotifyPropertyChangedFor(nameof(HasStatusLine))]
     [NotifyPropertyChangedFor(nameof(MetaSortText))]
     [NotifyPropertyChangedFor(nameof(SortLabel))]
     [NotifyPropertyChangedFor(nameof(SortArrow))]
@@ -114,11 +120,13 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// <summary>지금 보고 있는 경로. <b>런타임 전용 — JSON 에 저장하지 않는다</b>(§4.6).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsAwayFromAnchor))]
+    [NotifyPropertyChangedFor(nameof(HasStatusLine))]
     [NotifyPropertyChangedFor(nameof(LocationHint))]
     [NotifyPropertyChangedFor(nameof(CanGoUp))]
     private string? currentPath;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStatusLine))]
     private bool isLoading;
 
     [ObservableProperty]
@@ -137,6 +145,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MetaText))]
     [NotifyPropertyChangedFor(nameof(MetaCountText))]
+    [NotifyPropertyChangedFor(nameof(ItemCountText))]
     [NotifyPropertyChangedFor(nameof(ShowNoResults))]
     private IReadOnlyList<FileItemViewModel> displayItems = [];
 
@@ -188,6 +197,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// </remarks>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection))]
+    [NotifyPropertyChangedFor(nameof(HasStatusLine))]
     [NotifyPropertyChangedFor(nameof(SelectionText))]
     private IReadOnlyList<FileItemViewModel> selectedItems = [];
 
@@ -415,6 +425,67 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// <summary>메타의 앞 조각 — 개수와 구분점("7개 · ").</summary>
     public string MetaCountText => $"{DisplayItems.Count}개 · ";
 
+    // ── 헤더 1줄이 그리는 것들 (Phase 8-C ③) ─────────────────────────────────
+    //
+    // 8-C 이전에는 개수·뷰·정렬이 <b>2줄째 글자</b>였다. 지금은 셋이 1줄로 올라간다 —
+    // 개수는 breadcrumb 오른쪽 글자로, 뷰와 정렬은 내비 아이콘 옆의 <b>아이콘</b>으로.
+    // 그래서 2줄은 상태(앵커 밖 · 선택 · 읽는 중)가 있을 때만 뜨고, 없으면 통째로 접힌다
+    // (<see cref="HasStatusLine"/>) — 그것이 헤더 높이를 줄인 방법이다.
+    //
+    // <b>값을 만드는 자리는 늘리지 않았다.</b> 아래 넷은 전부 기존 <see cref="ViewModeText"/> ·
+    // <see cref="SortLabel"/> · <see cref="SortArrow"/> · <see cref="FoldersFirst"/> 에서
+    // 파생된다. 그래서 아이콘과 <see cref="MetaText"/> 가 어긋날 수 없다.
+
+    /// <summary>구분점 없는 개수 — 1줄에서 폴더 이름 옆에 붙는 조각.</summary>
+    /// <remarks>
+    /// <see cref="MetaCountText"/> 와 값이 같고 꼬리 구분점만 없다. 둘을 합치지 않는 이유는
+    /// <see cref="MetaText"/> 가 세 조각을 <b>이어 붙인 것</b>이라는 규약을 그대로 두기
+    /// 위해서다 — 구분점을 떼면 그 이음매가 "7개list" 가 된다.
+    /// </remarks>
+    public string ItemCountText => $"{DisplayItems.Count}개";
+
+    /// <summary>뷰 방식 아이콘 — list 는 줄 셋, details 는 격자 (§1.2 유니코드 글리프만).</summary>
+    public string ViewModeIcon => Entry?.ViewMode == FolderViewMode.Details ? "▦" : "☰";
+
+    public string ViewModeTip => Entry?.ViewMode == FolderViewMode.Details
+        ? "지금 details — 눌러서 list 로 (컬럼 없이 이름만)"
+        : "지금 list — 눌러서 details 로 (이름·크기·수정 컬럼)";
+
+    /// <summary>
+    /// 정렬 아이콘 — 방향 삼각형 하나, 통합 정렬이면 앞에 <c>∪</c> 가 붙는다 (Phase 8-C ③).
+    /// </summary>
+    /// <remarks>
+    /// <b>화살표(↑/↓)를 쓰지 않는다</b>: 같은 아이콘 줄에 「상위 폴더 ↑」가 이미 있어서 둘이
+    /// 섞인다. 삼각형은 이 줄에서 안 쓰던 모양이라 "정렬 방향"으로만 읽힌다.
+    /// <para>
+    /// <c>∪</c>(합집합)가 <b><see cref="FoldersFirst"/> 를 끈 상태가 갈 자리</b>다. 2줄째
+    /// 메타에 붙던 " · 통합"이 그 줄과 함께 사라지는데, 저장되지 않는 상태라 화면이 말해
+    /// 주지 않으면 알 길이 없다. <c>☰</c>(list 아이콘)와 헷갈리지 않게 가로줄 계열
+    /// (<c>≡</c>)을 피해 고른 글리프다.
+    /// </para>
+    /// <para>
+    /// <b>기준(이름·수정·크기·종류)은 아이콘에 없다.</b> 네 값에 글리프를 하나씩 붙이면
+    /// 어휘표가 이 앱 쪽으로 비대해진다(familylook §6 이 막는 것). 기준은
+    /// <see cref="SortTip"/> 과 열리는 메뉴의 체크가 말하고, 상세 뷰에서는 컬럼 머리글이
+    /// 이미 「이름 ↑」처럼 적고 있다.
+    /// </para>
+    /// </remarks>
+    public string SortIcon => (FoldersFirst ? string.Empty : "∪") + (Entry?.SortDesc == true ? "▾" : "▴");
+
+    /// <summary>정렬 아이콘의 툴팁 — 아이콘이 못 담는 기준과 통합 여부를 글자로 적는다.</summary>
+    public string SortTip =>
+        $"정렬: {SortLabel}{SortArrow}{(FoldersFirst ? string.Empty : " · 통합(폴더·파일 한 덩어리)")}"
+        + " — 눌러서 기준 변경. 재귀 검색 중에는 잠긴다(결과가 찾은 순서대로 나온다).";
+
+    /// <summary>
+    /// 헤더 2줄째를 띄울 것이 있는가 (Phase 8-C ③).
+    /// </summary>
+    /// <remarks>
+    /// 셋 다 <b>지금 벌어지고 있는 일</b>이라 평소에는 하나도 없다 — 그때 줄을 통째로 접어
+    /// 헤더 높이를 돌려준다. 1x1 타일에서는 그 한 줄이 목록 두 행쯤 된다.
+    /// </remarks>
+    public bool HasStatusLine => IsAwayFromAnchor || HasSelection || IsLoading;
+
     /// <summary>
     /// 메타의 가운데 조각 — 뷰 방식. <b>눌러서 뒤집는 글자</b>다(§3.2 · Stage 3D).
     /// </summary>
@@ -465,6 +536,8 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MetaSortText))]
     [NotifyPropertyChangedFor(nameof(MetaText))]
+    [NotifyPropertyChangedFor(nameof(SortIcon))]
+    [NotifyPropertyChangedFor(nameof(SortTip))]
     private bool foldersFirst = true;
 
     /// <summary>
@@ -508,6 +581,8 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         OnPropertyChanged(nameof(NameHeaderText));
         OnPropertyChanged(nameof(SizeHeaderText));
         OnPropertyChanged(nameof(ModifiedHeaderText));
+        OnPropertyChanged(nameof(SortIcon));
+        OnPropertyChanged(nameof(SortTip));
     }
 
     /// <summary>지금 정렬 컬럼이면 화살표를 붙이고, 아니면 라벨만.</summary>
@@ -553,6 +628,8 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         OnPropertyChanged(nameof(IsDetailsView));
         OnPropertyChanged(nameof(IsListView));
         OnPropertyChanged(nameof(ViewModeText));
+        OnPropertyChanged(nameof(ViewModeIcon));
+        OnPropertyChanged(nameof(ViewModeTip));
         OnPropertyChanged(nameof(MetaText));
 
         ClearSelection();
@@ -1107,6 +1184,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
             clock.Restart();
             OnPropertyChanged(nameof(MetaText));
             OnPropertyChanged(nameof(MetaCountText));
+            OnPropertyChanged(nameof(ItemCountText));
             OnPropertyChanged(nameof(SearchStatusText));
         }
 

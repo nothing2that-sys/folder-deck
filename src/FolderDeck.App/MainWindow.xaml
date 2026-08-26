@@ -99,7 +99,10 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:FolderRowViewModel}">
-                                    <Button Margin="0,0,4,0" FontSize="11"
+                                    <!-- 모양은 RotatingTileButton (App.xaml) 이 다 갖고 있다 —
+                                         테두리·면·손 커서·마우스 오버. 여기서는 <b>상태 둘</b>만
+                                         덮는다. -->
+                                    <Button Margin="0,0,5,0"
                                             Content="{Binding DisplayName}"
                                             Command="{Binding DataContext.ShowFolderCommand,
                                                               RelativeSource={RelativeSource AncestorType=Window}}"
@@ -107,22 +110,29 @@
                                             AutomationProperties.Name="순환 칸에 표시"
                                             ToolTip="{Binding PathText}">
                                         <Button.Style>
-                                            <Style TargetType="Button" BasedOn="{StaticResource LinkButton}">
-                                                <Setter Property="Foreground"
-                                                        Value="{StaticResource Brush.TextSecondary}" />
+                                            <Style TargetType="Button"
+                                                   BasedOn="{StaticResource RotatingTileButton}">
                                                 <Style.Triggers>
                                                     <!-- 지금 순환 칸에 떠 있는 폴더 — 왼쪽 목록의
-                                                         행 강조와 같은 값을 읽는다. 글씨 굵기도
-                                                         같이 바꿔 색만으로 말하지 않는다 (§3.2). -->
+                                                         행 강조와 같은 값을 읽는다. 면을 채우고
+                                                         글씨도 굵혀 색만으로 말하지 않는다 (§3.2).
+                                                         면은 Background 로 준다: 템플릿의
+                                                         TemplateBinding 을 타고 들어가므로 마우스
+                                                         오버 트리거와 싸우지 않는다(같은 색이다). -->
                                                     <DataTrigger Binding="{Binding IsShowingInRotating}"
                                                                  Value="True">
-                                                        <Setter Property="Foreground"
-                                                                Value="{StaticResource Brush.Rotating}" />
+                                                        <Setter Property="Background"
+                                                                Value="{StaticResource Brush.RotatingSurface}" />
                                                         <Setter Property="FontWeight" Value="SemiBold" />
                                                     </DataTrigger>
-                                                    <!-- 접근 못 하는 경로도 목록에서 지우지 않는다 (§5). -->
+                                                    <!-- 접근 못 하는 경로도 목록에서 지우지 않는다 (§5).
+                                                         테두리까지 빨강으로 — 글자색만 바꾸면 보라
+                                                         테두리 안에 빨간 글씨라 어느 쪽이 상태인지
+                                                         읽히지 않는다. -->
                                                     <DataTrigger Binding="{Binding IsInaccessible}" Value="True">
                                                         <Setter Property="Foreground"
+                                                                Value="{StaticResource Brush.Danger}" />
+                                                        <Setter Property="BorderBrush"
                                                                 Value="{StaticResource Brush.Danger}" />
                                                     </DataTrigger>
                                                 </Style.Triggers>

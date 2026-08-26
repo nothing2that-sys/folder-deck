@@ -368,6 +368,62 @@
             </Setter>
         </Style>
 
+        <!--
+            워크스페이스 툴바의 순환 폴더 타일 (Phase 8-B 8 -> 8-C 2).
+
+            8-B 는 LinkButton 으로 그렸는데 글자만 늘어놓은 줄로 보여 눌리는 것인 줄 몰랐다.
+            테두리·면·손 커서·마우스 오버 넷을 함께 준다 — 넷이 다 있어야 "버튼"으로 읽힌다.
+
+            색은 보라(Brush.Rotating) 계열이다. 런처 카드 3줄째의 순환 이름과 같은 색이고,
+            메인 창 순환 칸 테두리와도 같은 뜻이다(색은 뜻 하나씩 — familylook 4.2).
+
+            <b>테두리는 실선이다.</b> 순환 칸 타일은 점선인데 여기는 아니다: WPF Border 는
+            점선을 못 그리고(그래서 타일 쪽은 Rectangle 로 그린다) 20px 높이 칩에서 점선은
+            어차피 뭉개진다. 성격을 나르는 것은 여기서 색과 자리(순환 줄)다.
+
+            지금 순환 칸에 떠 있는 폴더는 면을 채우고 글씨를 굵힌다 —
+            <b>색만으로 말하지 않는다</b>(3.2). 왼쪽 목록 행 강조와 같은 값을 읽는다.
+        -->
+        <Style x:Key="RotatingTileButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.Rotating}" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.Rotating}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="7,1" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Back" CornerRadius="9"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background"
+                                        Value="{StaticResource Brush.RotatingSurface}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Back" Property="BorderThickness" Value="1.6" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Back" Property="Background"
+                                        Value="{StaticResource Brush.RotatingSurface}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.35" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         </ResourceDictionary>
     </Application.Resources>
 </Application>

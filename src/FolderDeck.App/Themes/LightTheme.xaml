@@ -36,6 +36,21 @@
     <SolidColorBrush x:Key="Brush.PinnedSurface" Color="#FFF6E0" />
     <SolidColorBrush x:Key="Brush.RotatingSurface" Color="#EDE7F6" />
 
+    <!-- ── 파일 목록 항목의 종류 (Phase 8-C 1) ──
+             폴더와 파일을 가르는 색이다. WPF 는 컬러 폰트를 그리지 않아 목록 글자 크기에서
+             폴더/파일 두 글리프가 같은 굵기의 가는 윤곽선으로 떨어진다 — 형태로는 약해서
+             색으로 가른다. 글리프 어휘는 familylook_spec.md 6 의 표(폴더/파일)를 그대로 쓴다.
+
+             위 의미색(호박=상시 / 보라=순환)과 <b>축이 다르다</b>: 저것은 타일 하나의 성격이고
+             이것은 타일 <b>안</b> 목록 항목의 종류다. 그래서 키를 따로 둔다. 값도 일부러
+             떨어뜨렸다 — Folder 는 Pinned(#FFB300)보다 어둡고 탁한 황토라 같은 화면에서
+             호박 테두리와 헷갈리지 않고, 흰 배경 위의 얇은 윤곽선으로도 읽힌다.
+
+             File 은 <b>무채색</b>이다. 색상축에서 폴더와 가장 멀고, 목록에서 다수인 쪽이
+             물러나므로 훑는 눈에 폴더가 먼저 걸린다. -->
+    <SolidColorBrush x:Key="Brush.FolderGlyph" Color="#B26A00" />
+    <SolidColorBrush x:Key="Brush.FileGlyph" Color="#9AA0A6" />
+
     <!-- ── 실패 ── -->
     <SolidColorBrush x:Key="Brush.Danger" Color="#C62828" />
     <SolidColorBrush x:Key="Brush.DangerSurface" Color="#FDECEA" />

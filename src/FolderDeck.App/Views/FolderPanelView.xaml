@@ -99,17 +99,23 @@
             </Style.Triggers>
         </Style>
 
-        <!-- 항목 앞 글리프 (Phase 8-B 3). 세 자리(상세·검색·list)가 같은 것을 그리므로
-             스타일 하나로 묶는다 — 글리프를 또 바꿀 때 고칠 자리가 하나다.
-             글리프 자체가 이미 갈리고(FileItemViewModel.Glyph), 색은 그 위에 얹는 덤이다:
-             파일은 보조색으로 물러나고 폴더는 본문색으로 남아 훑는 눈에 폴더가 먼저 걸린다. -->
+        <!-- 항목 앞 글리프 (Phase 8-B 3 -> 8-C 1). 세 자리(상세·검색·list)가 같은 것을 그리므로
+             스타일 하나로 묶는다 — 색을 또 손볼 때 고칠 자리가 하나다.
+
+             <b>폴더와 파일을 가르는 것은 여기, 색이다.</b> 글리프는 어휘표대로 되돌렸고
+             (FileItemViewModel.Glyph) 그 둘은 WPF 에서 비슷한 굵기의 윤곽선이라 형태만으로는
+             약하다. 황토(폴더) 대 무채색(파일)이면 훑는 눈에 폴더가 먼저 걸린다 —
+             목록에서 소수인 쪽이 튀어나오는 것이 맞다.
+
+             기본값을 파일 쪽에 두고 폴더를 트리거로 덮는다. 반대로 두면 IsDirectory 가
+             false 인 쪽에 트리거를 하나 더 달아야 한다. -->
         <Style x:Key="ItemGlyph" TargetType="TextBlock">
             <Setter Property="Text" Value="{Binding Glyph}" />
             <Setter Property="Margin" Value="0,0,5,0" />
-            <Setter Property="Foreground" Value="{StaticResource Brush.TextSecondary}" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.FileGlyph}" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsDirectory}" Value="True">
-                    <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+                    <Setter Property="Foreground" Value="{StaticResource Brush.FolderGlyph}" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -302,37 +308,132 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- 내비 클러스터 — 🔍 를 같은 크기로 여기 붙여서 "눌러진다"가 자명하게. -->
+                    <!-- 내비 클러스터 — 🔍 를 같은 크기로 여기 붙여서 "눌러진다"가 자명하게.
+
+                         Phase 8-C ③ 에서 <b>뷰 방식·정렬</b> 아이콘이 여기로 올라왔다(2줄째
+                         글자였다). 아이콘이 여섯에서 여덟이 되므로 폭을 24 → 20 으로 좁힌다 —
+                         "아이콘 사이 간격을 줄인다"가 그 뜻이고, 좁혀야 1줄이 감당한다.
+                         Width 를 스타일에 넣지 않고 여기 로컬 값으로 준 이유: NavButton 은
+                         MainWindow 의 툴바·행 「✕」도 쓰는 공용 스타일이라 거기까지 좁아진다.
+
+                         접히는 단계는 그대로다(App.xaml 의 Secondary/Tertiary 주석). 새 둘은
+                         Tertiary 에 얹었다 — 뷰 방식은 대체 조작이 없지만, 그 단계는 이미
+                         「상위」와 「검색」도 접는 폭이라 거기서는 ⌂ 하나만 남기는 것이 결이다. -->
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
-                        <Button Style="{StaticResource SecondaryNavButton}"
+                        <Button Style="{StaticResource SecondaryNavButton}" Width="20"
                                 Command="{Binding GoBackCommand}"
                                 AutomationProperties.Name="뒤로"
                                 ToolTip="뒤로 (마우스 뒤로 버튼 · Alt+←)" Content="←" />
-                        <Button Style="{StaticResource SecondaryNavButton}"
+                        <Button Style="{StaticResource SecondaryNavButton}" Width="20"
                                 Command="{Binding GoForwardCommand}"
                                 AutomationProperties.Name="앞으로"
                                 ToolTip="앞으로 (마우스 앞으로 버튼 · Alt+→)" Content="→" />
-                        <Button Style="{StaticResource TertiaryNavButton}"
+                        <Button Style="{StaticResource TertiaryNavButton}" Width="20"
                                 Command="{Binding GoUpCommand}"
                                 IsEnabled="{Binding CanGoUp}"
                                 AutomationProperties.Name="상위 폴더"
                                 ToolTip="상위 폴더 (Alt+↑)" Content="↑" />
-                        <Button Style="{StaticResource NavButton}"
+                        <Button Style="{StaticResource NavButton}" Width="20"
                                 Command="{Binding GoToAnchorCommand}"
                                 AutomationProperties.Name="앵커로 복귀"
                                 ToolTip="앵커로 복귀 (Alt+Home)" Content="⌂" />
-                        <Button Style="{StaticResource SecondaryNavButton}"
+                        <Button Style="{StaticResource SecondaryNavButton}" Width="20"
                                 Command="{Binding RefreshCommand}"
                                 AutomationProperties.Name="다시 읽기"
                                 ToolTip="다시 읽기 (F5)" Content="⟳" />
-                        <Button Style="{StaticResource TertiaryNavToggleButton}"
+
+                        <!-- 뷰 방식 토글 (§3.2). 상태를 보여 주는 곳과 바꾸는 곳이 같다 —
+                             글자가 아이콘이 됐을 뿐 커맨드도 뜻도 그대로다. -->
+                        <Button Style="{StaticResource TertiaryNavButton}" Width="20"
+                                Command="{Binding ToggleViewModeCommand}"
+                                Content="{Binding ViewModeIcon}"
+                                AutomationProperties.Name="뷰 방식 전환"
+                                ToolTip="{Binding ViewModeTip}" />
+
+                        <!-- 정렬 (부채 17 · Phase 8-C ③). 아이콘은 방향(▴/▾)과 통합(∪)만
+                             말하고 기준은 툴팁과 열리는 메뉴가 말한다 — 네 기준에 글리프를
+                             하나씩 붙이면 어휘표가 이 앱 쪽으로 비대해진다(familylook §6).
+                             ∪ 가 2줄째와 함께 사라진 " · 통합" 표시가 간 자리다.
+
+                             폭만 Auto 다: 통합일 때 두 글자(∪▾)가 된다.
+
+                             WPF ContextMenu 는 우클릭에만 저절로 열리므로 Click 이 IsOpen 을
+                             세운다(코드 비하인드는 그 일만 한다). 값을 정하는 것은 전부
+                             SetSortCommand 안이다. ContextMenu 는 시각 트리 밖이라
+                             DataContext 가 안 내려온다 — Tag 로 패널 VM 을 잡는다.
+                             재귀 검색 중에는 잠근다: 그 결과는 찾은 순서대로 흘러들고 정렬하지
+                             않으므로(§4.10) 기준을 바꿔도 순서가 안 바뀐다 — 아이콘만 바뀌면
+                             거짓말이 된다. 잠긴 모양은 NavButton 이 이미 갖고 있다
+                             (IsEnabled=False → Opacity 0.35). -->
+                        <Button Style="{StaticResource TertiaryNavButton}"
+                                Width="Auto" MinWidth="20" Padding="2,0"
+                                Click="OnSortTextClick"
+                                Content="{Binding SortIcon}"
+                                IsEnabled="{Binding IsRecursiveSearch, Converter={StaticResource InverseBool}}"
+                                ToolTipService.ShowOnDisabled="True"
+                                AutomationProperties.Name="정렬 기준 변경"
+                                ToolTip="{Binding SortTip}"
+                                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <Button.ContextMenu>
+                                <!-- 라벨은 SortLabel 이 쓰는 네 단어 그대로다. 방향(▴/▾)은
+                                     아이콘이 이미 말하므로 메뉴에 다시 적지 않는다. -->
+                                <ContextMenu>
+                                    <MenuItem Header="이름"
+                                              Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:SortBy.Name}" />
+                                    <MenuItem Header="수정"
+                                              Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:SortBy.Modified}" />
+                                    <MenuItem Header="크기"
+                                              Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:SortBy.Size}" />
+                                    <MenuItem Header="종류"
+                                              Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:SortBy.Type}" />
+                                    <Separator />
+                                    <!-- 폴더 먼저 끄기 = 통합 정렬 (Phase 8-B ②). 위 넷과 성격이
+                                         달라(무엇으로 대 어떻게 묶어) 구분선 아래에 둔다.
+                                         체크는 한쪽 방향이다 — 값을 바꾸는 길은 커맨드 하나뿐이고
+                                         그것이 목록을 다시 읽는다. 양방향으로 묶으면 메뉴가 값만
+                                         바꾸고 목록은 옛 순서로 남는 길이 생긴다.
+                                         저장하지 않는다: 워크스페이스 스키마에 슬롯이 없다. -->
+                                    <MenuItem Header="폴더 먼저" IsCheckable="True"
+                                              IsChecked="{Binding PlacementTarget.Tag.FoldersFirst,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                          Mode=OneWay}"
+                                              Command="{Binding PlacementTarget.Tag.ToggleFoldersFirstCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              ToolTip="끄면 폴더와 파일을 한 덩어리로 정렬한다 — 아이콘에 ∪ 가 붙는다 (창을 다시 열면 켜진 상태로 돌아온다)" />
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+
+                        <Button Style="{StaticResource TertiaryNavToggleButton}" Width="20"
                                 Click="OnSearchToggleClick"
                                 AutomationProperties.Name="검색"
                                 ToolTip="검색 (Ctrl+F)" Content="🔍" />
                     </StackPanel>
 
+                    <!-- 폴더 이름 줄 = breadcrumb + 개수 (Phase 8-C ③).
+
+                         개수가 2줄째에서 여기로 올라왔다. <b>개수를 오른쪽에 도킹하고
+                         breadcrumb 이 남는 자리를 먹는다</b> — 반대로 두면(개수가 이름 바로 뒤)
+                         경로가 길어질 때 개수가 먼저 잘려 나간다. 잘려도 되는 것은 경로 쪽이고
+                         (그쪽은 툴팁·앵커 복귀로 되찾을 수 있다) 개수는 늘 보여야 한다.
+                         Auto 열을 새로 만들지 않은 이유도 같다: 열을 만들면 개수가 이름 칸의
+                         MinWidth 를 밀어 내비 아이콘이 잘리는 옛 사고로 돌아간다. -->
+                    <DockPanel Grid.Column="0">
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding ItemCountText}"
+                                   Margin="6,0,4,0" VerticalAlignment="Center" FontSize="11"
+                                   Foreground="{StaticResource Brush.TextSecondary}"
+                                   ToolTip="{Binding MetaText}" />
+
                     <!-- breadcrumb: 첫 조각(앵커) 클릭 = 앵커 복귀. 우클릭 = 현재 경로 복사. -->
-                    <ItemsControl Grid.Column="0" ItemsSource="{Binding Breadcrumbs}"
+                    <ItemsControl ItemsSource="{Binding Breadcrumbs}"
                                   VerticalAlignment="Center" ClipToBounds="True"
                                   ToolTip="우클릭: 지금 보고 있는 폴더의 경로 복사">
                         <ItemsControl.ContextMenu>
@@ -389,86 +490,26 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    </DockPanel>
                 </Grid>
 
-                <!-- 메타 + 앵커를 벗어난 상태. 좁은 타일에서 넘치지 않게 잘라 낸다. -->
-                <StackPanel Orientation="Horizontal" Margin="3,2,0,4" ClipToBounds="True">
-                    <!-- 메타는 MetaText 한 덩이가 아니라 세 조각으로 그린다 (§3.2 · Stage 3D):
-                         가운데 뷰 방식 글자가 눌러서 뒤집는 자리다. 상태를 보여 주는 곳과 바꾸는
-                         곳을 같게 둔다 — 뷰 모드에는 타일 우클릭 메뉴가 없고(§3.2 의 우클릭
-                         토글은 배치 편집 모드 안이다) 새 메뉴·툴바를 만들지 않기 위해서다.
-                         MetaText 는 이 세 조각을 이어 붙인 것이라 화면과 어긋날 수 없다.
-                         새 색은 만들지 않는다: LinkButton(breadcrumb 조각과 같은 것)이 손 커서와
-                         Brush.RowHover 만으로 "눌린다"를 말한다. -->
-                    <TextBlock Text="{Binding MetaCountText}"
-                               Foreground="{StaticResource Brush.TextSecondary}"
-                               FontSize="11" VerticalAlignment="Center" />
-                    <Button Style="{StaticResource LinkButton}"
-                            Command="{Binding ToggleViewModeCommand}"
-                            Content="{Binding ViewModeText}"
-                            Foreground="{StaticResource Brush.TextSecondary}"
-                            FontSize="11" Padding="2,0" VerticalAlignment="Center"
-                            AutomationProperties.Name="뷰 방식 전환"
-                            ToolTip="눌러서 뷰 방식 전환 (list ↔ details)" />
-                    <!-- 정렬 글자도 눌러서 바꾸는 자리다 (부채 17). 뷰 글자와 같은 껍데기를 쓴다.
-                         뷰 방식은 2값이라 커맨드 하나로 뒤집히지만 정렬은 4값 + 방향이라 메뉴가
-                         뜬다 — 순환시키면 8단계가 된다. WPF ContextMenu 는 우클릭에만 저절로
-                         열리므로 Click 이 IsOpen 을 세운다(코드 비하인드는 그 일만 한다).
-                         값을 정하는 것은 전부 SetSortCommand 안이다.
-                         ContextMenu 는 시각 트리 밖이라 DataContext 가 안 내려온다 — 아래
-                         Tag 로 패널 VM 을 잡는다(이 앱에 남은 유일한 WPF ContextMenu 다).
-                         재귀 검색 중에는 잠근다: 그 결과는 찾은 순서대로 흘러들고 정렬하지
-                         않으므로(§4.10) 기준을 바꿔도 순서가 안 바뀐다 — 문구만 바뀌면 거짓말이 된다.
-                         잠긴 모양은 LinkButton 이 이미 갖고 있다(IsEnabled=False → Opacity 0.35). -->
-                    <Button Style="{StaticResource LinkButton}"
-                            Click="OnSortTextClick"
-                            Content="{Binding MetaSortText}"
-                            Foreground="{StaticResource Brush.TextSecondary}"
-                            FontSize="11" Padding="2,0" VerticalAlignment="Center"
-                            IsEnabled="{Binding IsRecursiveSearch, Converter={StaticResource InverseBool}}"
-                            ToolTipService.ShowOnDisabled="True"
-                            AutomationProperties.Name="정렬 기준 변경"
-                            ToolTip="눌러서 정렬 기준 변경 — 재귀 검색 중에는 잠긴다(결과가 찾은 순서대로 나온다)"
-                            Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                        <Button.ContextMenu>
-                            <!-- 라벨은 MetaSortText 가 쓰는 네 단어 그대로다. 화살표(↑/↓)는
-                                 헤더 문구가 이미 말하므로 메뉴에 다시 적지 않는다. -->
-                            <ContextMenu>
-                                <MenuItem Header="이름"
-                                          Command="{Binding PlacementTarget.Tag.SetSortCommand,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                          CommandParameter="{x:Static models:SortBy.Name}" />
-                                <MenuItem Header="수정"
-                                          Command="{Binding PlacementTarget.Tag.SetSortCommand,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                          CommandParameter="{x:Static models:SortBy.Modified}" />
-                                <MenuItem Header="크기"
-                                          Command="{Binding PlacementTarget.Tag.SetSortCommand,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                          CommandParameter="{x:Static models:SortBy.Size}" />
-                                <MenuItem Header="종류"
-                                          Command="{Binding PlacementTarget.Tag.SetSortCommand,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                          CommandParameter="{x:Static models:SortBy.Type}" />
-                                <Separator />
-                                <!-- 폴더 먼저 끄기 = 통합 정렬 (Phase 8-B 2). 위 넷과 성격이
-                                     달라(무엇으로 대 어떻게 묶어) 구분선 아래에 둔다.
-                                     체크는 한쪽 방향이다 — 값을 바꾸는 길은 커맨드 하나뿐이고
-                                     그것이 목록을 다시 읽는다. 양방향으로 묶으면 메뉴가 값만
-                                     바꾸고 목록은 옛 순서로 남는 길이 생긴다.
-                                     저장하지 않는다: 워크스페이스 스키마에 슬롯이 없다. -->
-                                <MenuItem Header="폴더 먼저" IsCheckable="True"
-                                          IsChecked="{Binding PlacementTarget.Tag.FoldersFirst,
-                                                      RelativeSource={RelativeSource AncestorType=ContextMenu},
-                                                      Mode=OneWay}"
-                                          Command="{Binding PlacementTarget.Tag.ToggleFoldersFirstCommand,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                          ToolTip="끄면 폴더와 파일을 한 덩어리로 정렬한다 (창을 다시 열면 켜진 상태로 돌아온다)" />
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
-                    <TextBlock Text="· 앵커 밖" Foreground="{StaticResource Brush.Rotating}"
-                               FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
+                <!-- 2줄 = <b>지금 벌어지고 있는 일</b>만 (Phase 8-C ③).
+
+                     개수·뷰 방식·정렬은 1줄로 올라갔다. 여기 남은 셋(앵커 밖 · 선택 · 읽는 중)은
+                     평소에 하나도 없으므로 그때는 줄을 통째로 접어 헤더 높이를 돌려준다 —
+                     1x1 타일에서 이 한 줄이 목록 두 행쯤 된다.
+
+                     Visibility 를 로컬 값으로 준다(스타일 트리거가 아니라): 이 줄에는 IsEmpty
+                     같은 반대 조건이 겹치지 않아 하나로 충분하다.
+                     좁은 타일에서 넘치지 않게 잘라 낸다. -->
+                <StackPanel Orientation="Horizontal" Margin="3,2,0,4" ClipToBounds="True"
+                            Visibility="{Binding HasStatusLine,
+                                         Converter={StaticResource BoolToVisibility}}">
+                    <!-- 앞의 "·" 를 뗐다 (Phase 8-C ③): 개수·뷰·정렬이 1줄로 올라가면서
+                         이 글귀가 줄의 첫 조각이 됐다 — 앞 조각이 없는데 구분점만 남으면
+                         무엇에서 이어지는지 알 수 없는 점 하나가 뜬다. -->
+                    <TextBlock Text="앵커 밖" Foreground="{StaticResource Brush.Rotating}"
+                               FontSize="11" VerticalAlignment="Center"
                                Visibility="{Binding IsAwayFromAnchor,
                                                     Converter={StaticResource BoolToVisibility}}" />
                     <TextBlock Text="{Binding SelectionText}" FontSize="11" Margin="6,0,0,0"

@@ -35,22 +35,24 @@ public sealed class FileItemViewModel(FolderItem item, string relativeFolder = "
     /// 이미지 리소스를 쓰지 않고 <b>유니코드 글리프만</b> 쓴다.
     /// </summary>
     /// <remarks>
-    /// <b>폴더 쪽을 <c>📁</c>(U+1F4C1) 에서 <c>▣</c>(U+25A3) 로 바꿨다</b> (Phase 8-B ③).
-    /// WPF 는 컬러 폰트를 그리지 않아 두 이모지가 <b>같은 굵기의 가는 윤곽선</b>으로 떨어진다 —
-    /// 목록 글자 크기에서 <c>📁</c> 와 <c>📄</c> 의 실루엣이 거의 갈리지 않았다.
-    /// <c>▣</c> 는 속이 찬 사각이라 <b>잉크의 무게</b>가 다르고, 파일 쪽 <c>📄</c> 는
-    /// 세로로 긴 종이 윤곽이라 <b>실루엣</b>도 다르다. 두 축이 함께 갈리므로 훑는 눈에
-    /// 폴더가 먼저 걸린다 — 목록에서 소수인 쪽이 튀어나오는 것이 맞다.
+    /// <c>doc/FolderDeck_familylook_spec.md</c> §6 어휘표 그대로다 —
+    /// 폴더 <c>📁</c>(U+1F4C1) · 파일 <c>📄</c>(U+1F4C4).
     /// <para>
-    /// 색도 갈라 붙지만(폴더=본문색 / 파일=보조색) 그것은 뷰의 몫이고 <b>덤이다</b> —
-    /// 색만으로 뜻을 나르지 않는다는 규칙(§3.2)대로 글리프 자체가 이미 갈린다.
+    /// Phase 8-B ③ 에서 폴더를 <c>▣</c>(U+25A3) 로 바꿨다가 <b>8-C ① 에서 되돌렸다</b>.
+    /// 바꾼 이유였던 "둘이 잘 안 갈린다"는 여전히 사실이다 — WPF 는 컬러 폰트를 그리지 않아
+    /// 두 이모지가 같은 굵기의 가는 윤곽선으로 떨어진다. 다만 <b>그것을 형태가 아니라 색으로
+    /// 푼다</b>: 어휘표를 지키면서 가르는 쪽이 낫다. 색은 뷰가 준다 —
+    /// <c>Views/FolderPanelView.xaml</c> 의 <c>ItemGlyph</c> 스타일이
+    /// <c>Brush.FolderGlyph</c>(황토)와 <c>Brush.FileGlyph</c>(무채색)를 갈라 붙인다.
     /// </para>
     /// <para>
-    /// <c>doc/FolderDeck_familylook_spec.md</c> §6 어휘표는 폴더를 <c>📁</c> 로 못박고
-    /// 있다 — 이 변경은 그 한 칸과 어긋난다. 문서는 이 작업 범위 밖이라 고치지 않았다.
+    /// <b>색만으로 나르는 것이 아니다.</b> "색만으로 구분하지 않는다"는 규칙(설계 §3.1 의
+    /// <c>열려 있음</c> 배지 · §3.2 의 상시/순환 테두리)은 <b>글자가 없는 상태 표시</b>에
+    /// 대한 것이다. 여기는 글리프 옆에 이름이 늘 붙어 있고, 상세 뷰에서는 크기 칸이 폴더만
+    /// 비어 있어(<see cref="SizeText"/>) 색을 못 봐도 종류를 읽을 수 있다.
     /// </para>
     /// </remarks>
-    public string Glyph => Item.IsDirectory ? "▣" : "📄";
+    public string Glyph => Item.IsDirectory ? "📁" : "📄";
 
     /// <summary>폴더는 비워 둔다 — 재귀 계산하지 않는다.</summary>
     public string SizeText => Item.IsDirectory ? string.Empty : Humanize(Item.Size);
