@@ -62,14 +62,25 @@ internal static class FpuGuard
     }
 
     /// <summary>
-    /// 마스크가 하나라도 풀려 있으면 전부 켜고 <b>검산까지</b> 한다. 안 풀렸으면 아무것도
-    /// 하지 않는다 — 뜨거운 경로에서 불릴 수 있다.
+    /// 마스크가 하나라도 풀려 있으면 전부 켠다. 안 풀렸으면 아무것도 하지 않는다 —
+    /// 뜨거운 경로에서 불릴 수 있다.
     /// </summary>
+    /// <remarks>
+    /// <b>여기 있던 계측을 걷어냈다</b>(E-2 · <c>ShellMenuProbe</c>). 그때는 읽기 실패 ·
+    /// 되돌리기 실패 · 검산 결과를 한 줄씩 파일에 적었고, 검산을 위해 되돌린 값을 다시 읽었다.
+    /// 지금은 <b>고치는 손만 남았다</b> — 되돌림이 몇 번 일어났는지는 <see cref="RestoreCount"/>
+    /// 가 세고, 그 이상은 아무 데도 남지 않는다.
+    /// <para>
+    /// <paramref name="tag"/>·<paramref name="when"/> 은 그 로그가 쓰던 값이라 지금은 읽는 곳이
+    /// 없다. <b>일부러 남겼다</b>: 태그는 <see cref="Enter"/> 호출 17곳에서 「무엇을 감싸는
+    /// 스코프인가」를 말하는 유일한 글자이고(디버거로 <see cref="Scope"/> 를 열면 보인다),
+    /// 떼면 프로브 제거와 무관한 17곳 + 시험 넷의 손질이 이 회차에 섞인다.
+    /// </para>
+    /// </remarks>
     private static void Restore(string tag, string when)
     {
         if (Current() is not { } before)
         {
-            ShellMenuProbe.Log("Fpu", $"{tag} {when} — 제어워드 읽기 실패");
             return;
         }
 
@@ -78,24 +89,8 @@ internal static class FpuGuard
             return;
         }
 
-        long n = Interlocked.Increment(ref _restoreCount);
-
-        if (!SetExceptionMask(MaskEm))
-        {
-            ShellMenuProbe.Log("Fpu", $"{tag} {when} #{n} — 되돌리기 실패 before=0x{before:X8}");
-            return;
-        }
-
-        // 되돌린 값을 다시 읽어 검산한다 — 「불렀으니 됐을 것」으로 두지 않는다.
-        uint? verified = Current();
-
-        ShellMenuProbe.Log(
-            "Fpu",
-            verified is { } after && (after & MaskEm) == MaskEm
-                ? $"{tag} {when} #{n} 되돌림 before=0x{before:X8} after=0x{after:X8}"
-                : $"{tag} {when} #{n} — 검산 실패 before=0x{before:X8} after={Show(verified)}");
-
-        static string Show(uint? v) => v is { } x ? $"0x{x:X8}" : "읽기실패";
+        Interlocked.Increment(ref _restoreCount);
+        SetExceptionMask(MaskEm);
     }
 
     /// <summary>

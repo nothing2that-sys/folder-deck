@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FolderDeck.App.Interop;
@@ -1092,32 +1091,22 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
     partial void OnItemsChanged(IReadOnlyList<FileItemViewModel> value) => RestartSearch();
 
-    // ── E-4 임시 계측 ────────────────────────────────────────────────────────
-    //
-    // 「덱 업데이트가 셸 메뉴와 겹치는가」(조사 §4 중점 3)만 본다. 경로는 찍지 않는다 —
-    // 개인 경로가 로그에 남는다. DisplayItems 대입이 곧 두 ListView 의 ItemsSource 통째
-    // 교체다(둘 다 VirtualizationMode=Recycling).
-    //
-    // 「교체」 다음에 「레이아웃 통과」가 없으면 그 교체가 부른 레이아웃 패스에서 죽은 것이다 —
-    // FailFast 는 로그를 남기지 않으므로 이 짝의 결손이 유일한 증거다. 기록은 매번
-    // 파일을 닫으므로 프로세스가 즉사해도 앞줄은 남는다.
-    private static long _displaySwapSeq;
-
+    /// <summary>
+    /// 목록을 갈아끼우기 <b>직전</b>에 FPU 마스크를 되돌린다 (F-1 그물).
+    /// </summary>
+    /// <remarks>
+    /// <c>DisplayItems</c> 대입이 곧 두 <c>ListView</c> 의 <c>ItemsSource</c> 통째 교체이고,
+    /// 그 다음이 레이아웃 패스다. 셸 확장이 FPU 마스크를 풀고 갔으면 그 레이아웃에서 터지므로
+    /// 이 길목에서 한 번 더 켠다 — <see cref="FpuGuard"/> 는 안 풀려 있으면 아무것도 하지
+    /// 않아 뜨거운 경로에서도 값싸다.
+    /// <para>
+    /// 원래 이 자리에 <b>어느 교체가 레이아웃을 못 넘겼는지</b> 짝으로 찍는 계측이 있었다
+    /// (E-2·E-4). 원인이 확정돼 걷어냈다 — 마스크를 되돌리는 손만 남았다.
+    /// </para>
+    /// </remarks>
     partial void OnDisplayItemsChanged(IReadOnlyList<FileItemViewModel> value)
     {
-        // ── F-1 그물. 여기가 레이아웃 직전이다 — 이 줄이 되돌림을 찍으면 §2 열거에서
-        // 자리를 빠뜨린 것이다. 스코프의 진입 쪽이 곧 「첫 줄 검사」다.
         using var fpu = FpuGuard.Enter("그물:DisplayItems");
-
-        long seq = Interlocked.Increment(ref _displaySwapSeq);
-
-        ShellMenuProbe.Log("Display", $"#{seq} 교체 count={value.Count} {ShellMenuProbe.MenuContext()}");
-
-        // Loaded 는 레이아웃이 끝난 뒤에 도는 우선순위다. 대입이 UI 스레드가 아니면 이 줄은
-        // 영영 안 찍히지만, 지금 대입 자리는 전부 UI 스레드다(await 뒤 ConfigureAwait(true)).
-        Dispatcher.CurrentDispatcher.BeginInvoke(
-            () => ShellMenuProbe.Log("Display", $"#{seq} 레이아웃 통과"),
-            DispatcherPriority.Loaded);
     }
 
     /// <summary>검색어·체크·목록이 바뀔 때마다 이전 검색을 즉시 취소하고 다시 잡는다.</summary>

@@ -444,18 +444,12 @@ public partial class MainWindow : Window
     /// </summary>
     protected override void OnClosing(CancelEventArgs e)
     {
-        // ── E-2 임시 계측. 원인이 확정되면 뺀다. e.Cancel 은 건드리지 않는다 — 막으면 증상이 가려진다.
-        ShellMenuProbe.Log("Closing", Environment.StackTrace);
-
         base.OnClosing(e);
         CapturePlacement();
     }
 
     protected override void OnClosed(EventArgs e)
     {
-        // ── E-2 임시 계측. 원인이 확정되면 뺀다.
-        ShellMenuProbe.Log("Closed", Environment.StackTrace);
-
         _messageTimer.Stop();
         _messageTimer.Tick -= OnMessageExpired;
         ViewModel.PropertyChanged -= OnViewModelPropertyChanged;

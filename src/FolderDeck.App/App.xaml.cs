@@ -39,20 +39,6 @@ public partial class App : Application, IWorkspaceHost
     {
         base.OnStartup(e);
 
-        // ── E-2 임시 계측. 원인이 확정되면 뺀다. Handled 를 세우지 않는다 — 막으면 증상이 가려진다.
-        DispatcherUnhandledException += (_, args) => ShellMenuProbe.Log(
-            "DispatcherUnhandled",
-            $"{args.Exception.GetType().FullName}: {args.Exception.Message}{Environment.NewLine}{args.Exception}");
-
-        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
-        {
-            var text = args.ExceptionObject is Exception ex
-                ? $"{ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex}"
-                : args.ExceptionObject?.ToString() ?? "(ExceptionObject 가 null)";
-
-            ShellMenuProbe.Log("AppDomain", $"IsTerminating={args.IsTerminating}{Environment.NewLine}{text}");
-        };
-
         var options = CommandLineOptions.Parse(e.Args);
 
         var store = new WorkspaceStore();

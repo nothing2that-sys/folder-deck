@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using System.Threading;
 using System.Windows.Interop;
 
 namespace FolderDeck.App.Interop;
@@ -23,15 +22,6 @@ internal readonly record struct ShellMenuOutcome(ShellMenuAppCommand App, int Sh
 internal static class ShellItemMenu
 {
     /// <summary>
-    /// <b>임시 계측이다(E-4).</b> <c>TrackPopupMenuEx</c> 의 중첩 메시지 루프가 도는 동안
-    /// 1 이상이다 — 그 사이에 무엇이 큐에서 실행됐는지 가리려고 둔다.
-    /// </summary>
-    internal static int MenuDepth;
-
-    /// <summary><b>임시 계측이다(E-4).</b> 메뉴가 마지막으로 닫힌 시각(UTC). 안 띄웠으면 null.</summary>
-    internal static DateTime? LastMenuClosedUtc;
-
-    /// <summary>
     /// 메뉴를 띄운다. 고른 것이 셸 항목이면 <b>여기서 실행하고</b>, 앱 항목이면 무엇이
     /// 눌렸는지만 돌려준다 — 앱 커맨드는 뷰모델 것이라 뷰가 부른다.
     /// </summary>
@@ -46,11 +36,6 @@ internal static class ShellItemMenu
     public static ShellMenuOutcome Show(
         HwndSource source, IReadOnlyList<string> paths, bool isDirectory, int screenX, int screenY)
     {
-        // ── E-3 임시 계측. 경로 문자열은 찍지 않는다 — 개인 경로가 로그에 남는다.
-        ShellMenuProbe.Log(
-            "Show",
-            $"진입 paths={paths.Count} isDirectory={isDirectory} hwnd=0x{source.Handle.ToInt64():X}");
-
         using var scm = ShellContextMenu.Acquire(paths, source.Handle);
 
         var hMenu = ShellNative.CreatePopupMenu();
@@ -58,9 +43,6 @@ internal static class ShellItemMenu
         {
             throw new COMException("CreatePopupMenu 실패", Marshal.GetLastPInvokeError());
         }
-
-        // ── E-3 임시 계측. finally 에서 반환값을 찍으려고 둔다 — null 이면 예외로 빠졌다는 뜻이다.
-        ShellMenuOutcome? outcome = null;
 
         try
         {
@@ -80,39 +62,23 @@ internal static class ShellItemMenu
             // 앱/셸 분기는 ShellMenuPolicy.ToAppCommand 하나뿐이다.
             var app = ShellMenuPolicy.ToAppCommand(chosen);
 
-            // ── E-3 임시 계측. 앱이냐 셸이냐가 여기서 갈린다.
-            ShellMenuProbe.Log("Show", $"chosen=0x{chosen:X} ToAppCommand={app}");
-
             if (app != ShellMenuAppCommand.None)
             {
-                outcome = new ShellMenuOutcome(app, 0);
-                return outcome.Value;
+                return new ShellMenuOutcome(app, 0);
             }
 
             if (chosen == 0)
             {
-                outcome = new ShellMenuOutcome(ShellMenuAppCommand.None, 0);
-                return outcome.Value;
+                return new ShellMenuOutcome(ShellMenuAppCommand.None, 0);
             }
 
-            // ── E-3 임시 계측. 셸 항목을 고른 경우만 지나는 자리다.
-            ShellMenuProbe.Log("Show", $"Invoke 직전 menuId=0x{chosen:X}");
             int shellHr = scm.Invoke(chosen, source.Handle);
-            ShellMenuProbe.Log("Show", $"Invoke 직후 hr=0x{shellHr:X8}");
 
-            outcome = new ShellMenuOutcome(ShellMenuAppCommand.None, shellHr);
-            return outcome.Value;
+            return new ShellMenuOutcome(ShellMenuAppCommand.None, shellHr);
         }
         finally
         {
             ShellNative.DestroyMenu(hMenu);
-
-            // ── E-3 임시 계측. DestroyMenu 직후다.
-            ShellMenuProbe.Log(
-                "Show",
-                outcome is { } done
-                    ? $"정상 반환 App={done.App} ShellHr=0x{done.ShellHr:X8}"
-                    : "예외로 빠져나감");
         }
     }
 
@@ -177,13 +143,6 @@ internal static class ShellItemMenu
         {
             if (scm.HandleMenuMessage((uint)msg, wParam, lParam, out var result))
             {
-                // ── E-3 임시 계측. 삼킨 것만 찍는다 — false 까지 찍으면 메뉴가 떠 있는 동안
-                // 메시지가 쏟아져 로그가 못 쓰게 된다.
-                ShellMenuProbe.Log(
-                    "Hook",
-                    $"msg=0x{msg:X4} wParam=0x{wParam.ToInt64():X} lParam=0x{lParam.ToInt64():X} " +
-                    $"result=0x{result.ToInt64():X}");
-
                 handled = true;
                 return result;
             }
@@ -198,16 +157,9 @@ internal static class ShellItemMenu
         try
         {
             uint chosen;
-            int lastError;
 
-            // ── E-4 임시 계측. 중첩 메시지 루프가 도는 구간을 표시한다. finally 라 예외로도 샌다.
-            Interlocked.Increment(ref MenuDepth);
-            try
+            using (FpuGuard.Enter("TrackPopupMenuEx"))
             {
-                // ── F-1. 스코프가 아래 GetLastPInvokeError 읽기를 **안에** 둔다 —
-                // Dispose 의 _controlfp_s 가 last error 를 덮으므로 순서가 이래야 한다.
-                using var fpu = FpuGuard.Enter("TrackPopupMenuEx");
-
                 chosen = ShellNative.TrackPopupMenuEx(
                     hMenu,
                     ShellNative.TPM_RETURNCMD | ShellNative.TPM_LEFTALIGN | ShellNative.TPM_RIGHTBUTTON,
@@ -215,20 +167,7 @@ internal static class ShellItemMenu
                     y,
                     source.Handle,
                     IntPtr.Zero);
-
-                // ── E-3 임시 계측. 바로 다음 줄에서 읽는다 — 사이에 P/Invoke 하나라도 끼면 값이 덮인다.
-                lastError = Marshal.GetLastPInvokeError();
             }
-            finally
-            {
-                Interlocked.Decrement(ref MenuDepth);
-                LastMenuClosedUtc = DateTime.UtcNow;
-            }
-
-            ShellMenuProbe.Log(
-                "Track",
-                $"chosen={chosen} (0x{chosen:X}) lastError={lastError} " +
-                $"hMenu=0x{hMenu.ToInt64():X} hwnd=0x{source.Handle.ToInt64():X}");
 
             return chosen;
         }
