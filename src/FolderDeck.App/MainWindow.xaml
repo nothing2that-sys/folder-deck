@@ -414,7 +414,8 @@
                                                             IsHitTestVisible="False"
                                                             Visibility="{Binding IsDropTarget,
                                                                 Converter={StaticResource BoolToVisibility}}">
-                                                        <TextBlock Text="여기에 놓기" FontSize="10"
+                                                        <TextBlock Text="{Binding DropTargetText}"
+                                                                   FontSize="10"
                                                                    FontWeight="SemiBold"
                                                                    Foreground="{StaticResource Brush.Accent}" />
                                                     </Border>
@@ -591,6 +592,24 @@
                                                                 Command="{Binding RemoveCommand}"
                                                                 AutomationProperties.Name="대상함에서 빼기"
                                                                 ToolTip="대상함에서 뺀다 (폴더는 그대로)" />
+
+                                                        <!-- 드롭 과녁 글귀 (§4.2-2 259행). 색만 바뀌면
+                                                             놓기 전에 이동인지 복사인지 알 수 없다 —
+                                                             폴더 행과 같은 배지를 쓴다.
+                                                             IsHitTestVisible="False" 인 이유는 폴더 행의
+                                                             같은 자리 주석에 있다. -->
+                                                        <Border DockPanel.Dock="Right"
+                                                                Background="{StaticResource Brush.AccentSurface}"
+                                                                CornerRadius="2" Padding="4,0" Margin="4,0,0,0"
+                                                                VerticalAlignment="Center"
+                                                                IsHitTestVisible="False"
+                                                                Visibility="{Binding IsDropTarget,
+                                                                    Converter={StaticResource BoolToVisibility}}">
+                                                            <TextBlock Text="{Binding DropTargetText}"
+                                                                       FontSize="10"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="{StaticResource Brush.Accent}" />
+                                                        </Border>
                                                         <CheckBox IsChecked="{Binding IsChecked}"
                                                                   VerticalContentAlignment="Center"
                                                                   Checked="OnTrayCheckChanged"

@@ -256,6 +256,8 @@
         </Rectangle>
 
         <!-- 테두리만으로는 큰 타일에서 눈에 안 띄어 말로도 적는다 (§4.2-2 와 같은 글귀).
+             글귀는 뷰모델이 만든다 — 놓으면 이동인지 복사인지를 말해야 하고(볼륨이 가른다)
+             글자를 여기 박으면 받는 자리 셋이 세 벌이 되어 하나만 고쳐진다.
              목록 위에 떠야 하므로 형제 중 마지막이 아니라 여기 두고 Panel.ZIndex 로 올린다.
              IsHitTestVisible="False" — 이것이 없으면 깜빡인다. WPF 는 드래그 이벤트를 히트테스트로
              찾은 <b>자손</b>에 올리고 그것이 이 컨트롤까지 버블한다. 그래서 커서가 이 글귀 위로
@@ -267,7 +269,7 @@
                 CornerRadius="3" Padding="10,4"
                 HorizontalAlignment="Center" VerticalAlignment="Center"
                 Visibility="{Binding IsDropTarget, Converter={StaticResource BoolToVisibility}}">
-            <TextBlock Text="여기에 놓기" FontWeight="SemiBold"
+            <TextBlock Text="{Binding DropTargetText}" FontWeight="SemiBold"
                        Foreground="{StaticResource Brush.Accent}" />
         </Border>
 

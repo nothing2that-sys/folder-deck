@@ -30,6 +30,31 @@ public interface IFileDropTarget
 
     /// <summary>드래그가 이 자리 위에 있는가 (파란 과녁 강조 — Phase 2 빈 칸과 같은 결).</summary>
     bool IsDropTarget { get; set; }
+
+    /// <summary>지금 놓으면 복사인가 — 과녁 글귀가 이것을 읽는다 (§4.2-2).</summary>
+    /// <remarks>
+    /// <b><see cref="IsDropTarget"/> 과 같은 자리에서 같이 정해진다.</b> 판정을 낸 곳이 문구도
+    /// 정해야 <c>DragOver</c> 가 말한 것과 <c>Drop</c> 이 한 것이 갈리지 않는다.
+    /// </remarks>
+    bool DropTargetCopies { get; set; }
+}
+
+/// <summary>
+/// 과녁에 뜨는 글귀 — <b>놓으면 무엇이 되는지</b>를 말한다 (§4.2-2 259행).
+/// </summary>
+/// <remarks>
+/// 규칙이 조건부가 된 이상(같은 볼륨이면 이동 · 다른 볼륨이면 복사) 손동작만으로는 무엇이 될지
+/// 알 수 없다. 그런데 이 경로에는 확인창을 두지 않기로 했으므로(§4.2-2) <b>놓기 전에 말하는</b>
+/// 자리는 과녁뿐이다 — §3.1 배지 · §4.3 상시 표시와 같은 결이다.
+/// <para>
+/// <b>글귀는 여기 한 곳에서만 만든다.</b> 받는 자리 셋(왼쪽 폴더 행 · 대상함 · 타일)이 같은 값을
+/// 읽어야 하고, XAML 은 뷰모델이 낸 것을 <b>읽기만 한다</b> — 글자를 XAML 에 박으면 세 벌이 되고
+/// 하나만 고쳐진다.
+/// </para>
+/// </remarks>
+public static class DropTargetCaption
+{
+    public static string For(bool copy) => copy ? "여기로 복사" : "여기로 이동";
 }
 
 /// <summary>

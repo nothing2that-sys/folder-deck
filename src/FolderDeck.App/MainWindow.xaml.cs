@@ -395,7 +395,8 @@ public partial class MainWindow : Window
     /// <remarks>
     /// <c>DragOver</c> 와 <c>Drop</c> 이 <b>이 함수 하나</b>를 쓴다. 포맷 순서와 수정키 규칙은
     /// <see cref="DropRouter.Resolve"/> 에 있어 타일까지 세 자리가 같은 것을 본다 — 여기서
-    /// 더하는 것은 <b>목적지</b>뿐이다.
+    /// 더하는 것은 <b>목적지</b>뿐이고, 그 목적지는 <c>Resolve</c> 에 넘긴다(볼륨 판정이 그것을
+    /// 봐야 한다, §4.2-2).
     /// <para>
     /// 목적지는 <b>그 자리의 앵커 경로</b>다(<c>Entry.Path</c>). 타일의 <c>CurrentPath</c> 는
     /// 타일에만 있는 개념이다 — 대상함에 놓으면 <b>그 항목 하나</b>로만 가고 체크된 목적지
@@ -405,13 +406,16 @@ public partial class MainWindow : Window
     private ResolvedDrop? ResolveDrop(object sender, DragEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: IFileDropTarget target }
-            || DropRouter.Resolve(e.Data, e.KeyStates) is not { } incoming
+            || DropRouter.Resolve(e.Data, e.KeyStates, target.Entry.Path) is not { } incoming
             || !ViewModel.CanDropOnto(target.Entry.Path, incoming.Items))
         {
             return null;
         }
 
         target.IsDropTarget = true;
+
+        // 문구도 여기서 정한다 — 판정을 낸 자리와 갈라지면 "복사라고 써 놓고 옮기는" 자리가 생긴다.
+        target.DropTargetCopies = incoming.Copy;
         return new ResolvedDrop(target.Entry.Path, incoming.Items, incoming.Copy);
     }
 

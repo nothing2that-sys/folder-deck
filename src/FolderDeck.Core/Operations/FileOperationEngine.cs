@@ -1,4 +1,5 @@
 using FolderDeck.Core.Models;
+using FolderDeck.Core.Paths;
 
 namespace FolderDeck.Core.Operations;
 
@@ -258,7 +259,8 @@ public sealed class FileOperationEngine(IRecycleBin recycleBin) : IFileOperation
 
         // 같은 볼륨의 이동이고 합칠 것이 없으면 통째로 이름만 바꾼다 — 트리를 걷지 않는다.
         // (Directory.Move 는 볼륨을 건너뛰지 못한다 — 확인함. 그때는 복사 후 삭제로 간다.)
-        if (request.Op == FileOperationKind.Move && !merging && SameVolume(source.Path, target))
+        if (request.Op == FileOperationKind.Move && !merging
+            && FolderPathRules.SameVolume(source.Path, target))
         {
             walk.Touch(source.Path);
             Directory.Move(source.Path, target);
@@ -427,11 +429,6 @@ public sealed class FileOperationEngine(IRecycleBin recycleBin) : IFileOperation
         request.Op == FileOperationKind.Copy
         && request.OnConflict == ConflictPolicy.Rename
         && SamePath(sourcePath, target);
-
-
-    private static bool SameVolume(string a, string b) =>
-        string.Equals(Path.GetPathRoot(Path.GetFullPath(a)), Path.GetPathRoot(Path.GetFullPath(b)),
-            StringComparison.OrdinalIgnoreCase);
 
     private static bool IsUnder(string path, string parent)
     {

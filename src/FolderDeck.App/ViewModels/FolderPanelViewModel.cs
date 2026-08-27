@@ -361,6 +361,14 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [ObservableProperty]
     private bool isDropTarget;
 
+    /// <summary>지금 놓으면 복사인가 — 과녁 글귀가 이것을 읽는다 (§4.2-2).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DropTargetText))]
+    private bool dropTargetCopies;
+
+    /// <summary>과녁 글귀 — <b>XAML 은 이것을 읽기만 한다</b>(§4.2-2 259행).</summary>
+    public string DropTargetText => DropTargetCaption.For(DropTargetCopies);
+
     /// <summary>
     /// 셸 드롭의 목적지 — <b>지금 보고 있는 경로</b>이고 앵커가 아니다(§4.9 · §4.7
     /// <c>allVisible</c> 과 같은 기준: 화면에 보이는 그대로가 목적지다).

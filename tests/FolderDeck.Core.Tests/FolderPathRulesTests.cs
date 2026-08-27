@@ -92,4 +92,55 @@ public sealed class FolderPathRulesTests
     [Fact]
     public void LeafNameTakesTheLastSegment() =>
         Assert.Equal("Recipe", FolderPathRules.LeafName(@"D:\code\Recipe\"));
+
+    // ── 볼륨 판정 (§4.2-2 · D51 결정 4) ───────────────────────────────────────
+    //
+    // <b>실제 볼륨을 만들지 않는다.</b> 순수 함수라 경로 문자열만으로 시험할 수 있고, 그것이
+    // 엔진의 private static 에서 여기로 나온 이유다 — 두 번째 드라이브도 NAS 도 없는 기계에서
+    // 「D: 에서 NAS 로 끌면 복사」라는 규칙을 시험할 수 있어야 한다.
+
+    [Fact]
+    public void SameRootIsTheSameVolume() =>
+        Assert.True(FolderPathRules.SameVolume(@"D:\code\Main.cs", @"D:\output"));
+
+    [Fact]
+    public void ADifferentDriveLetterIsADifferentVolume() =>
+        Assert.False(FolderPathRules.SameVolume(@"D:\code\Main.cs", @"C:\output"));
+
+    /// <summary>드라이브 문자의 대소문자는 볼륨을 가르지 않는다 — 껐다 켜면 어느 쪽으로도 온다.</summary>
+    [Fact]
+    public void TheDriveLetterCaseDoesNotMatter() =>
+        Assert.True(FolderPathRules.SameVolume(@"d:\code", @"D:\output"));
+
+    /// <summary>UNC 는 <b>서버가 아니라 공유</b>가 루트다 — 같은 서버의 다른 공유는 다른 볼륨이다.</summary>
+    [Fact]
+    public void TheSameUncShareIsTheSameVolume() =>
+        Assert.True(FolderPathRules.SameVolume(@"\\nas\backup\a.txt", @"\\nas\backup\old"));
+
+    [Fact]
+    public void ADifferentUncShareIsADifferentVolume() =>
+        Assert.False(FolderPathRules.SameVolume(@"\\nas\backup\a.txt", @"\\nas\media"));
+
+    /// <summary>로컬 드라이브와 UNC 공유는 언제나 다른 볼륨이다 — 이 회차가 겨냥한 바로 그 경로다.</summary>
+    [Fact]
+    public void ALocalDriveAndAUncShareAreDifferentVolumes() =>
+        Assert.False(FolderPathRules.SameVolume(@"D:\code\Main.cs", @"\\nas\backup"));
+
+    /// <summary>
+    /// 상대 경로도 <b>먼저 정규화한 뒤</b> 본다 — 안 그러면 루트가 빈 문자열로 나와 아무 상대 경로나
+    /// 서로 같은 볼륨이 된다.
+    /// </summary>
+    [Fact]
+    public void ARelativePathIsResolvedBeforeTheRootIsRead()
+    {
+        var here = Directory.GetCurrentDirectory();
+
+        Assert.True(FolderPathRules.SameVolume("sub", here));
+        Assert.True(FolderPathRules.SameVolume(@"sub\deeper", "other"));
+    }
+
+    /// <summary>끝 구분자는 루트를 바꾸지 않는다 — 목적지 경로가 어느 쪽으로도 들어온다.</summary>
+    [Fact]
+    public void ATrailingSeparatorDoesNotChangeTheVolume() =>
+        Assert.True(FolderPathRules.SameVolume(@"D:\code\", @"D:\code"));
 }

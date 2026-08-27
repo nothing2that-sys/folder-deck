@@ -66,7 +66,7 @@ public sealed class TileDropTests
     private static (IReadOnlyList<OperationItem> Items, bool Copy)? Accepted(
         MainWindowFixture f, FolderPanelViewModel tile, DataObject data, DragDropKeyStates keys) =>
         tile.ShellDropDestination is { } destination
-        && DropRouter.Resolve(data, keys) is { } resolved
+        && DropRouter.Resolve(data, keys, destination) is { } resolved
         && f.ViewModel.CanDropOnto(destination, resolved.Items)
             ? resolved
             : null;
@@ -347,23 +347,60 @@ public sealed class TileDropTests
         Assert.True(data.GetDataPresent(DataFormats.FileDrop));
         Assert.Equal(DropRoute.Internal, DropRouter.Route(data));
 
-        // 수정키가 없으면 이동 — 셸 규칙(기본 복사)을 탔다면 true 가 됐을 자리다.
-        Assert.False(DropRouter.Resolve(data, DragDropKeyStates.None)!.Value.Copy);
+        // 목적지는 픽스처 안이라 원본과 같은 볼륨이다 — 볼륨이 가르는 자리를 여기서 섞지 않는다.
+        var destination = f.OutputPath;
 
-        // Shift 는 내부 규칙에서 아무 뜻이 없다 — 여전히 이동이다.
-        Assert.False(DropRouter.Resolve(data, DragDropKeyStates.ShiftKey)!.Value.Copy);
+        // 수정키가 없고 같은 볼륨이면 이동 — 셸 규칙(기본 복사)을 탔다면 true 가 됐을 자리다.
+        Assert.False(DropRouter.Resolve(data, DragDropKeyStates.None, destination)!.Value.Copy);
 
-        Assert.True(DropRouter.Resolve(data, DragDropKeyStates.ControlKey)!.Value.Copy);
+        // Shift 는 내부 규칙에서 "이동"이다 — 같은 볼륨에서는 무수정키와 결과가 같다.
+        Assert.False(DropRouter.Resolve(data, DragDropKeyStates.ShiftKey, destination)!.Value.Copy);
+
+        Assert.True(DropRouter.Resolve(data, DragDropKeyStates.ControlKey, destination)!.Value.Copy);
     }
 
-    [Fact]
-    public void TheInternalRuleMovesByDefaultAndCopiesWithControl()
-    {
-        Assert.False(DropRouter.InternalDropCopies(DragDropKeyStates.None));
-        Assert.True(DropRouter.InternalDropCopies(DragDropKeyStates.ControlKey));
+    /// <summary>
+    /// 내부 규칙의 네 줄 (§4.2-2 · D51 결정 1) — <c>Ctrl</c> 복사 · <c>Shift</c> 이동 ·
+    /// <c>Ctrl</c>+<c>Shift</c> 복사 · <b>수정키가 없으면 볼륨이 가른다.</b>
+    /// </summary>
+    /// <remarks>
+    /// 이 판은 전에 <c>TheInternalRuleMovesByDefaultAndCopiesWithControl</c> 이었고
+    /// 「내부 규칙은 <c>Shift</c> 를 읽지 않는다」를 <b>명시적으로 굳혀 두었다</b> — 이번 회차가
+    /// 바꾸기로 한 바로 그 동작이라 이름이 그대로면 시험이 거짓말을 한다.
+    /// </remarks>
+    [Theory]
+    // 수정키 없음 — 같은 볼륨이면 이동, 다른 볼륨이면 복사. 이 회차의 본체다.
+    [InlineData(DragDropKeyStates.None, true, false)]
+    [InlineData(DragDropKeyStates.None, false, true)]
+    // Ctrl 은 볼륨과 무관하게 복사.
+    [InlineData(DragDropKeyStates.ControlKey, true, true)]
+    [InlineData(DragDropKeyStates.ControlKey, false, true)]
+    // Shift 는 볼륨과 무관하게 이동 — 전에는 읽지 않던 키다.
+    [InlineData(DragDropKeyStates.ShiftKey, true, false)]
+    [InlineData(DragDropKeyStates.ShiftKey, false, false)]
+    // Ctrl+Shift 는 복사 — 탐색기의 바로가기 만들기가 이 앱에 없어 되돌릴 수 있는 쪽으로 떨어뜨린다.
+    [InlineData(DragDropKeyStates.ControlKey | DragDropKeyStates.ShiftKey, true, true)]
+    [InlineData(DragDropKeyStates.ControlKey | DragDropKeyStates.ShiftKey, false, true)]
+    public void TheInternalRuleReadsControlShiftAndTheVolume(
+        DragDropKeyStates keys, bool sameVolume, bool copies) =>
+        Assert.Equal(copies, DropRouter.InternalDropCopies(keys, sameVolume));
 
-        // Shift 는 셸 규칙의 키다 — 내부에서는 아무 뜻이 없다.
-        Assert.False(DropRouter.InternalDropCopies(DragDropKeyStates.ShiftKey));
+    /// <summary>
+    /// <b>셸 규칙은 이 회차에서 움직이지 않았다</b> (§4.9 · D51 결정 8) — 밖에서 들어오는 것의
+    /// 기본 복사는 취향이 아니라 방어이고 <b>볼륨과 무관하게</b> 성립한다.
+    /// </summary>
+    /// <remarks>
+    /// 내부 규칙을 고치다 셸 가지가 함께 움직이면 앱이 관리하지 않는 폴더의 원본이 지워진다.
+    /// 셸 규칙은 볼륨을 아예 인자로 받지 않는다는 것 자체가 단언이다.
+    /// </remarks>
+    [Fact]
+    public void TheShellRuleDidNotMove()
+    {
+        Assert.True(DropRouter.ShellDropCopies(DragDropKeyStates.None));
+        Assert.False(DropRouter.ShellDropCopies(DragDropKeyStates.ShiftKey));
+        Assert.True(DropRouter.ShellDropCopies(DragDropKeyStates.ControlKey));
+        Assert.False(
+            DropRouter.ShellDropCopies(DragDropKeyStates.ControlKey | DragDropKeyStates.ShiftKey));
     }
 
     /// <summary>사설 포맷이 실린 드롭은 항목을 <b>그대로</b> 낸다 — 변환 계층이 없다.</summary>
@@ -379,7 +416,113 @@ public sealed class TileDropTests
         var data = new DataObject();
         data.SetData(FolderPanelView.FileDragFormat, new FileDropPayload(@"C:\deck\work", items));
 
-        Assert.Same(items, DropRouter.Resolve(data, DragDropKeyStates.None)!.Value.Items);
+        Assert.Same(
+            items, DropRouter.Resolve(data, DragDropKeyStates.None, @"C:\deck\out")!.Value.Items);
+    }
+
+    // ── 뭉치 판정 (§4.2-2 · D51 결정 2) ──────────────────────────────────────
+    //
+    // 판정 단위는 <b>뭉치</b>다. 항목마다 복사/이동을 가르면 한 번 누른 것이 조작 둘 ·
+    // 결과 보고 둘이 되고 뒤가 앞을 덮는다 — §4.3 이 같은 이유로 이미 정해 둔 것이다.
+    // 볼륨이 섞이는 경로는 재귀 검색 결과뿐이다(§4.10).
+
+    /// <summary>여럿이 다 목적지와 같은 볼륨이면 뭉치는 같은 볼륨이다.</summary>
+    [Fact]
+    public void ABundleEntirelyOnTheDestinationVolumeCountsAsSameVolume() =>
+        Assert.True(DropRouter.AllOnSameVolume(
+            [
+                new OperationItem(@"C:\deck\work\Main.cs", false),
+                new OperationItem(@"C:\deck\other\Views", true),
+            ],
+            @"C:\deck\out"));
+
+    /// <summary>
+    /// <b>하나라도 다른 볼륨이면 뭉치 전부가 다른 볼륨이다</b> — 그래서 무수정키 드롭이 통째로
+    /// 복사가 되고 안전한 쪽으로 떨어진다. 항목마다 가르지 않는다.
+    /// </summary>
+    [Fact]
+    public void OneItemOnAnotherVolumeMakesTheWholeBundleCopy()
+    {
+        IReadOnlyList<OperationItem> mixed =
+        [
+            new OperationItem(@"C:\deck\work\Main.cs", false),
+            new OperationItem(@"C:\deck\work\Recipe", true),
+            new OperationItem(@"D:\elsewhere\one.txt", false),   // 이 하나가 뭉치를 가른다
+        ];
+
+        Assert.False(DropRouter.AllOnSameVolume(mixed, @"C:\deck\out"));
+
+        // 그래서 수정키 없는 드롭은 뭉치 전부가 복사다.
+        Assert.True(DropRouter.InternalDropCopies(
+            DragDropKeyStates.None, DropRouter.AllOnSameVolume(mixed, @"C:\deck\out")));
+    }
+
+    /// <summary>목적지를 알 수 없으면 같은 볼륨이라고 말하지 않는다 — 모를 때도 되돌릴 수 있는 쪽이다.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void AnUnknownDestinationIsNotTheSameVolume(string? destination) =>
+        Assert.False(DropRouter.AllOnSameVolume(
+            [new OperationItem(@"C:\deck\work\Main.cs", false)], destination));
+
+    // ── 과녁 문구 (§4.2-2 259행 · D51 결정 5) ────────────────────────────────
+
+    /// <summary>
+    /// <b>문구가 결과를 말한다.</b> 규칙이 조건부가 된 이상 손동작만으로는 무엇이 될지 알 수 없고
+    /// 이 경로에는 확인창을 두지 않기로 했다 — 놓기 전에 말하는 자리는 과녁뿐이다.
+    /// </summary>
+    [Fact]
+    public void TheTargetCaptionSaysWhatTheDropWillDo()
+    {
+        Assert.Equal("여기로 복사", DropTargetCaption.For(copy: true));
+        Assert.Equal("여기로 이동", DropTargetCaption.For(copy: false));
+    }
+
+    /// <summary>
+    /// 받는 자리 <b>셋</b>(왼쪽 폴더 행 · 대상함 · 타일)이 <b>같은 값</b>을 읽는다 — 글귀를 XAML 에
+    /// 박으면 세 벌이 되어 하나만 고쳐진다.
+    /// </summary>
+    [Fact]
+    public async Task TheThreeTargetsReadTheSameCaption()
+    {
+        using var f = await ReadyAsync();
+
+        f.ViewModel.AddToTray(f.Row("산출물"));
+
+        var row = f.Row("작업");
+        var tray = f.ViewModel.Tray.Single();
+        var tile = f.Rotating;
+
+        foreach (var copy in new[] { false, true })
+        {
+            row.DropTargetCopies = copy;
+            tray.DropTargetCopies = copy;
+            tile.DropTargetCopies = copy;
+
+            Assert.Equal(DropTargetCaption.For(copy), row.DropTargetText);
+            Assert.Equal(DropTargetCaption.For(copy), tray.DropTargetText);
+            Assert.Equal(DropTargetCaption.For(copy), tile.DropTargetText);
+        }
+    }
+
+    /// <summary>
+    /// 이동에서 복사로 갈리면 <b>화면이 따라와야 한다</b> — 알림이 없으면 끌고 다니는 동안 글귀가
+    /// 옛 값으로 굳는다.
+    /// </summary>
+    [Fact]
+    public async Task TheCaptionRaisesChangeWhenTheVerdictFlips()
+    {
+        using var f = await ReadyAsync();
+
+        var row = f.Row("작업");
+        var seen = new List<string?>();
+        ((INotifyPropertyChanged)row).PropertyChanged += (_, e) => seen.Add(e.PropertyName);
+
+        row.DropTargetCopies = true;
+
+        Assert.Contains(nameof(FolderRowViewModel.DropTargetText), seen);
+        Assert.Equal("여기로 복사", row.DropTargetText);
     }
 
     /// <summary>
@@ -392,11 +535,16 @@ public sealed class TileDropTests
         var data = new DataObject();
         data.SetData(DataFormats.FileDrop, new[] { @"C:\outside\a.txt" });
 
-        Assert.True(DropRouter.Resolve(data, DragDropKeyStates.None)!.Value.Copy);
-        Assert.False(DropRouter.Resolve(data, DragDropKeyStates.ShiftKey)!.Value.Copy);
+        // 목적지는 셸 가지가 아예 보지 않는다 — 볼륨과 무관하게 기본 복사다(결정 8).
+        Assert.True(DropRouter.Resolve(data, DragDropKeyStates.None, @"C:\outside")!.Value.Copy);
+        Assert.False(DropRouter.Resolve(data, DragDropKeyStates.ShiftKey, @"C:\outside")!.Value.Copy);
+
+        // 같은 볼륨을 목적지로 줘도 셸 규칙은 복사 그대로다.
+        Assert.True(DropRouter.Resolve(data, DragDropKeyStates.None, @"C:\deck\out")!.Value.Copy);
 
         // Ctrl 은 셸 규칙에서 아무 뜻이 없다 — 여전히 복사다.
-        Assert.True(DropRouter.Resolve(data, DragDropKeyStates.ControlKey)!.Value.Copy);
+        Assert.True(
+            DropRouter.Resolve(data, DragDropKeyStates.ControlKey, @"C:\outside")!.Value.Copy);
     }
 
     [Fact]
@@ -405,8 +553,8 @@ public sealed class TileDropTests
         var data = new DataObject();
         data.SetData(DataFormats.UnicodeText, "그냥 글자");
 
-        Assert.Null(DropRouter.Resolve(data, DragDropKeyStates.None));
-        Assert.Null(DropRouter.Resolve(null, DragDropKeyStates.None));
+        Assert.Null(DropRouter.Resolve(data, DragDropKeyStates.None, @"C:\deck\out"));
+        Assert.Null(DropRouter.Resolve(null, DragDropKeyStates.None, @"C:\deck\out"));
     }
 
     /// <summary>사설 포맷 자리에 엉뚱한 것이 실려 있으면 받지 않는다 — 셸 분기로 흘러가지도 않는다.</summary>
@@ -418,7 +566,7 @@ public sealed class TileDropTests
         data.SetData(DataFormats.FileDrop, new[] { @"C:\outside\a.txt" });
 
         Assert.Equal(DropRoute.Internal, DropRouter.Route(data));
-        Assert.Null(DropRouter.Resolve(data, DragDropKeyStates.None));
+        Assert.Null(DropRouter.Resolve(data, DragDropKeyStates.None, @"C:\deck\out"));
     }
 
     /// <summary>커서 효과는 우리가 정한 하나로 좁힌다 — <c>Link</c> 는 쓰지 않는다(§4.9).</summary>

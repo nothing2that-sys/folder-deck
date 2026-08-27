@@ -876,6 +876,7 @@ public partial class FolderPanelView : UserControl
     /// <c>DragOver</c> 와 <c>Drop</c> 이 <b>이 함수 하나</b>를 쓴다. 포맷 순서와 수정키 규칙은
     /// <see cref="DropRouter.Resolve"/> 에 있어 왼쪽 폴더 행·대상함과 같은 것을 본다 — 여기서
     /// 더하는 것은 <b>목적지</b>뿐이고, 타일의 목적지는 앵커가 아니라 지금 보고 있는 경로다(§4.9).
+    /// 그 목적지는 <c>Resolve</c> 에 넘긴다 — 볼륨 판정이 그것을 봐야 한다(§4.2-2).
     /// <para>
     /// 같은 타일 안에 놓거나 두 타일이 같은 폴더를 볼 때는 <b>막을 것이 없다</b> — 항목의 부모가
     /// 목적지와 같아 ①(<c>AcceptedForDrop</c>)에 전부 걸려 0개가 되고, 그래서 과녁이 켜지지
@@ -887,13 +888,16 @@ public partial class FolderPanelView : UserControl
         ResolveDrop(DragEventArgs e)
     {
         if (ViewModel is not { ShellDropDestination: { } destination, ShellDropHost: { } host } panel
-            || DropRouter.Resolve(e.Data, e.KeyStates) is not { } incoming
+            || DropRouter.Resolve(e.Data, e.KeyStates, destination) is not { } incoming
             || !host.CanDropOnto(destination, incoming.Items))
         {
             return null;
         }
 
         panel.IsDropTarget = true;
+
+        // 문구도 여기서 정한다 — 판정을 낸 자리와 갈라지면 "복사라고 써 놓고 옮기는" 자리가 생긴다.
+        panel.DropTargetCopies = incoming.Copy;
         return (host, destination, incoming.Items, incoming.Copy);
     }
 

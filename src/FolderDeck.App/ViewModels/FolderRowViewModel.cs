@@ -15,6 +15,14 @@ public sealed partial class FolderRowViewModel(FolderEntry entry) : ObservableOb
     [ObservableProperty]
     private bool isDropTarget;
 
+    /// <summary>지금 놓으면 복사인가 — 과녁 글귀가 이것을 읽는다 (§4.2-2).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DropTargetText))]
+    private bool dropTargetCopies;
+
+    /// <summary>과녁 글귀 — <b>XAML 은 이것을 읽기만 한다</b>(§4.2-2 259행).</summary>
+    public string DropTargetText => DropTargetCaption.For(DropTargetCopies);
+
     public string DisplayName => string.IsNullOrWhiteSpace(Entry.DisplayName)
         ? System.IO.Path.GetFileName(Entry.Path.TrimEnd('\\', '/')) is { Length: > 0 } name ? name : Entry.Path
         : Entry.DisplayName!;

@@ -38,6 +38,26 @@ public static class FolderPathRules
         return normalized;
     }
 
+    /// <summary>
+    /// 두 경로가 <b>같은 볼륨</b>인가 — 이동이 이름 바꾸기로 끝나는지(엔진)와 수정키 없는 앱 내부
+    /// 드래그가 이동인지 복사인지(§4.2-2)를 <b>이 하나</b>가 가른다.
+    /// </summary>
+    /// <remarks>
+    /// 판정은 <see cref="IoPath.GetPathRoot"/> 비교다. <c>subst</c> 드라이브와 마운트 포인트에서
+    /// 탐색기가 무엇을 하는지는 <b>재지 않았고</b> 여기서도 그것까지 흉내 내지 않는다 — 어긋나는
+    /// 것은 <b>정책뿐</b>이라 위험하지 않다. 엔진은 <c>Directory.Move</c> 가 볼륨을 못 넘을 때
+    /// 복사+삭제로 가는 것을 이미 알고 있다.
+    /// <para>
+    /// 엔진 안의 <c>private static</c> 으로 두면 App 에서 못 불러 같은 뜻의 식이 두 벌이 된다.
+    /// 순수 함수라 <b>실제 볼륨 없이 경로 문자열만으로 시험할 수 있다</b>는 것도 여기 있는 이유다.
+    /// </para>
+    /// </remarks>
+    public static bool SameVolume(string a, string b) =>
+        string.Equals(
+            IoPath.GetPathRoot(IoPath.GetFullPath(a)),
+            IoPath.GetPathRoot(IoPath.GetFullPath(b)),
+            StringComparison.OrdinalIgnoreCase);
+
     /// <summary>경로의 잎 이름. 잎이 없으면(루트 등) 깎인 경로를 이름으로 쓴다.</summary>
     public static string LeafName(string path)
     {

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using FolderDeck.App.ViewModels;
 using FolderDeck.Core.Operations;
+using FolderDeck.Core.Paths;
 using IoDirectory = System.IO.Directory;
 
 namespace FolderDeck.App.Views;
@@ -14,7 +15,10 @@ public enum DropRoute
     /// <summary>받을 수 있는 포맷이 없다.</summary>
     None,
 
-    /// <summary>앱 안에서 시작한 드래그 — 기본 <b>이동</b> / <c>Ctrl</c> 복사 (§4.2-2).</summary>
+    /// <summary>
+    /// 앱 안에서 시작한 드래그 — <b>같은 볼륨이면 이동 · 다른 볼륨이면 복사</b>,
+    /// <c>Ctrl</c> 복사 / <c>Shift</c> 이동 (§4.2-2).
+    /// </summary>
     Internal,
 
     /// <summary>탐색기·바탕화면에서 온 드래그 — 기본 <b>복사</b> / <c>Shift</c> 이동 (§4.9).</summary>
@@ -78,49 +82,92 @@ public static class DropRouter
     /// 셸 드롭의 수정키 — <b>기본 복사, <c>Shift</c> 를 누르면 이동</b> (§4.9).
     /// </summary>
     /// <remarks>
-    /// 내부 규칙(기본 이동 / <c>Ctrl</c> 복사)과 <b>일부러 반대다.</b> 앱 안의 드래그는 이미 이
-    /// 워크스페이스에 속한 파일을 옮기는 것이지만, 밖에서 들어오는 것은 남의 폴더에 있는
-    /// 원본이다. 확인창이 없는 경로에서 기본값이 이동이면 한 번의 드래그가 앱이 관리하지 않는
-    /// 폴더의 파일을 지운다.
+    /// 내부 규칙(<see cref="InternalDropCopies"/>)과 <b>일부러 다르다.</b> 앱 안의 드래그는 이미
+    /// 이 워크스페이스에 속한 파일을 옮기는 것이라 볼륨이 가르지만, 밖에서 들어오는 것은 남의
+    /// 폴더에 있는 원본이다 — <b>볼륨과 무관하게</b> 기본이 복사다. 확인창이 없는 경로에서
+    /// 기본값이 이동이면 한 번의 드래그가 앱이 관리하지 않는 폴더의 파일을 지운다.
     /// <para>판정은 <b>놓는 순간</b>의 <c>KeyStates</c> 로 한다 — 끌다가 마음을 바꿀 수 있어야 한다.</para>
     /// </remarks>
     public static bool ShellDropCopies(DragDropKeyStates keys) =>
         (keys & DragDropKeyStates.ShiftKey) != DragDropKeyStates.ShiftKey;
 
     /// <summary>
-    /// 앱 안에서 시작한 드래그의 수정키 — <b>기본 이동, <c>Ctrl</c> 을 누르면 복사</b> (§4.2-2).
+    /// 앱 안에서 시작한 드래그의 규칙 — <c>Ctrl</c> 복사 · <c>Shift</c> 이동 ·
+    /// <b>수정키가 없으면 볼륨이 가른다</b>(같은 볼륨 이동 / 다른 볼륨 복사). §4.2-2
     /// </summary>
     /// <remarks>
-    /// <see cref="ShellDropCopies"/> 와 <b>일부러 반대다.</b> 앱 안의 드래그는 이미 이
-    /// 워크스페이스에 속한 파일을 옮기는 것이라 이동이 기본이지만, 밖에서 들어오는 것은 남의
-    /// 폴더에 있는 원본이다.
+    /// <b>탐색기가 그렇게 한다</b>(2026-08-27 손 실측). 무수정키가 늘 이동이면 <c>D:</c> 에서
+    /// NAS 로 끄는 한 번의 드래그가 로컬 원본을 지운다 — 이 경로에는 확인창이 없다(§4.2-2).
+    /// 같은 위험을 §4.9 는 <b>앱 경계</b>에서 이미 막아 두었고 여기는 <b>볼륨 경계</b>다.
+    /// <para>
+    /// <c>Ctrl</c>+<c>Shift</c> 는 <b>복사</b>다. 탐색기에서는 바로가기 만들기인데 이 앱에는 그
+    /// 동작이 없다 — <b>애매한 조합은 되돌릴 수 있는 쪽으로 떨어뜨린다</b>(§4.4 영구 삭제 거절 ·
+    /// §4.9 기본 복사와 같은 결). 그래서 <c>Ctrl</c> 을 먼저 본다.
+    /// </para>
+    /// <para>
+    /// <see cref="ShellDropCopies"/> 는 <b>건드리지 않는다</b> — 밖에서 들어오는 것의 기본 복사는
+    /// 취향이 아니라 방어이고 볼륨과 무관하게 성립한다(§4.9).
+    /// </para>
     /// <para>판정은 <b>놓는 순간</b>의 <c>KeyStates</c> 로 한다 — 끌기 시작할 때가 아니다.</para>
     /// </remarks>
-    public static bool InternalDropCopies(DragDropKeyStates keys) =>
-        (keys & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
+    public static bool InternalDropCopies(DragDropKeyStates keys, bool sameVolume)
+    {
+        if ((keys & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey)
+        {
+            return true;
+        }
+
+        if ((keys & DragDropKeyStates.ShiftKey) == DragDropKeyStates.ShiftKey)
+        {
+            return false;
+        }
+
+        return !sameVolume;
+    }
+
+    /// <summary>
+    /// 이 뭉치가 <b>통째로</b> 목적지와 같은 볼륨에 있는가 — <b>하나라도 다르면 false</b> (§4.2-2).
+    /// </summary>
+    /// <remarks>
+    /// <b>판정 단위는 뭉치다.</b> 항목마다 복사/이동을 가르면 한 번 누른 것이 조작 둘 · 결과 보고
+    /// 둘이 되고 뒤가 앞을 덮는다 — §4.3 이 같은 이유로 이미 정해 둔 것이다. 하나라도 다른 볼륨이면
+    /// 뭉치 전부가 복사로 가서 <b>안전한 쪽</b>으로 떨어진다.
+    /// <para>
+    /// 볼륨이 섞이는 경로는 재귀 검색 결과뿐이다(§4.10). 목적지를 알 수 없으면 같은 볼륨이라고
+    /// 말하지 않는다 — 모를 때도 되돌릴 수 있는 쪽이다.
+    /// </para>
+    /// </remarks>
+    public static bool AllOnSameVolume(IReadOnlyList<OperationItem>? items, string? destination) =>
+        !string.IsNullOrWhiteSpace(destination)
+        && items is not null
+        && items.All(item => FolderPathRules.SameVolume(item.Path, destination));
 
     /// <summary>
     /// 한 드롭을 <b>항목 목록 + 복사여부</b>로 푼다 — 받을 포맷이 없으면 null (§4.9 · §4.2-2).
     /// </summary>
     /// <remarks>
     /// <b>여기가 두 규칙이 갈리는 유일한 자리다.</b> <see cref="Route"/> 가 정한 순서 위에
-    /// 포맷 꺼내기와 수정키 규칙을 얹는다 — 내부는 기본 이동(<c>Ctrl</c> 복사), 셸은 기본
-    /// 복사(<c>Shift</c> 이동)로 일부러 반대다.
+    /// 포맷 꺼내기와 수정키 규칙을 얹는다 — 내부는 볼륨이 가르고(<c>Ctrl</c> 복사 ·
+    /// <c>Shift</c> 이동), 셸은 볼륨과 무관하게 기본 복사(<c>Shift</c> 이동)다.
     /// <para>
-    /// <b>목적지는 여기서 정하지 않는다.</b> 자리마다 다르기 때문이다 — 왼쪽 폴더 행과 대상함은
-    /// 앵커 경로(<c>Entry.Path</c>)이고 타일은 지금 보고 있는 경로(<c>CurrentPath</c>)다(§4.9).
-    /// 목적지가 정해진 뒤의 ①②③ 판정은 <c>MainViewModel.CanDropOnto</c> 한 곳이 한다.
+    /// <b>목적지를 구하는 방법</b>은 여기서 정하지 않는다. 자리마다 다르기 때문이다 — 왼쪽 폴더
+    /// 행과 대상함은 앵커 경로(<c>Entry.Path</c>)이고 타일은 지금 보고 있는 경로
+    /// (<c>CurrentPath</c>)다(§4.9). <b>이미 구한 값을 받는 것</b>은 그것과 다른 이야기다 —
+    /// 내부 규칙이 볼륨을 보게 된 이상 목적지 없이는 판정이 서지 않고, 두 <c>ResolveDrop</c> 안에
+    /// 판정을 베껴 두면 <b>하나만 고쳐지는 사고</b>가 난다(§4.9).
+    /// 목적지가 정해진 뒤의 ①②③ 판정은 여전히 <c>MainViewModel.CanDropOnto</c> 한 곳이 한다.
     /// </para>
     /// </remarks>
     public static (IReadOnlyList<OperationItem> Items, bool Copy)? Resolve(
-        IDataObject? data, DragDropKeyStates keys)
+        IDataObject? data, DragDropKeyStates keys, string? destination)
     {
         switch (Route(data))
         {
             case DropRoute.Internal:
                 // 앱 안에서 시작한 드래그 — 사설 포맷에 항목이 이미 실려 있어 변환이 없다.
                 return data!.GetData(FolderPanelView.FileDragFormat) is FileDropPayload payload
-                    ? (payload.Items, InternalDropCopies(keys))
+                    ? (payload.Items,
+                        InternalDropCopies(keys, AllOnSameVolume(payload.Items, destination)))
                     : null;
 
             case DropRoute.Shell:
