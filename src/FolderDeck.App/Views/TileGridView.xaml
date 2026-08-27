@@ -45,8 +45,14 @@
             </ItemsControl.ItemContainerStyle>
             <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:GridCellViewModel}">
-                    <!-- 빈 칸만 클릭·드롭을 받는다. 타일이 덮은 칸은 위층 타일이 가져간다. -->
-                    <Border Margin="4" CornerRadius="3" BorderThickness="1"
+                    <!-- 빈 칸만 클릭·드롭을 받는다. 타일이 덮은 칸은 위층 타일이 가져간다.
+                         여백은 아래 넷이 같은 값 하나를 읽는다 — 어긋나면 드래그 미리보기가
+                         실제 타일과 다른 자리에 그려진다. ItemTemplate 안이라 DataContext 가
+                         칸 뷰모델이므로 ElementName 으로 Root 를 거친다(아래 폴더 선택 팝업과
+                         같은 우회다). -->
+                    <Border CornerRadius="3" BorderThickness="1"
+                            Margin="{Binding DataContext.TileGap, ElementName=Root,
+                                     Converter={StaticResource TileMargin}}"
                             Background="Transparent"
                             AllowDrop="True"
                             DragOver="OnCellDragOver"
@@ -122,14 +128,21 @@
                             </Style>
                         </Grid.Style>
 
-                        <!-- 파일 목록. 편집 모드에서는 상호작용을 잠근다(실수 클릭 방지). -->
+                        <!-- 파일 목록. 편집 모드에서는 상호작용을 잠근다(실수 클릭 방지).
+                             여백은 여기서 준다 — 격자의 밀도는 격자가 아는 것이고 파일 목록
+                             패널이 알 일이 아니다(그래서 FolderPanelView.xaml 루트에는 값이 없다). -->
                         <views:FolderPanelView DataContext="{Binding Panel}"
+                                               Margin="{Binding DataContext.TileGap,
+                                                        ElementName=Root,
+                                                        Converter={StaticResource TileMargin}}"
                                                IsHitTestVisible="{Binding DataContext.IsViewMode,
                                                                   ElementName=TileRoot}" />
 
                         <!-- 편집 손잡이 층 — 여기를 잡으면 이동, 오른쪽 아래 그립은 리사이즈. -->
                         <Border Background="{StaticResource Brush.EditOverlay}"
-                                Margin="4" CornerRadius="4" Cursor="SizeAll"
+                                CornerRadius="4" Cursor="SizeAll"
+                                Margin="{Binding DataContext.TileGap, ElementName=Root,
+                                         Converter={StaticResource TileMargin}}"
                                 MouseLeftButtonDown="OnTileMouseDown"
                                 Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}">
                             <Border.ContextMenu>
@@ -210,7 +223,9 @@
                 <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
             </Grid.RowDefinitions>
 
-            <Border x:Name="PreviewBox" Margin="4" CornerRadius="4" BorderThickness="2"
+            <Border x:Name="PreviewBox" CornerRadius="4" BorderThickness="2"
+                    Margin="{Binding DataContext.TileGap, ElementName=Root,
+                             Converter={StaticResource TileMargin}}"
                     BorderBrush="{StaticResource Brush.Accent}"
                     Background="{StaticResource Brush.AccentSurface}">
                 <TextBlock x:Name="PreviewText" HorizontalAlignment="Center" VerticalAlignment="Center"

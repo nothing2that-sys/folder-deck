@@ -398,13 +398,22 @@ public sealed class ClipboardCopyPasteTests
     }
 
     /// <summary>
-    /// 생성자 인자 수는 그대로다 — 붙여넣기가 새 의존을 들이지 않았다는 못이다(§8 정지 조건 2).
+    /// 생성자의 <b>필수</b> 인자 수는 그대로다 — 붙여넣기가 새 의존을 들이지 않았다는
+    /// 못이다(§8 정지 조건 2).
     /// </summary>
+    /// <remarks>
+    /// 이 판은 전에 <c>TheMainViewModelConstructorStillTakesTenArguments</c> 였고 인자 수를
+    /// <b>10 으로</b> 못박았다. D56 이 전역 설정 둘(<c>AppSettings</c> · 쓰기 가능 여부)을
+    /// 더해 수가 12 가 되었는데, <b>둘 다 기본값이 있는 선택 인자이고 서비스 의존이 아니다</b> —
+    /// 원래 못이 겨눈 것은 「새 <b>의존</b>이 늘었는가」라 그것을 그대로 잰다.
+    /// </remarks>
     [Fact]
-    public void TheMainViewModelConstructorStillTakesTenArguments()
+    public void TheMainViewModelConstructorStillTakesTenRequiredArguments()
     {
         var constructor = Assert.Single(typeof(MainViewModel).GetConstructors());
+        var parameters = constructor.GetParameters();
 
-        Assert.Equal(10, constructor.GetParameters().Length);
+        Assert.Equal(10, parameters.Count(p => !p.IsOptional));
+        Assert.All(parameters.Skip(10), p => Assert.True(p.IsOptional));
     }
 }

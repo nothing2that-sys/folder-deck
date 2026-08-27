@@ -193,7 +193,9 @@ public partial class App : Application, IWorkspaceHost
             new UserPrompt(),
             new MacroEditor(),
             new FolderEditor(),
-            new SelfLauncher());
+            new SelfLauncher(),
+            _settings,
+            _settingsWritable);
 
         var window = new MainWindow(viewModel, new FolderPicker());
 

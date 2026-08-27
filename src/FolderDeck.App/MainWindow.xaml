@@ -144,11 +144,33 @@
                         </ItemsControl>
                     </ScrollViewer>
 
-                    <TextBlock VerticalAlignment="Center" FontSize="11"
-                               TextTrimming="CharacterEllipsis"
-                               Foreground="{StaticResource Brush.EditChromeText}"
-                               Visibility="{Binding IsEditingLayout, Converter={StaticResource BoolToVisibility}}"
-                               Text="배치 편집 중 — 타일 끌어 이동 · 오른쪽 아래 ◢ 로 크기 · 우클릭으로 상시↔순환/제거 · 빈 칸 클릭이나 폴더 끌어놓기로 추가" />
+                    <!-- 배치 편집 중에만 뜨는 줄. 안내 글귀는 남는 폭을 먹고 줄어들고,
+                         간격 고르개는 오른쪽에 제 폭을 지킨다(DockPanel 이 붙인 순서대로 준다). -->
+                    <DockPanel Visibility="{Binding IsEditingLayout,
+                                            Converter={StaticResource BoolToVisibility}}">
+
+                        <!-- 타일 사이 여백 (§3.2 · D56). 평소 모드가 아니라 여기 두는 이유:
+                             ① 간격은 이 창에서 보이는 값이라 런처에 두면 고른 뒤 창을 옮겨야
+                             효과를 본다. ② 밀도는 배치의 성질이고, 평소 모드에 컨트롤을 늘리지
+                             않는 것이 §3.2(평소엔 타일이 못박혀 파일 작업 중에 배치가 흔들리지
+                             않는다)와 맞는다.
+                             고를 수 있는 값은 다섯뿐이다 — 임의의 숫자는 받지 않는다. -->
+                        <ComboBox DockPanel.Dock="Right" FontSize="11"
+                                  VerticalAlignment="Center"
+                                  ItemsSource="{Binding TileGapChoices}"
+                                  SelectedItem="{Binding TileGap}"
+                                  AutomationProperties.Name="타일 사이 여백"
+                                  ToolTip="타일과 타일 사이의 간격(px). 고르면 바로 반영되고 앱을 껐다 켜도 남는다." />
+
+                        <TextBlock DockPanel.Dock="Right" Text="타일 사이" FontSize="11"
+                                   VerticalAlignment="Center" Margin="12,0,4,0"
+                                   Foreground="{StaticResource Brush.EditChromeText}" />
+
+                        <TextBlock VerticalAlignment="Center" FontSize="11"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{StaticResource Brush.EditChromeText}"
+                                   Text="배치 편집 중 — 타일 끌어 이동 · 오른쪽 아래 ◢ 로 크기 · 우클릭으로 상시↔순환/제거 · 빈 칸 클릭이나 폴더 끌어놓기로 추가" />
+                    </DockPanel>
                 </Grid>
             </DockPanel>
         </Border>

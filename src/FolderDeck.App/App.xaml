@@ -18,6 +18,7 @@
             <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
             <conv:InverseBooleanConverter x:Key="InverseBool" />
             <conv:WiderThanConverter x:Key="WiderThan" />
+            <conv:TileGapToMarginConverter x:Key="TileMargin" />
 
             <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 

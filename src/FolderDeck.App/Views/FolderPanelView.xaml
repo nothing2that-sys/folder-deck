@@ -18,8 +18,7 @@
              DragEnter="OnTileDragOver"
              DragOver="OnTileDragOver"
              DragLeave="OnTileDragLeave"
-             Drop="OnTileDrop"
-             Margin="4">
+             Drop="OnTileDrop">
 
     <!-- 앵커 복귀 Alt+Home, 상위 Alt+↑, 뒤로/앞으로 Alt+←/→.
          마우스 XButton1/2 는 코드 비하인드에서 받는다. -->

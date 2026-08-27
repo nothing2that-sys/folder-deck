@@ -30,6 +30,12 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     private readonly IFolderEditor _folderEditor;
     private readonly ISelfLauncher _selfLauncher;
 
+    /// <summary>전역 설정 (§7.2). 워크스페이스가 아니라 <b>앱 전체</b>의 값이 여기 있다.</summary>
+    private readonly AppSettings _settings;
+
+    /// <summary>설정 파일이 손상돼 덮어쓰지 않기로 한 실행인가 (<c>App.LoadSettings</c>).</summary>
+    private readonly bool _settingsWritable;
+
     /// <summary>디바운스 저장 실패는 스레드 풀에서 올라온다 — UI 스레드로 되돌리기 위해 잡아 둔다.</summary>
     private readonly SynchronizationContext? _uiContext = SynchronizationContext.Current;
 
@@ -46,7 +52,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         IUserPrompt prompt,
         IMacroEditor macroEditor,
         IFolderEditor folderEditor,
-        ISelfLauncher selfLauncher)
+        ISelfLauncher selfLauncher,
+        AppSettings? settings = null,
+        bool settingsWritable = true)
     {
         Workspace = workspace;
         _store = store;
@@ -58,6 +66,11 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         _macroEditor = macroEditor;
         _folderEditor = folderEditor;
         _selfLauncher = selfLauncher;
+
+        // 설정을 안 넘기면 기본값 한 벌로 선다 — 그러면 간격이 8 이라 이 회차 전과 같다.
+        _settings = settings ?? new AppSettings();
+        _settingsWritable = settingsWritable;
+        tileGap = _settings.TileGap;
 
         Rows = [.. workspace.Folders.Select(f => new FolderRowViewModel(f))];
 
@@ -370,6 +383,39 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     public bool IsViewMode => !IsEditingLayout;
 
     public string EditToggleText => IsEditingLayout ? "배치 편집 끝내기" : "배치 편집";
+
+    /// <summary>고를 수 있는 타일 사이 간격 다섯 — 목록은 <see cref="AppSettings"/> 것이다.</summary>
+    public IReadOnlyList<int> TileGapChoices => AppSettings.TileGapChoices;
+
+    /// <summary>
+    /// 지금 <b>눈에 보이는 타일 사이 간격</b> (§3.2 · D56). 격자의 네 자리가 이 값 하나를 읽는다.
+    /// </summary>
+    /// <remarks>
+    /// <b>워크스페이스가 아니라 전역 설정에 산다</b> — 화면 밀도는 어느 작업 관리를 열었는지와
+    /// 무관한 취향이고, 워크스페이스 스키마를 올리지 않기로 한 이유다(결정 4).
+    /// <para>
+    /// 값을 고르면 <b>바인딩이 알아서 다시 그린다</b> — "다시 그려라"고 시키는 코드는 없다.
+    /// </para>
+    /// </remarks>
+    [ObservableProperty]
+    private int tileGap = AppSettings.DefaultTileGap;
+
+    /// <summary>
+    /// 프로덕션이 쓰는 <see cref="IWorkspaceStore.SaveSettingsDebounced"/> 그대로다 —
+    /// 즉시 저장(<c>SaveSettings</c>)은 프로덕션에서 불리지 않는 통로라 새로 부르지 않는다.
+    /// </summary>
+    partial void OnTileGapChanged(int value)
+    {
+        // 램프를 지키는 자리는 AppSettings 하나다 — 여기서 또 세지 않는다.
+        _settings.TileGap = value;
+
+        if (!_settingsWritable)
+        {
+            return;
+        }
+
+        _store.SaveSettingsDebounced(_settings);
+    }
 
     [RelayCommand]
     public void ToggleLayoutEdit()

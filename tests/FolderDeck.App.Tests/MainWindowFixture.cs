@@ -122,7 +122,17 @@ internal sealed class MainWindowFixture : IDisposable
     /// 타일·대상함·매크로가 <b>한 폴더를 동시에</b> 가리키는 상태로 세운다 (§4.11-2 E3 검증용).
     /// <b>기본은 끔</b> — 기존 테스트들이 이 픽스처의 개수를 그대로 단언하므로 켜면 깨진다.
     /// </param>
-    public MainWindowFixture(bool seedFolderReferences = false)
+    /// <param name="settings">
+    /// 전역 설정 (§7.2). <b>기본은 null</b> — 그러면 뷰모델이 기본값 한 벌로 서고 타일 사이
+    /// 여백이 8 이라 D56 이전과 같다. 간격을 무는 시험만 자기 것을 넘긴다.
+    /// </param>
+    /// <param name="settingsWritable">
+    /// 설정 파일이 손상돼 <b>덮어쓰지 않기로 한 실행</b>인가 (<c>App.LoadSettings</c>).
+    /// </param>
+    public MainWindowFixture(
+        bool seedFolderReferences = false,
+        AppSettings? settings = null,
+        bool settingsWritable = true)
     {
         _root = Path.Combine(Path.GetTempPath(), "FolderDeck.AppTests", Guid.NewGuid().ToString("N"));
 
@@ -212,10 +222,15 @@ internal sealed class MainWindowFixture : IDisposable
         FolderEditor = new FakeFolderEditor();
         Engine = new FileOperationEngine(RecycleBin);
         SelfLauncher = new FakeSelfLauncher();
+        Settings = settings;
+
         ViewModel = new MainViewModel(
             Workspace, Store, new FolderEnumerator(), Shell, Clipboard, Engine, Prompt, MacroEditor,
-            FolderEditor, SelfLauncher);
+            FolderEditor, SelfLauncher, settings, settingsWritable);
     }
+
+    /// <summary>이 픽스처가 뷰모델에 넘긴 전역 설정. 안 넘겼으면 null 이다.</summary>
+    public AppSettings? Settings { get; }
 
     public string CodePath { get; }
 
