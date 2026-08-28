@@ -16,6 +16,16 @@
     </AssemblyAttribute>
   </ItemGroup>
 
+  <!-- Everything64.dll 배관(D65). voidtools Everything SDK — 라이선스는 같은 폴더의
+       THIRD-PARTY-NOTICES.txt. SDK 폴더(Everything-SDK/) 는 참조하지 않는다(결정 2) —
+       이 복사본만 쓴다. 빌드 출력과 게시 출력 둘 다에 들어가야 감지·배포가 된다. -->
+  <ItemGroup>
+    <!-- Link 로 평탄화한다 — 표준 DLL 검색 순서는 실행 파일과 같은 폴더만 보고 하위 폴더는
+         안 본다(D64 Q2 실측). Native\ 아래 그대로 두면 배포본에서 못 찾는다. -->
+    <None Include="Native\Everything64.dll" Link="Everything64.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Native\THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>

@@ -11,6 +11,7 @@ public partial class IconSettingsDialog : Window
     {
         InitializeComponent();
         DataContext = new IconSettingsViewModel(current);
+        EverythingTabContent.DataContext = new EverythingSettingsViewModel(EverythingProbe.Detect());
     }
 
     public IReadOnlyDictionary<string, string>? Result { get; private set; }

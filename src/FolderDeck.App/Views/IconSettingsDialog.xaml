@@ -92,6 +92,13 @@
                     </Border>
                 </DockPanel>
             </TabItem>
+
+            <!-- D65 — 검색 타일은 이 회차에서 만들지 않는다(결정 8). 상태 한 줄뿐이다. -->
+            <TabItem Header="검색">
+                <StackPanel x:Name="EverythingTabContent" Margin="10">
+                    <TextBlock TextWrapping="Wrap" Text="{Binding StatusText}" />
+                </StackPanel>
+            </TabItem>
         </TabControl>
     </DockPanel>
 </Window>
