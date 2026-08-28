@@ -352,9 +352,31 @@ public sealed class InstanceTests
 
         Assert.False(arrived.Wait(TimeSpan.FromMilliseconds(400)));
 
-        // 그리고 진짜 신호는 여전히 통한다.
-        Assert.True(ActivationSignal.TrySend(pipe));
+        // 그리고 진짜 신호는 여전히 통한다 — 서버가 다시 열리는 데 걸리는 시간은 이 판이
+        // 무는 성질이 아니라 OS 스케줄링에 건 마진일 뿐이므로(D62), 한 번만 쏘지 않고
+        // 통할 때까지 되쏜다.
+        Assert.True(TrySendUntilItWorks(pipe, SignalWait));
         Assert.True(arrived.Wait(SignalWait));
+    }
+
+    /// <summary>
+    /// D62 — 「빈 연결 뒤에도 신호가 결국 통한다」를 무는 것이지 「몇 ms 안에 통한다」를 무는
+    /// 것이 아니다. <paramref name="budget"/> 동안 짧은 간격으로 되쏜다.
+    /// </summary>
+    private static bool TrySendUntilItWorks(string pipe, TimeSpan budget)
+    {
+        var waited = Stopwatch.StartNew();
+        while (waited.Elapsed < budget)
+        {
+            if (ActivationSignal.TrySend(pipe))
+            {
+                return true;
+            }
+
+            Thread.Sleep(25);
+        }
+
+        return false;
     }
 
     // ── 배지 판정 (§4.2) ─────────────────────────────────────────────────────
