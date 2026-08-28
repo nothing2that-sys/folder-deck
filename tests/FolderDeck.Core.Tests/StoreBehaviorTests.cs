@@ -136,6 +136,71 @@ public sealed class StoreBehaviorTests
         Assert.Equal(order, reloaded.WorkspaceOrder);
     }
 
+    // ── 확장자별 글리프 매핑 (D59) — 사전형을 JSON 에 담아 본 첫 선례(B-0 Q3) ─────────
+
+    [Fact]
+    public void ExtensionGlyphsRoundTrip()
+    {
+        using var temp = new TempStore();
+        var mapping = new Dictionary<string, string> { [".pdf"] = "📕", [".zip"] = "🗜" };
+
+        Assert.Null(temp.Store.SaveSettings(new AppSettings { ExtensionGlyphs = mapping }));
+
+        var reloaded = temp.Store.LoadSettings().ValueOrThrow();
+
+        Assert.Equal(3, reloaded.SchemaVersion);
+        Assert.Equal(mapping.Count, reloaded.ExtensionGlyphs.Count);
+        foreach (var (key, value) in mapping)
+        {
+            Assert.Equal(value, reloaded.ExtensionGlyphs[key]);
+        }
+    }
+
+    /// <summary>
+    /// 슬롯이 없는 옛(v2) 파일 — <c>null</c> 이 흘러 <c>NullReferenceException</c> 이 나지
+    /// 않고 빈 매핑으로 읽혀야 한다(D59 「만들 것」).
+    /// </summary>
+    [Fact]
+    public void MissingExtensionGlyphsSlotReadsAsEmpty()
+    {
+        using var temp = new TempStore();
+        File.WriteAllText(temp.Paths.SettingsFile, "{ \"schemaVersion\": 2, \"skipLauncher\": false }");
+
+        var reloaded = temp.Store.LoadSettings().ValueOrThrow();
+
+        Assert.Empty(reloaded.ExtensionGlyphs);
+    }
+
+    /// <summary>슬롯은 있되 값이 명시적으로 <c>null</c> 인 파일도 같은 자리에서 닫힌다.</summary>
+    [Fact]
+    public void ExplicitNullExtensionGlyphsReadsAsEmpty()
+    {
+        using var temp = new TempStore();
+        File.WriteAllText(
+            temp.Paths.SettingsFile, "{ \"schemaVersion\": 2, \"extensionGlyphs\": null }");
+
+        var reloaded = temp.Store.LoadSettings().ValueOrThrow();
+
+        Assert.Empty(reloaded.ExtensionGlyphs);
+    }
+
+    /// <summary>
+    /// 넣을 때·찾을 때가 같은 정규화를 거친다(D59 결정 5) — <c>PDF</c> · <c>.PDF</c> ·
+    /// <c>.pdf</c> 가 전부 같은 키로 떨어진다. 빈 문자열·공백은 "매핑 못 함"을 뜻하는 빈
+    /// 문자열로, 점 하나(<c>"."</c>)는 유효한 키 그대로 돌아온다.
+    /// </summary>
+    [Fact]
+    public void NormalizeExtensionLowersAndForcesLeadingDot()
+    {
+        Assert.Equal(".pdf", AppSettings.NormalizeExtension("PDF"));
+        Assert.Equal(".pdf", AppSettings.NormalizeExtension(".PDF"));
+        Assert.Equal(".pdf", AppSettings.NormalizeExtension(".pdf"));
+        Assert.Equal(".pdf", AppSettings.NormalizeExtension("  .pdf  "));
+        Assert.Equal(string.Empty, AppSettings.NormalizeExtension(string.Empty));
+        Assert.Equal(string.Empty, AppSettings.NormalizeExtension("   "));
+        Assert.Equal(".", AppSettings.NormalizeExtension("."));
+    }
+
     [Fact]
     public void SettingsOmitNullOptionalFields()
     {

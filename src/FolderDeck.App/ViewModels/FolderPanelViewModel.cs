@@ -134,6 +134,14 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(FailureText))]
     private FolderAccessFailure? failure;
 
+    /// <summary>
+    /// 확장자→글리프 사용자 매핑(D59). 패널은 저장소를 모른다 — <see cref="MainViewModel"/> 이
+    /// 타일을 만들 때 물려주고, 설정 창에서 바뀌면 다시 물려준 뒤 <see cref="RefreshAsync"/> 로
+    /// 다시 읽어 새 글리프가 반영된다. 비어 있으면 지금과 같다(결정 6).
+    /// </summary>
+    public IReadOnlyDictionary<string, string> ExtensionGlyphs { get; set; } =
+        new Dictionary<string, string>();
+
     /// <summary>현재 경로를 열거한 원본 목록. 검색·필터는 이걸 건드리지 않는다.</summary>
     [ObservableProperty]
     private IReadOnlyList<FileItemViewModel> items = [];
@@ -1215,7 +1223,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
                 .SearchAsync(root, query, stats, token)
                 .ConfigureAwait(true))
             {
-                buffer.Add(new FileItemViewModel(hit.Item, hit.RelativeFolder));
+                buffer.Add(new FileItemViewModel(hit.Item, hit.RelativeFolder, ExtensionGlyphs));
 
                 if (buffer.Count >= SearchFlushBatch || clock.ElapsedMilliseconds >= SearchFlushMs)
                 {
@@ -1434,7 +1442,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
                 : SelectedItems.Select(i => i.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             Failure = listing.Failure;
-            Items = [.. listing.Items.Select(i => new FileItemViewModel(i))];
+            Items = [.. listing.Items.Select(i => new FileItemViewModel(i, extensionGlyphs: ExtensionGlyphs))];
 
             if (chosen is not null)
             {

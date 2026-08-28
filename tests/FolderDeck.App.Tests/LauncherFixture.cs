@@ -94,6 +94,22 @@ internal sealed class FakeFolderEditor : IFolderEditor
     }
 }
 
+/// <summary>설정 창 대신 답만 돌려준다 (D59).</summary>
+internal sealed class FakeIconSettingsEditor : IIconSettingsEditor
+{
+    /// <summary>창이 돌려줄 값. <b>null 이면 사용자가 취소한 것</b> — 기본은 취소다.</summary>
+    public IReadOnlyDictionary<string, string>? Answer { get; set; }
+
+    /// <summary>창이 뜬 횟수와 그때 미리 채워져 있던 값.</summary>
+    public List<IReadOnlyDictionary<string, string>> Opened { get; } = [];
+
+    public IReadOnlyDictionary<string, string>? Edit(IReadOnlyDictionary<string, string> current)
+    {
+        Opened.Add(current);
+        return Answer;
+    }
+}
+
 /// <summary>매크로 편집 창 대신 답만 돌려준다 (§4.7).</summary>
 internal sealed class FakeMacroEditor : IMacroEditor
 {

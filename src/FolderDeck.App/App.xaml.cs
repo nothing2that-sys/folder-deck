@@ -195,7 +195,8 @@ public partial class App : Application, IWorkspaceHost
             new FolderEditor(),
             new SelfLauncher(),
             _settings,
-            _settingsWritable);
+            _settingsWritable,
+            new IconSettingsEditor());
 
         var window = new MainWindow(viewModel, new FolderPicker());
 

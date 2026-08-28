@@ -14,7 +14,7 @@
         MinHeight="{x:Static layout:WindowPlacement.MinWindowHeight}"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource Brush.Chrome}"
-        FontFamily="Segoe UI" FontSize="12"
+        FontFamily="Segoe UI, Segoe UI Emoji, Segoe UI Symbol" FontSize="12"
         Foreground="{StaticResource Brush.TextPrimary}">
 
     <!-- 갱신 자리 넷 중 하나 — 수동(F5). 나머지는 창 활성화 · 조작 후 · 타일마다 붙는
@@ -70,6 +70,16 @@
                         Content="{Binding EditToggleText}"
                         AutomationProperties.Name="배치 편집"
                         ToolTip="켜면 타일을 옮기고 크기를 바꿀 수 있다. 그동안 파일 목록은 잠긴다." />
+
+                <!-- 설정 창 진입점 (D59). 자주 누르는 것이 아니라 「배치 편집」·「다른 작업
+                     관리 열기」와 같은 자리(오른쪽 끝)에 텍스트 버튼으로 둔다 — 나머지 둘을
+                     옮기지 않으므로(결정 2) 셋 중 안쪽(가운데에 더 가까운 쪽)에 붙는다. -->
+                <Button DockPanel.Dock="Right" Padding="12,4" Margin="6,0,0,0"
+                        Command="{Binding OpenIconSettingsCommand}"
+                        IsEnabled="{Binding CanOpenIconSettings}"
+                        Content="설정"
+                        AutomationProperties.Name="설정"
+                        ToolTip="확장자별 글리프 매핑을 편집한다." />
 
                 <!-- 남는 가운데. 두 내용이 번갈아 들어서므로 Grid 로 겹쳐 둔다 —
                      DockPanel 은 마지막 자식 하나만 남는 폭을 먹기 때문이다. -->

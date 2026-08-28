@@ -28,6 +28,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     private readonly IUserPrompt _prompt;
     private readonly IMacroEditor _macroEditor;
     private readonly IFolderEditor _folderEditor;
+    private readonly IIconSettingsEditor _iconSettingsEditor;
     private readonly ISelfLauncher _selfLauncher;
 
     /// <summary>전역 설정 (§7.2). 워크스페이스가 아니라 <b>앱 전체</b>의 값이 여기 있다.</summary>
@@ -54,7 +55,8 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         IFolderEditor folderEditor,
         ISelfLauncher selfLauncher,
         AppSettings? settings = null,
-        bool settingsWritable = true)
+        bool settingsWritable = true,
+        IIconSettingsEditor? iconSettingsEditor = null)
     {
         Workspace = workspace;
         _store = store;
@@ -66,6 +68,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         _macroEditor = macroEditor;
         _folderEditor = folderEditor;
         _selfLauncher = selfLauncher;
+
+        // 안 넘기면 늘 취소로 답하는 안전한 기본값 — 설정 창을 모르는 기존 시험이 이걸로 선다.
+        _iconSettingsEditor = iconSettingsEditor ?? NullIconSettingsEditor.Instance;
 
         // 설정을 안 넘기면 기본값 한 벌로 선다 — 그러면 간격이 8 이라 이 회차 전과 같다.
         _settings = settings ?? new AppSettings();
@@ -304,6 +309,42 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         }
 
         Inform("선택 창을 띄웠다.");
+    }
+
+    /// <summary>설정 파일이 손상돼 덮어쓰지 않기로 한 실행이면 잠근다 — <c>CanChangeSkipLauncher</c> 와 같은 결.</summary>
+    public bool CanOpenIconSettings => _settingsWritable;
+
+    /// <summary>
+    /// 설정 창을 연다(D59). 지금은 「아이콘」탭 하나 — 확장자→글리프 매핑을 편집한다.
+    /// 취소면 아무것도 안 바뀐다. 저장은 워크스페이스가 아니라 앱 전역 설정이라
+    /// <see cref="AppSettings"/> 쪽 디바운스 저장을 쓴다(§7.2 · SkipLauncher 와 같은 통로).
+    /// </summary>
+    /// <remarks>
+    /// 이미 떠 있는 타일의 패널은 새 매핑을 스스로 알아채지 못한다 — <see cref="FolderPanelViewModel.
+    /// ExtensionGlyphs"/> 는 평범한 get/set 이라 통지를 내지 않는다. 그래서 여기서 다시 물려주고
+    /// <see cref="RefreshAllAsync"/> 로 목록을 다시 읽어(F5 와 같은 길) 새 글리프가 바로 보이게 한다.
+    /// </remarks>
+    [RelayCommand]
+    public async Task OpenIconSettingsAsync()
+    {
+        if (_iconSettingsEditor.Edit(_settings.ExtensionGlyphs) is not { } updated)
+        {
+            return;
+        }
+
+        _settings.ExtensionGlyphs = new Dictionary<string, string>(updated);
+
+        foreach (var panel in Panels)
+        {
+            panel.ExtensionGlyphs = _settings.ExtensionGlyphs;
+        }
+
+        if (_settingsWritable)
+        {
+            _store.SaveSettingsDebounced(_settings);
+        }
+
+        await RefreshAllAsync().ConfigureAwait(true);
     }
 
     // ── 창 위치 (§6.1 · Phase 4 Stage 2) ─────────────────────────────────────
@@ -2771,6 +2812,10 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         var panel = new FolderPanelViewModel(
             _enumerator, _shell, _clipboard, spec.Kind == TileKind.Rotating, ReportError, ReportRejection)
         {
+            // 확장자→글리프 매핑(D59). 패널은 설정 저장소를 모른다 — 여기서 스냅샷을 물려주고,
+            // 설정 창에서 바뀌면 OpenIconSettingsAsync 가 다시 물려준다.
+            ExtensionGlyphs = _settings.ExtensionGlyphs,
+
             // 우클릭 "휴지통으로 삭제"가 닿을 통로. 패널은 엔진을 모른다 (§4.4).
             TrashSelectionCommand = TrashSelectionCommand,
 

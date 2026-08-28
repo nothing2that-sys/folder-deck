@@ -34,9 +34,15 @@ public sealed class ItemGlyphTests
         Assert.Equal("\U0001F4C4", file.Glyph);
     }
 
-    /// <summary>글리프는 두 갈래뿐이다 — 확장자별로 늘리지 않는다 (§1.2).</summary>
+    /// <summary>
+    /// 매핑이 비어 있으면 지금(v1)과 같다 — 두 갈래뿐이다(D59 결정 6). <b>확장자별로 절대
+    /// 늘지 않는다는 뜻이 아니다</b> — <see cref="ExtensionGlyphTests"/> 가 매핑이 찼을 때를
+    /// 다룬다. 이 판은 이름을 바꿨다(원래 <c>ThereAreExactlyTwoGlyphs</c>) — D59 전에는
+    /// "확장자별로 늘리지 않는다"는 항상-참인 규약이었지만 D59 가 그 규약을 뒤집었고, 지금은
+    /// "매핑이 비어 있을 때만" 참인 좁은 사실이기 때문이다.
+    /// </summary>
     [Fact]
-    public async Task ThereAreExactlyTwoGlyphs()
+    public async Task WithNoExtensionMappingThereAreExactlyTwoGlyphs()
     {
         using var f = new MainWindowFixture();
         await f.ViewModel.InitializeAsync();

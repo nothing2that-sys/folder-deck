@@ -48,9 +48,10 @@ public sealed class AppSettingsSchemaTests : IDisposable
 
     // ── 스키마 ───────────────────────────────────────────────────────────────
 
+    /// <summary>D59 가 <c>extensionGlyphs</c> 를 더하며 3 으로 올렸다 — 이 판의 이름도 그만큼 바뀐다.</summary>
     [Fact]
-    public void CurrentSchemaVersionIsTwo() =>
-        Assert.Equal(2, AppSettings.CurrentSchemaVersion);
+    public void CurrentSchemaVersionIsThree() =>
+        Assert.Equal(3, AppSettings.CurrentSchemaVersion);
 
     /// <summary>워크스페이스 스키마는 이 회차와 무관하다 — 간격은 앱 전체의 값이다(결정 4).</summary>
     [Fact]
@@ -152,9 +153,9 @@ public sealed class AppSettingsSchemaTests : IDisposable
     public void AFreshSettingsObjectStartsAtTheOldSpacing() =>
         Assert.Equal(8, new AppSettings().TileGap);
 
-    /// <summary>v1 파일을 저장하면 2 로 승격된다 — 슬롯도 파일에 적힌다.</summary>
+    /// <summary>v1 파일을 저장하면 지금 판(D59 기준 3)으로 승격된다 — 슬롯도 파일에 적힌다.</summary>
     [Fact]
-    public void SavingAV1FilePromotesItToVersionTwoAndWritesTheSlot()
+    public void SavingAV1FilePromotesItToTheCurrentVersionAndWritesTheSlot()
     {
         WriteSettingsFile("""
             {
@@ -170,17 +171,22 @@ public sealed class AppSettingsSchemaTests : IDisposable
 
         using var document = JsonDocument.Parse(File.ReadAllText(_paths.SettingsFile));
 
-        Assert.Equal(2, document.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(3, document.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.Equal(12, document.RootElement.GetProperty("tileGap").GetInt32());
     }
 
-    /// <summary>모르는 앞선 판본은 여전히 거절한다 — 승격이 그 방어를 지우지 않았다.</summary>
+    /// <summary>
+    /// 모르는 앞선 판본은 여전히 거절한다 — 승격이 그 방어를 지우지 않았다. D59 가 3 까지
+    /// 정의했으므로 "아직 모르는 판본"은 4 로 옮겼다(이 판이 걸었던 리터럴 3 은 D59 전에는
+    /// 미래 판이었지만 지금은 현재 판이라 그대로 두면 거짓 양성이 아니라 거짓 음성 —
+    /// <c>Failure</c> 가 <c>null</c> 이 되어 조용히 통과해버린다).
+    /// </summary>
     [Fact]
     public void AFileFromANewerVersionIsStillRejected()
     {
         WriteSettingsFile("""
             {
-              "schemaVersion": 3
+              "schemaVersion": 4
             }
             """);
 
