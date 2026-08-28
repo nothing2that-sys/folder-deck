@@ -82,14 +82,15 @@ public sealed class CorruptDataTests
     public void FutureSchemaVersionFailsAsUnsupported()
     {
         using var temp = new TempStore();
+        var future = Workspace.CurrentSchemaVersion + 1;
         temp.WriteRawWorkspace($"{Id}.json", $$"""
-            { "schemaVersion": 99, "id": "{{Id}}", "title": "미래 파일", "folders": [] }
+            { "schemaVersion": {{future}}, "id": "{{Id}}", "title": "미래 파일", "folders": [] }
             """);
 
         var result = temp.Store.LoadWorkspace(Id);
 
         Assert.Equal(StorageFailureKind.UnsupportedSchemaVersion, result.Failure!.Kind);
-        Assert.Contains("99", result.Failure.Message);
+        Assert.Contains(future.ToString(), result.Failure.Message);
     }
 
     [Fact]

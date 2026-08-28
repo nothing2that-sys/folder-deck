@@ -527,7 +527,7 @@ public sealed class SchemaMigrationTests : IDisposable
     {
         var id = Guid.NewGuid();
         var json = JsonSerializer.Serialize(
-            new { schemaVersion = 99, id, title = "미래", folders = Array.Empty<object>() },
+            new { schemaVersion = Workspace.CurrentSchemaVersion + 1, id, title = "미래", folders = Array.Empty<object>() },
             FolderDeckJson.Options);
         File.WriteAllText(_paths.WorkspaceFile(id), json);
 
@@ -671,7 +671,7 @@ public sealed class SchemaMigrationTests : IDisposable
         var id = Guid.NewGuid();
         File.WriteAllText(_paths.WorkspaceFile(id), $$"""
         {
-          "schemaVersion": 7,
+          "schemaVersion": {{Workspace.CurrentSchemaVersion + 1}},
           "id": "{{id}}",
           "title": "미래 파일",
           "folders": []

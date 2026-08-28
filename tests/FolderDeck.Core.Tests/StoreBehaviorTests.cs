@@ -229,7 +229,8 @@ public sealed class StoreBehaviorTests
     public void FutureSettingsSchemaVersionFails()
     {
         using var temp = new TempStore();
-        File.WriteAllText(temp.Paths.SettingsFile, "{ \"schemaVersion\": 42 }");
+        File.WriteAllText(
+            temp.Paths.SettingsFile, $"{{ \"schemaVersion\": {AppSettings.CurrentSchemaVersion + 1} }}");
 
         Assert.Equal(StorageFailureKind.UnsupportedSchemaVersion, temp.Store.LoadSettings().Failure!.Kind);
     }

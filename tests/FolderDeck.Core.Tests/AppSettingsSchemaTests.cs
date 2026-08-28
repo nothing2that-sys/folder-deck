@@ -176,17 +176,17 @@ public sealed class AppSettingsSchemaTests : IDisposable
     }
 
     /// <summary>
-    /// 모르는 앞선 판본은 여전히 거절한다 — 승격이 그 방어를 지우지 않았다. D59 가 3 까지
-    /// 정의했으므로 "아직 모르는 판본"은 4 로 옮겼다(이 판이 걸었던 리터럴 3 은 D59 전에는
-    /// 미래 판이었지만 지금은 현재 판이라 그대로 두면 거짓 양성이 아니라 거짓 음성 —
-    /// <c>Failure</c> 가 <c>null</c> 이 되어 조용히 통과해버린다).
+    /// 모르는 앞선 판본은 여전히 거절한다 — 승격이 그 방어를 지우지 않았다. D60 부터는 이
+    /// 자리를 <see cref="AppSettings.CurrentSchemaVersion"/><c> + 1</c> 로 문다 — 리터럴로
+    /// 적으면 그 값이 현재 판이 되는 순간 <c>Failure</c> 가 <c>null</c> 이 되어 조용히
+    /// 통과해버린다(D59 가 3 → 4 로 옮겨서 넘겼던 문제).
     /// </summary>
     [Fact]
     public void AFileFromANewerVersionIsStillRejected()
     {
-        WriteSettingsFile("""
+        WriteSettingsFile($$"""
             {
-              "schemaVersion": 4
+              "schemaVersion": {{AppSettings.CurrentSchemaVersion + 1}}
             }
             """);
 
