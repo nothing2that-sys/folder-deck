@@ -339,7 +339,7 @@ public partial class FolderPanelView : UserControl
     /// 목록에서 왼쪽 버튼을 눌렀다 — <b>여기서는 아무것도 바꾸지 않는다.</b> 누른 자리만 기억한다.
     /// </summary>
     /// <remarks>
-    /// <b>두 <see cref="ListView"/> 가 이 핸들러 하나를 쓴다</b>(§6.1 의 두 뷰 방식). 뷰 방식마다
+    /// <b>두 <see cref="ListView"/> 가 이 핸들러 하나를 쓴다</b>(§3.2 의 두 뷰 방식). 뷰 방식마다
     /// 따로 쓰면 하나만 고쳐지는 사고가 난다.
     /// <para>
     /// 선택을 지우는 것도 캡처도 <b>임계를 넘은 뒤</b>다(<see cref="BeginBand"/>). 여기서 지우면

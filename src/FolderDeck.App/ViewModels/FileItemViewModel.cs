@@ -56,8 +56,8 @@ public sealed partial class FileItemViewModel(
     /// <summary>
     /// 화면이 바인딩하는 셸 아이콘. getter 가 처음 불릴 때 취득을 한 번만 건다 — 목록
     /// 가상화 덕분에 보이는 줄에서만 불리므로 여기가 취득이 걸리는 자리다(Phase 11 · D68-c).
-    /// 확장자 커스텀이 걸린 항목(<see cref="HasCustomGlyph"/>)은 ① 단이 이겨 셸을 부르지
-    /// 않는다 — <see cref="Glyph"/> 와 같은 판정이어야 하므로 규칙을 그대로 되풀이한다.
+    /// 확장자 커스텀이 걸린 항목(<see cref="TryGetCustomGlyph"/>)은 ① 단이 이겨 셸을 부르지
+    /// 않는다 — <see cref="Glyph"/> 와 같은 헬퍼를 쓴다.
     /// </summary>
     public BitmapSource? ShellIcon
     {
@@ -78,7 +78,7 @@ public sealed partial class FileItemViewModel(
         _shellIconRequested = true;
         var service = _shellIconService;
 
-        if (HasCustomGlyph())
+        if (TryGetCustomGlyph(out _))
         {
             return;
         }
@@ -105,18 +105,27 @@ public sealed partial class FileItemViewModel(
     }
 
     /// <summary>
-    /// <see cref="Glyph"/> 의 매핑 판정과 <b>같은 규칙</b> — 확장자 커스텀이 걸린 항목인가.
-    /// 걸려 있으면 셸을 부르지 않는다(① 단이 이긴다).
+    /// <see cref="Glyph"/> 와 <see cref="EnsureShellIconRequested"/> 가 함께 쓰는 확장자 매핑
+    /// 판정. 걸려 있으면 <paramref name="glyph"/> 에 그 글자를 담고 <c>true</c> 를 낸다 —
+    /// 걸려 있으면 셸을 부르지 않는다(① 단이 이긴다). 폴더는 매핑을 보지 않는다(늘 <c>false</c>).
     /// </summary>
-    private bool HasCustomGlyph()
+    private bool TryGetCustomGlyph(out string glyph)
     {
+        glyph = string.Empty;
+
         if (Item.IsDirectory)
         {
             return false;
         }
 
         var extension = AppSettings.NormalizeExtension(System.IO.Path.GetExtension(Item.Name));
-        return extension.Length > 0 && _extensionGlyphs.TryGetValue(extension, out var glyph) && glyph.Length > 0;
+        if (extension.Length > 0 && _extensionGlyphs.TryGetValue(extension, out var mapped) && mapped.Length > 0)
+        {
+            glyph = mapped;
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -155,12 +164,7 @@ public sealed partial class FileItemViewModel(
                 return "📁";
             }
 
-            var extension = AppSettings.NormalizeExtension(System.IO.Path.GetExtension(Item.Name));
-            return extension.Length > 0
-                && _extensionGlyphs.TryGetValue(extension, out var glyph)
-                && glyph.Length > 0
-                    ? glyph
-                    : "📄";
+            return TryGetCustomGlyph(out var glyph) ? glyph : "📄";
         }
     }
 
