@@ -170,3 +170,23 @@ public static class RubberBand
         band.Left < item.Right && band.Right > item.Left
         && band.Top < item.Bottom && band.Bottom > item.Top;
 }
+
+/// <summary>
+/// 항목 드래그의 <b>임계 판정</b> (§4.2-2 · D71). 원래 <c>OnItemPreviewMouseMove</c> 안에
+/// 박혀 있던 거리 판정을 그대로 뺐다.
+/// </summary>
+/// <remarks>
+/// <see cref="RubberBand.PastThreshold"/> 와 같은 <see cref="SystemParameters"/> 값을 쓰지만
+/// (기존 드래그와 새 임계값을 만들지 않는다는 결정 그대로다) 뜻이 다른 판정이라 —
+/// 하나는 고무줄을 시작할지, 이것은 항목 드래그를 시작할지를 묻는다 — <see cref="RubberBand"/>
+/// 안에 얹지 않고 같은 파일에 나란히 둔다. 원본 식도 <see cref="RubberBand.PastThreshold"/> 처럼
+/// "어느 한 축이라도 넘으면 참"이 아니라 <b>"가로·세로 각각 비교해 둘 다 미달일 때만 아직
+/// 클릭"</b>이라는 부정형 그대로다 — 글자 그대로 옮기라는 지시를 그렇게 지켰다.
+/// </remarks>
+public static class ItemDragThreshold
+{
+    /// <summary>시작점과 현재점 사이가 임계를 넘었나 — 넘지 않았으면 아직 클릭이다.</summary>
+    public static bool PastThreshold(Point origin, Point now) =>
+        !(Math.Abs(now.X - origin.X) < SystemParameters.MinimumHorizontalDragDistance
+          && Math.Abs(now.Y - origin.Y) < SystemParameters.MinimumVerticalDragDistance);
+}

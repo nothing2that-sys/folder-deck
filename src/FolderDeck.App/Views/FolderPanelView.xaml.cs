@@ -255,78 +255,6 @@ public partial class FolderPanelView : UserControl
         e.Handled = true;
     }
 
-    private void OnItemPreviewMouseUp(object sender, MouseButtonEventArgs e)
-    {
-        _dragOrigin = null;
-
-        // 끌지 않고 놓았다 = 선택을 좁히려던 클릭이었다.
-        if (_pendingSingleSelect is { } item && _pendingSingleSelectList is { } list)
-        {
-            list.SelectedItems.Clear();
-            list.SelectedItem = item;
-        }
-
-        _pendingSingleSelect = null;
-        _pendingSingleSelectList = null;
-    }
-
-    /// <summary>
-    /// 임계값을 넘겨 끌면 드래그로 본다 (§4.2-2). 그 아래면 그대로 두어 클릭·더블클릭이 산다.
-    /// </summary>
-    private void OnItemPreviewMouseMove(object sender, MouseEventArgs e)
-    {
-        if (_dragOrigin is not { } origin
-            || e.LeftButton != MouseButtonState.Pressed
-            || ViewModel is not { } panel)
-        {
-            return;
-        }
-
-        var moved = e.GetPosition(this) - origin;
-        if (Math.Abs(moved.X) < SystemParameters.MinimumHorizontalDragDistance
-            && Math.Abs(moved.Y) < SystemParameters.MinimumVerticalDragDistance)
-        {
-            return;
-        }
-
-        _dragOrigin = null;
-        _pendingSingleSelect = null;
-        _pendingSingleSelectList = null;
-
-        if (panel.BuildDragPayload() is not { } payload)
-        {
-            return;
-        }
-
-        var data = new DataObject();
-        data.SetData(FileDragFormat, payload);
-
-        // 같은 드래그를 앱 밖에서도 읽을 수 있게 셸 포맷을 더 싣는다 (§4.9 · Stage 2).
-        // 시작은 하나이고 갈림은 받는 쪽에서 일어난다 — 앱 안에서는 사설 포맷이 먼저 읽힌다.
-        ShellExport.Attach(data, payload.Items);
-
-        // 기본 이동 · Ctrl 복사는 놓는 쪽이 정한다 — 여기서는 둘 다 허용만 한다.
-        var landedInside = ObserveDropsInThisWindow();
-
-        DragDropEffects effect;
-
-        // OLE 드래그는 중첩 루프를 돌며 놓는 쪽의 코드를 우리 스레드에서 돌린다 —
-        // 셸 메뉴와 같은 위험이다(F-1).
-        using (FpuGuard.Enter("DoDragDrop"))
-        {
-            effect = DragDrop.DoDragDrop(this, data, ShellExport.AllowedEffects);
-        }
-
-        landedInside.Dispose();
-
-        // 밖으로 나갔을 때만 알린다. 앱 안에 놓였으면 그쪽 경로가 자기 결과를 적는다(§4.2-2) —
-        // 여기서 한 줄 더 쓰면 그 결과를 덮는다.
-        if (!landedInside.Fired && effect != DragDropEffects.None)
-        {
-            panel.ReportExported?.Invoke(payload.Items.Count);
-        }
-    }
-
     /// <summary>
     /// 이 드래그가 <b>이 창 안</b>에 놓였는지만 본다 (§4.9 — 결과 보고의 갈림).
     /// </summary>
@@ -424,14 +352,67 @@ public partial class FolderPanelView : UserControl
 
     /// <summary>
     /// 임계를 넘으면 고무줄을 시작하고, 시작한 뒤에는 사각형과 선택을 갱신한다.
+    /// <b>항목 드래그 판정이 이 고무줄 흐름보다 먼저 온다</b> (D71).
     /// </summary>
     /// <remarks>
     /// 임계는 기존 드래그와 <b>같은 <see cref="SystemParameters"/></b> 를 쓴다 — 새 숫자를 만들지
     /// 않는다. 기준점도 같은 요소가 아니라 <c>ListArea</c> 지만, 두 값 다 같은 좌표계 안의
     /// 거리이므로 비교가 성립한다.
+    /// <para>
+    /// <b>왜 여기인가(D70·D71)</b> — 이 핸들러는 패널에 걸린 터널링 핸들러라 커서가 패널 안
+    /// 어디에 있든 매번 불린다. 예전에는 항목(<c>ListViewItem</c>) 컨테이너에 걸려 있어 커서가
+    /// 항목 밖으로 나가면 안 불렸다 — 그래서 빠르게 끌면 드래그가 시작되지 않았다.
+    /// </para>
     /// </remarks>
     private void OnPanelPreviewMouseMove(object sender, MouseEventArgs e)
     {
+        if (_dragOrigin is { } dragOrigin
+            && e.LeftButton == MouseButtonState.Pressed
+            && ViewModel is { } panel
+            && ItemDragThreshold.PastThreshold(dragOrigin, e.GetPosition(this)))
+        {
+            // 예전 OnItemPreviewMouseMove 의 몸통 그대로다 — 자리만 옮겼다(D71).
+            _dragOrigin = null;
+            _pendingSingleSelect = null;
+            _pendingSingleSelectList = null;
+
+            if (panel.BuildDragPayload() is not { } payload)
+            {
+                return;
+            }
+
+            var data = new DataObject();
+            data.SetData(FileDragFormat, payload);
+
+            // 같은 드래그를 앱 밖에서도 읽을 수 있게 셸 포맷을 더 싣는다 (§4.9 · Stage 2).
+            // 시작은 하나이고 갈림은 받는 쪽에서 일어난다 — 앱 안에서는 사설 포맷이 먼저 읽힌다.
+            ShellExport.Attach(data, payload.Items);
+
+            // 기본 이동 · Ctrl 복사는 놓는 쪽이 정한다 — 여기서는 둘 다 허용만 한다.
+            var landedInside = ObserveDropsInThisWindow();
+
+            DragDropEffects effect;
+
+            // OLE 드래그는 중첩 루프를 돌며 놓는 쪽의 코드를 우리 스레드에서 돌린다 —
+            // 셸 메뉴와 같은 위험이다(F-1).
+            using (FpuGuard.Enter("DoDragDrop"))
+            {
+                effect = DragDrop.DoDragDrop(this, data, ShellExport.AllowedEffects);
+            }
+
+            landedInside.Dispose();
+
+            // 밖으로 나갔을 때만 알린다. 앱 안에 놓였으면 그쪽 경로가 자기 결과를 적는다(§4.2-2) —
+            // 여기서 한 줄 더 쓰면 그 결과를 덮는다.
+            if (!landedInside.Fired && effect != DragDropEffects.None)
+            {
+                panel.ReportExported?.Invoke(payload.Items.Count);
+            }
+
+            // 드래그를 시작했으면 여기서 끝낸다 — 고무줄 코드로 흘러가면 안 된다(D71).
+            return;
+        }
+
         if (_bandOrigin is not { } origin)
         {
             return;
@@ -467,7 +448,27 @@ public partial class FolderPanelView : UserControl
         ApplySelection(band);
     }
 
-    private void OnPanelPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) => EndBand();
+    /// <summary>
+    /// <c>EndBand()</c> 를 부르기 전에 예전 <c>OnItemPreviewMouseUp</c> 이 하던 일(선택 접기)을
+    /// 먼저 한다 (D71) — 항목 컨테이너에 걸려 있던 그 핸들러는 커서가 항목 밖에서 놓이면
+    /// 불리지 않아 선택이 미확정으로 남았다.
+    /// </summary>
+    private void OnPanelPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _dragOrigin = null;
+
+        // 끌지 않고 놓았다 = 선택을 좁히려던 클릭이었다.
+        if (_pendingSingleSelect is { } item && _pendingSingleSelectList is { } list)
+        {
+            list.SelectedItems.Clear();
+            list.SelectedItem = item;
+        }
+
+        _pendingSingleSelect = null;
+        _pendingSingleSelectList = null;
+
+        EndBand();
+    }
 
     /// <summary>캡처를 빼앗겼다 — 상태가 남으면 마우스가 계속 먹히지 않는 것처럼 보인다.</summary>
     private void OnPanelLostMouseCapture(object sender, MouseEventArgs e) => EndBand();

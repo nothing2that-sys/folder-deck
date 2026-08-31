@@ -73,10 +73,10 @@
             <Setter Property="HorizontalAlignment" Value="Left" />
 
             <EventSetter Event="MouseDoubleClick" Handler="OnItemDoubleClick" />
-            <!-- 끌어내기 (§4.2-2): 누른 자리를 기억했다가 임계값을 넘으면 드래그로 본다. -->
+            <!-- 끌어내기 (§4.2-2): 누른 자리를 기억한다 — 임계 판정과 드래그 시작은 D71 부터
+                 패널의 PreviewMouseMove·PreviewMouseLeftButtonUp(FolderPanelView.xaml 12·14행)
+                 이 한다. 항목 컨테이너에 걸면 커서가 항목 밖으로 나갈 때 안 불려 씹혔다(D70). -->
             <EventSetter Event="PreviewMouseLeftButtonDown" Handler="OnItemPreviewMouseDown" />
-            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="OnItemPreviewMouseUp" />
-            <EventSetter Event="PreviewMouseMove" Handler="OnItemPreviewMouseMove" />
             <!-- 우클릭 두 단계 (§4.6 · D32): 누를 때 선택을 잡고, 놓을 때 셸 메뉴를 띄운다. -->
             <EventSetter Event="PreviewMouseRightButtonDown" Handler="OnItemPreviewRightButtonDown" />
             <EventSetter Event="PreviewMouseRightButtonUp" Handler="OnItemPreviewRightButtonUp" />
