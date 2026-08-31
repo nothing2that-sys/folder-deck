@@ -61,6 +61,27 @@ public sealed class CorruptDataTests
         Assert.Equal(StorageFailureKind.CorruptData, temp.Store.LoadWorkspace(Id).Failure!.Kind);
     }
 
+    /// <summary>
+    /// 모르는 <c>kind</c> 는 조용히 빈 칸이 되지 않고 파일 전체가 CorruptData 로 보고된다
+    /// (§7.1 v7 · D69-c). 새 동작이 아니라 지금 동작을 못박는 것이다.
+    /// </summary>
+    [Fact]
+    public void UnknownTileKindFailsAsCorruptData()
+    {
+        using var temp = new TempStore();
+        temp.WriteRawWorkspace($"{Id}.json", $$"""
+            {
+              "schemaVersion": 1,
+              "id": "{{Id}}",
+              "title": "모르는 타일 종류",
+              "folders": [],
+              "tiles": [ { "kind": "bogus", "cellX": 0, "cellY": 0 } ]
+            }
+            """);
+
+        Assert.Equal(StorageFailureKind.CorruptData, temp.Store.LoadWorkspace(Id).Failure!.Kind);
+    }
+
     [Fact]
     public void NumericEnumValueFails()
     {

@@ -148,7 +148,7 @@ public sealed class StoreBehaviorTests
 
         var reloaded = temp.Store.LoadSettings().ValueOrThrow();
 
-        Assert.Equal(3, reloaded.SchemaVersion);
+        Assert.Equal(4, reloaded.SchemaVersion);
         Assert.Equal(mapping.Count, reloaded.ExtensionGlyphs.Count);
         foreach (var (key, value) in mapping)
         {

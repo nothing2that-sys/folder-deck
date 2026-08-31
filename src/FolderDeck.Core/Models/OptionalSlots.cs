@@ -10,11 +10,12 @@ public sealed class GridSpec
     public int Rows { get; set; } = 4;
 }
 
-/// <summary>타일 성격 (§2.3). Phase 2.</summary>
+/// <summary>타일 성격 (§2.3). Phase 2. <c>Search</c> 는 Phase 12(D69-c) — 전역 검색 타일.</summary>
 public enum TileKind
 {
     Pinned,
     Rotating,
+    Search,
 }
 
 /// <summary>
@@ -25,6 +26,8 @@ public sealed class TileSpec
 {
     /// <summary>
     /// 상시 칸이 못박은 폴더. <b>순환 칸은 null</b> — 어떤 폴더가 뜰지는 왼쪽 리스트 클릭이 정한다.
+    /// <b>검색 칸도 null</b>(D69-c) — <see cref="FolderDeck.Core.Storage.WorkspaceStore.LoadWorkspaceFile"/>
+    /// 이 값이 있어도 지운다.
     /// </summary>
     public Guid? FolderId { get; set; }
 

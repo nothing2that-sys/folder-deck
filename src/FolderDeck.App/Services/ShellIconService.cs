@@ -15,8 +15,8 @@ namespace FolderDeck.App.Services;
 /// 갈라 두면 해제가 <c>finally</c> 밖으로 나가는 자리가 생긴다(D52 · D66 Q5).
 /// </summary>
 /// <remarks>
-/// 이 회차는 취득 계층만 만든다 — <b>이 클래스를 부르는 자리는 아직 코드 어디에도 없다.</b>
-/// 배선(뷰모델·XAML·DI)은 D68-c 의 몫이다(§1).
+/// 이 회차는 취득 계층만 만든다 — <b>배선은 D68-c 가 끝냈다</b>(<c>FileItemViewModel</c> ·
+/// <c>MainViewModel</c>).
 /// </remarks>
 public sealed class ShellIconService
 {

@@ -55,9 +55,9 @@ public sealed class EverythingNative : IEverythingNative
     public void Reset() => Everything_Reset();
 
     /// <summary>
-    /// 필요한 길이를 먼저 재고 버퍼를 잡는다 — 고정 길이 하나로 끝내지 않는다(§6-1). 반환된
-    /// 글자 수가 버퍼 용량-1 에 못 미치면 잘리지 않은 것으로 본다. 그렇지 않으면 버퍼를
-    /// 두 배로 늘려 다시 부른다.
+    /// 고정 길이 버퍼 하나로 끝내지 않는다(§6-1) — API 에 길이를 먼저 묻는 방법이 없어서,
+    /// 채워지면 버퍼를 두 배로 늘려 다시 부른다. 반환된 글자 수가 버퍼 용량-1 에 못 미치면
+    /// 잘리지 않은 것으로 본다.
     /// </summary>
     public string? GetResultFullPath(uint index)
     {

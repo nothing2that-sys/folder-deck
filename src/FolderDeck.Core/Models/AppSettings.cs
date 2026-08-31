@@ -5,10 +5,11 @@ public sealed class AppSettings
 {
     /// <summary>
     /// 1 → 2: <c>tileGap</c> 이 늘었다. 2 → 3: <c>extensionGlyphs</c> 가 늘었다(D59).
+    /// 3 → 4: <c>showShellIcons</c>·<c>everythingMaxResults</c> 가 늘었다(D69-c).
     /// <b>워크스페이스 스키마는 이것과 무관하다</b> — 간격도 아이콘 매핑도 창마다가 아니라
     /// 앱 전체의 값이다.
     /// </summary>
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     /// <summary>저장소 소유. 저장 시 찍힌다 (<see cref="Workspace.SchemaVersion"/> 과 같은 규약).</summary>
     public int SchemaVersion { get; set; }
@@ -99,5 +100,43 @@ public sealed class AppSettings
 
         var lower = trimmed.ToLowerInvariant();
         return lower[0] == '.' ? lower : "." + lower;
+    }
+
+    // ── 셸 아이콘 (§4.12 · D69-c) ─────────────────────────────────────────────
+
+    private bool _showShellIcons = true;
+
+    /// <summary>
+    /// 파일 목록에 셸 아이콘을 쓸지(§3.2 ② 단). <b>슬롯이 없는 구파일은 켬으로 읽어야 한다</b> —
+    /// 그래서 자동 프로퍼티가 아니라 필드 초기자로 <c>true</c> 를 준다(<see cref="TileGap"/> 과
+    /// 같은 자리). 자동 프로퍼티의 기본값은 <c>false</c> 라 슬롯 없는 파일에서 아이콘이
+    /// 조용히 꺼진다.
+    /// </summary>
+    public bool ShowShellIcons
+    {
+        get => _showShellIcons;
+        set => _showShellIcons = value;
+    }
+
+    // ── 전역 검색 결과 상한 (§4.12 · D69-c) ───────────────────────────────────
+
+    /// <summary>
+    /// 고를 수 있는 <b>다섯</b> — <see cref="TileGapChoices"/> 와 같은 램프 구조다.
+    /// </summary>
+    public static readonly IReadOnlyList<int> EverythingMaxResultsChoices = [200, 500, 1000, 2000, 5000];
+
+    public const int DefaultEverythingMaxResults = 1000;
+
+    private int _everythingMaxResults = DefaultEverythingMaxResults;
+
+    /// <summary>
+    /// Everything 질의 한 번의 최대 결과 수. 램프 밖 값은 <see cref="DefaultEverythingMaxResults"/>
+    /// 로 떨어진다 — <see cref="TileGap"/> 과 같은 자리다: 필드 초기자가 슬롯 없는 구파일을,
+    /// setter 가 램프 밖 값을 각각 닫는다.
+    /// </summary>
+    public int EverythingMaxResults
+    {
+        get => _everythingMaxResults;
+        set => _everythingMaxResults = EverythingMaxResultsChoices.Contains(value) ? value : DefaultEverythingMaxResults;
     }
 }

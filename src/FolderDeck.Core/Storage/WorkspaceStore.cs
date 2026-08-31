@@ -137,6 +137,26 @@ public sealed class WorkspaceStore : IWorkspaceStore, IDisposable
             }
         }
 
+        // 검색 타일 정리(§7.1 v7 · D69-c). 거부하지 않는다 — 사람이 손으로 고칠 수 있는
+        // 파일이고, 워크스페이스 자체를 못 열게 되는 쪽이 더 나쁘다(§4.11-1 과 같은 결).
+        if (workspace.Tiles is not null)
+        {
+            var firstSearchIndex = workspace.Tiles.FindIndex(t => t.Kind == TileKind.Search);
+            if (firstSearchIndex >= 0)
+            {
+                workspace.Tiles[firstSearchIndex].FolderId = null;
+
+                // 목록 순서로 첫 하나만 남긴다 — 뒤에서부터 지워야 앞쪽 인덱스가 안 밀린다.
+                for (var i = workspace.Tiles.Count - 1; i > firstSearchIndex; i--)
+                {
+                    if (workspace.Tiles[i].Kind == TileKind.Search)
+                    {
+                        workspace.Tiles.RemoveAt(i);
+                    }
+                }
+            }
+        }
+
         return StorageResult<Workspace>.Ok(workspace);
     }
 

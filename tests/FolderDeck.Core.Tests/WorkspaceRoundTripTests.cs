@@ -150,4 +150,25 @@ public sealed class WorkspaceRoundTripTests
         Assert.Equal(ConflictPolicy.Overwrite, macro.OnConflict);
         Assert.True(macro.Confirm);
     }
+
+    /// <summary>검색 타일이 든 워크스페이스가 저장 → 로드를 무손실로 왕복한다(§7.1 v7 · D69-c).</summary>
+    [Fact]
+    public void ASearchTileSurvivesARoundTrip()
+    {
+        using var temp = new TempStore();
+        var workspace = new Workspace
+        {
+            Title = "검색 타일 왕복",
+            Tiles = [new TileSpec { Kind = TileKind.Search, CellX = 2, CellY = 1, SpanX = 1, SpanY = 1 }],
+        };
+
+        temp.Store.SaveWorkspace(workspace);
+        var reloaded = temp.Store.LoadWorkspace(workspace.Id).ValueOrThrow();
+
+        var tile = Assert.Single(reloaded.Tiles!);
+        Assert.Equal(TileKind.Search, tile.Kind);
+        Assert.Null(tile.FolderId);
+        Assert.Equal(2, tile.CellX);
+        Assert.Equal(1, tile.CellY);
+    }
 }

@@ -133,9 +133,9 @@ public sealed class SchemaMigrationTests : IDisposable
     }
 
     [Fact]
-    public void CurrentSchemaVersionIsSix()
+    public void CurrentSchemaVersionIsSeven()
     {
-        Assert.Equal(6, Workspace.CurrentSchemaVersion);
+        Assert.Equal(7, Workspace.CurrentSchemaVersion);
     }
 
     [Fact]
@@ -622,9 +622,9 @@ public sealed class SchemaMigrationTests : IDisposable
         Assert.True(Assert.Single(workspace.Folders).FoldersFirst);
     }
 
-    /// <summary>저장하면 6 으로 승격되고 두 슬롯이 파일에 적힌다.</summary>
+    /// <summary>저장하면 지금 판(D69-c 기준 7)으로 승격되고 두 슬롯이 파일에 적힌다.</summary>
     [Fact]
-    public void SavingAV5FilePromotesItToSixAndWritesTheNewSlots()
+    public void SavingAV5FilePromotesItToTheCurrentVersionAndWritesTheNewSlots()
     {
         var id = WriteV5File();
         var workspace = _store.LoadWorkspace(id).ValueOrThrow();
@@ -634,12 +634,12 @@ public sealed class SchemaMigrationTests : IDisposable
         Assert.Null(_store.SaveWorkspace(workspace));
 
         var json = File.ReadAllText(_paths.WorkspaceFile(id));
-        Assert.Contains("\"schemaVersion\": 6", json);
+        Assert.Contains($"\"schemaVersion\": {Workspace.CurrentSchemaVersion}", json);
         Assert.Contains("\"leftPanelCollapsed\": true", json);
         Assert.Contains("\"foldersFirst\": false", json);
 
         var reloaded = _store.LoadWorkspace(id).ValueOrThrow();
-        Assert.Equal(6, reloaded.SchemaVersion);
+        Assert.Equal(Workspace.CurrentSchemaVersion, reloaded.SchemaVersion);
         Assert.True(reloaded.LeftLayout!.LeftPanelCollapsed);
         Assert.False(reloaded.Folders[0].FoldersFirst);
 
@@ -663,10 +663,10 @@ public sealed class SchemaMigrationTests : IDisposable
     }
 
     /// <summary>
-    /// 6 보다 큰 버전은 여전히 거절이다 — 앞으로 늘 슬롯을 모르는 채로 열면 안 된다.
+    /// 지금 판보다 큰 버전은 여전히 거절이다 — 앞으로 늘 슬롯을 모르는 채로 열면 안 된다.
     /// </summary>
     [Fact]
-    public void AVersionAboveSixIsStillRejected()
+    public void AVersionAboveTheCurrentOneIsStillRejected()
     {
         var id = Guid.NewGuid();
         File.WriteAllText(_paths.WorkspaceFile(id), $$"""
@@ -682,5 +682,87 @@ public sealed class SchemaMigrationTests : IDisposable
 
         Assert.False(result.IsSuccess);
         Assert.Equal(StorageFailureKind.UnsupportedSchemaVersion, result.Failure!.Kind);
+    }
+
+    // ── v6 → v7: 검색 타일 (§7.1 v7 · D69-c) ─────────────────────────────────
+
+    [Fact]
+    public void ASearchKindTileReadsAsTileKindSearch()
+    {
+        var id = Guid.NewGuid();
+        File.WriteAllText(_paths.WorkspaceFile(id), $$"""
+        {
+          "schemaVersion": 7,
+          "id": "{{id}}",
+          "title": "검색 타일",
+          "folders": [],
+          "tiles": [ { "kind": "search", "cellX": 0, "cellY": 0, "spanX": 1, "spanY": 1 } ]
+        }
+        """);
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        var tile = Assert.Single(workspace.Tiles!);
+        Assert.Equal(TileKind.Search, tile.Kind);
+    }
+
+    /// <summary>손으로 값을 남겨 둔 파일도 로드 시점에 지운다(결정 3).</summary>
+    [Fact]
+    public void ASearchTileWithAFolderIdIsReadWithTheFolderIdCleared()
+    {
+        var id = Guid.NewGuid();
+        var strayFolderId = Guid.NewGuid();
+        File.WriteAllText(_paths.WorkspaceFile(id), $$"""
+        {
+          "schemaVersion": 7,
+          "id": "{{id}}",
+          "title": "검색 타일 folderId",
+          "folders": [],
+          "tiles": [ { "kind": "search", "folderId": "{{strayFolderId}}", "cellX": 0, "cellY": 0 } ]
+        }
+        """);
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        var tile = Assert.Single(workspace.Tiles!);
+        Assert.Null(tile.FolderId);
+    }
+
+    /// <summary>둘 이상이면 목록 순서로 첫 하나만 남는다 — 거부하지 않는다(결정 4).</summary>
+    [Fact]
+    public void DuplicateSearchTilesKeepOnlyTheFirst()
+    {
+        var id = Guid.NewGuid();
+        File.WriteAllText(_paths.WorkspaceFile(id), $$"""
+        {
+          "schemaVersion": 7,
+          "id": "{{id}}",
+          "title": "검색 타일 중복",
+          "folders": [],
+          "tiles": [
+            { "kind": "pinned", "cellX": 0, "cellY": 0 },
+            { "kind": "search", "cellX": 1, "cellY": 0 },
+            { "kind": "search", "cellX": 2, "cellY": 0 },
+            { "kind": "search", "cellX": 3, "cellY": 0 }
+          ]
+        }
+        """);
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        Assert.Equal(2, workspace.Tiles!.Count);
+        var remainingSearch = Assert.Single(workspace.Tiles, t => t.Kind == TileKind.Search);
+        Assert.Equal(1, remainingSearch.CellX);
+    }
+
+    [Fact]
+    public void SavingStampsWorkspaceSchemaVersionSeven()
+    {
+        var workspace = new Workspace { Title = "버전 찍힘" };
+
+        Assert.Null(_store.SaveWorkspace(workspace));
+
+        var json = File.ReadAllText(_paths.WorkspaceFile(workspace.Id));
+        Assert.Contains("\"schemaVersion\": 7", json);
     }
 }

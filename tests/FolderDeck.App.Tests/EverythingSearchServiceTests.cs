@@ -238,6 +238,63 @@ public sealed class EverythingSearchServiceTests
         Assert.NotEqual(callerThreadId, threadId);
     }
 
+    // 15 (D69-c)
+    [Fact]
+    public async Task MissingModifiedDateFallsBackToUtcKind()
+    {
+        var fake = HealthyFake();
+        fake.Results.Add(new FakeResult(@"C:\a\nodate.txt", 0, 1, null));
+        using var service = new EverythingSearchService(fake);
+
+        var result = await service.SearchAsync("q", SortBy.Name, sortDesc: false, 100, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(DateTimeKind.Utc, item.ModifiedUtc.Kind);
+    }
+
+    // 16 (D69-c)
+    [Fact]
+    public async Task ACancelledBeforeStartSearchNeverCallsNative()
+    {
+        var fake = HealthyFake();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        using var service = new EverythingSearchService(fake);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.SearchAsync("q", SortBy.Name, sortDesc: false, 100, cts.Token));
+
+        Assert.Empty(fake.Calls);
+        Assert.False(fake.QueryCalled);
+    }
+
+    // 17 (D69-c)
+    [Fact]
+    public async Task DisposeReturnsWithinTheTimeoutWhileAQueryIsRunning()
+    {
+        var fake = HealthyFake();
+        var queryStarted = new ManualResetEventSlim();
+        var releaseQuery = new ManualResetEventSlim();
+        fake.OnQuery = () =>
+        {
+            queryStarted.Set();
+            releaseQuery.Wait(TimeSpan.FromSeconds(10));
+        };
+        var service = new EverythingSearchService(fake);
+        var search = service.SearchAsync("q", SortBy.Name, sortDesc: false, 100, CancellationToken.None);
+
+        Assert.True(queryStarted.Wait(TimeSpan.FromSeconds(5)), "쿼리가 시작되지 않았다.");
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        service.Dispose();
+        stopwatch.Stop();
+
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(4), $"Dispose 가 {stopwatch.Elapsed} 걸렸다.");
+
+        releaseQuery.Set();
+        await Task.WhenAny(search, Task.Delay(TimeSpan.FromSeconds(5)));
+    }
+
     private sealed record FakeResult(string? FullPath, uint Attributes, long? Size, DateTime? ModifiedUtc);
 
     private sealed class FakeEverythingNative : IEverythingNative

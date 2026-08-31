@@ -6,7 +6,8 @@ using FolderDeck.Core.Models;
 
 namespace FolderDeck.App.Services;
 
-/// <summary>전역 검색 타일(§4.12)의 native 호출 결과 판정 — 네 갈래(§4.12-6).</summary>
+/// <summary>전역 검색 타일(§4.12)의 native 호출 결과 판정 — 다섯 갈래(§4.12-6). <c>Failed</c> 는
+/// 질의 자체의 실패고 나머지 넷과는 종류가 다르다.</summary>
 public enum EverythingSearchOutcome
 {
     Ok,
@@ -62,6 +63,21 @@ public sealed class EverythingSearchService : IDisposable
     /// <summary><c>Everything.h:43</c> — "Everything search client is not running".</summary>
     private const uint EverythingErrorIpc = 2;
 
+    /// <summary>
+    /// 수정일을 못 받은 항목의 <see cref="FolderItem.ModifiedUtc"/> 폴백(§6-4 · D69-c).
+    /// <c>DateTime.MinValue</c> 는 <c>Kind == Unspecified</c> 라 계약을 어긴다 — <c>FolderItem</c>
+    /// 은 UTC 를 약속한다.
+    /// </summary>
+    private static readonly DateTime UnknownModifiedUtc = DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc);
+
+    /// <summary>
+    /// <see cref="Dispose"/> 가 <c>_thread.Join()</c> 에 거는 시한(§6-4 · D69-c). 질의가 도는
+    /// 중에 창을 닫아도 UI 가 오래 막히지 않게 하는 값이지, native 호출의 실측 소요를 재서
+    /// 정한 값은 아니다 — 스레드는 <c>IsBackground</c> 라 시한을 넘겨도 프로세스 종료를
+    /// 막지 않는다(보고서 §4).
+    /// </summary>
+    private static readonly TimeSpan DisposeJoinTimeout = TimeSpan.FromSeconds(2);
+
     private readonly IEverythingNative _native;
     private readonly BlockingCollection<Action> _queue = new();
     private readonly Thread _thread;
@@ -92,6 +108,14 @@ public sealed class EverythingSearchService : IDisposable
         {
             try
             {
+                // 시작 전에 이미 취소됐으면 native 를 한 번도 부르지 않는다(§6-4 · D69-c).
+                // 도는 질의를 끊는 것이 아니다(§4.12-3) — 아직 시작하지 않은 것만 건너뛴다.
+                if (token.IsCancellationRequested)
+                {
+                    completion.TrySetCanceled(token);
+                    return;
+                }
+
                 var result = ExecuteSearch(query, sortBy, sortDesc, maxResults);
                 if (token.IsCancellationRequested)
                 {
@@ -174,7 +198,7 @@ public sealed class EverythingSearchService : IDisposable
                     fullPath,
                     isDirectory,
                     isDirectory ? null : _native.GetResultSize(i),
-                    _native.GetResultDateModifiedUtc(i) ?? DateTime.MinValue));
+                    _native.GetResultDateModifiedUtc(i) ?? UnknownModifiedUtc));
             }
 
             return new EverythingSearchResult(
@@ -205,7 +229,14 @@ public sealed class EverythingSearchService : IDisposable
     public void Dispose()
     {
         _queue.CompleteAdding();
-        _thread.Join();
-        _queue.Dispose();
+
+        // 시한 안에 스레드가 안 끝나면 그냥 돌아온다 — 스레드는 IsBackground 라 프로세스
+        // 종료를 막지 않는다(§6-4 · D69-c). _queue.Dispose() 는 스레드가 실제로 끝났을 때만
+        // 부른다 — 아직 도는 스레드가 나중에 disposed 된 컬렉션을 건드리면(GetConsumingEnumerable
+        // 의 다음 MoveNext) 배경 스레드에서 처리되지 않은 예외가 나 프로세스를 죽일 수 있다.
+        if (_thread.Join(DisposeJoinTimeout))
+        {
+            _queue.Dispose();
+        }
     }
 }

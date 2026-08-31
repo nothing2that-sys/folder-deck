@@ -48,15 +48,18 @@ public sealed class AppSettingsSchemaTests : IDisposable
 
     // ── 스키마 ───────────────────────────────────────────────────────────────
 
-    /// <summary>D59 가 <c>extensionGlyphs</c> 를 더하며 3 으로 올렸다 — 이 판의 이름도 그만큼 바뀐다.</summary>
+    /// <summary>D69-c 가 <c>showShellIcons</c>·<c>everythingMaxResults</c> 를 더하며 4 로 올렸다.</summary>
     [Fact]
-    public void CurrentSchemaVersionIsThree() =>
-        Assert.Equal(3, AppSettings.CurrentSchemaVersion);
+    public void CurrentSchemaVersionIsFour() =>
+        Assert.Equal(4, AppSettings.CurrentSchemaVersion);
 
-    /// <summary>워크스페이스 스키마는 이 회차와 무관하다 — 간격은 앱 전체의 값이다(결정 4).</summary>
+    /// <summary>
+    /// 두 스키마는 독립적으로 버전이 오른다 — 이 회차에서 워크스페이스가 7 로 오른 것은
+    /// <c>TileKind.Search</c> 때문이지 <see cref="AppSettings"/> 의 새 필드들과는 무관하다(결정 4).
+    /// </summary>
     [Fact]
-    public void TheWorkspaceSchemaDidNotMove() =>
-        Assert.Equal(6, Workspace.CurrentSchemaVersion);
+    public void TheWorkspaceSchemaMovesForItsOwnReasons() =>
+        Assert.Equal(7, Workspace.CurrentSchemaVersion);
 
     // ── 왕복 ─────────────────────────────────────────────────────────────────
 
@@ -153,7 +156,7 @@ public sealed class AppSettingsSchemaTests : IDisposable
     public void AFreshSettingsObjectStartsAtTheOldSpacing() =>
         Assert.Equal(8, new AppSettings().TileGap);
 
-    /// <summary>v1 파일을 저장하면 지금 판(D59 기준 3)으로 승격된다 — 슬롯도 파일에 적힌다.</summary>
+    /// <summary>v1 파일을 저장하면 지금 판(D69-c 기준 4)으로 승격된다 — 슬롯도 파일에 적힌다.</summary>
     [Fact]
     public void SavingAV1FilePromotesItToTheCurrentVersionAndWritesTheSlot()
     {
@@ -171,7 +174,7 @@ public sealed class AppSettingsSchemaTests : IDisposable
 
         using var document = JsonDocument.Parse(File.ReadAllText(_paths.SettingsFile));
 
-        Assert.Equal(3, document.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(4, document.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.Equal(12, document.RootElement.GetProperty("tileGap").GetInt32());
     }
 
@@ -187,6 +190,110 @@ public sealed class AppSettingsSchemaTests : IDisposable
         WriteSettingsFile($$"""
             {
               "schemaVersion": {{AppSettings.CurrentSchemaVersion + 1}}
+            }
+            """);
+
+        Assert.Equal(StorageFailureKind.UnsupportedSchemaVersion, _store.LoadSettings().Failure!.Kind);
+    }
+
+    // ── 셸 아이콘 · 검색 결과 상한 (D69-c) ──────────────────────────────────────
+
+    /// <summary>슬롯이 없는 v3 파일 → 켬. 자동 프로퍼티였다면 꺼짐으로 조용히 읽혔을 자리다.</summary>
+    [Fact]
+    public void AV3FileWithNoShowShellIconsSlotReadsAsShown()
+    {
+        WriteSettingsFile("""
+            {
+              "schemaVersion": 3,
+              "skipLauncher": true
+            }
+            """);
+
+        var loaded = _store.LoadSettings();
+
+        Assert.Null(loaded.Failure);
+        Assert.True(loaded.Value!.ShowShellIcons);
+    }
+
+    [Fact]
+    public void AnExplicitShowShellIconsFalseStaysFalse()
+    {
+        WriteSettingsFile("""
+            {
+              "schemaVersion": 3,
+              "showShellIcons": false
+            }
+            """);
+
+        var loaded = _store.LoadSettings();
+
+        Assert.Null(loaded.Failure);
+        Assert.False(loaded.Value!.ShowShellIcons);
+    }
+
+    [Fact]
+    public void AFileWithNoEverythingMaxResultsSlotReadsAsTheDefault()
+    {
+        WriteSettingsFile("""
+            {
+              "schemaVersion": 3
+            }
+            """);
+
+        var loaded = _store.LoadSettings();
+
+        Assert.Null(loaded.Failure);
+        Assert.Equal(AppSettings.DefaultEverythingMaxResults, loaded.Value!.EverythingMaxResults);
+        Assert.Equal(1000, loaded.Value.EverythingMaxResults);
+    }
+
+    [Fact]
+    public void AnEverythingMaxResultsOutsideTheRampFallsBackToTheDefault()
+    {
+        WriteSettingsFile("""
+            {
+              "schemaVersion": 3,
+              "everythingMaxResults": 777
+            }
+            """);
+
+        var loaded = _store.LoadSettings();
+
+        Assert.Null(loaded.Failure);
+        Assert.Equal(1000, loaded.Value!.EverythingMaxResults);
+    }
+
+    [Fact]
+    public void AnEverythingMaxResultsOnTheRampSurvives()
+    {
+        WriteSettingsFile("""
+            {
+              "schemaVersion": 3,
+              "everythingMaxResults": 2000
+            }
+            """);
+
+        var loaded = _store.LoadSettings();
+
+        Assert.Null(loaded.Failure);
+        Assert.Equal(2000, loaded.Value!.EverythingMaxResults);
+    }
+
+    [Fact]
+    public void SavingStampsSchemaVersionFour()
+    {
+        Assert.Null(_store.SaveSettings(new AppSettings()));
+
+        using var document = JsonDocument.Parse(File.ReadAllText(_paths.SettingsFile));
+        Assert.Equal(4, document.RootElement.GetProperty("schemaVersion").GetInt32());
+    }
+
+    [Fact]
+    public void ASchemaVersionFiveFileIsRejectedAsUnsupported()
+    {
+        WriteSettingsFile("""
+            {
+              "schemaVersion": 5
             }
             """);
 
