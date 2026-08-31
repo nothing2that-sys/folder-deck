@@ -1,3 +1,5 @@
+using FolderDeck.Core.Enumeration;
+
 namespace FolderDeck.App.Tests;
 
 /// <summary>
@@ -43,6 +45,100 @@ public sealed class DragDropTests
         Assert.Equal(2, payload.Items.Count);
         Assert.Contains(payload.Items, i => i.Path == Path.Combine(f.CodePath, "Main.cs") && !i.IsDirectory);
         Assert.Contains(payload.Items, i => i.Path == Path.Combine(f.CodePath, "Recipe") && i.IsDirectory);
+    }
+
+    // ── 누른 항목 (D72 — 임계를 넘기 전에 선택이 바뀌어도 누른 파일이 끌린다) ──────
+
+    /// <summary>같은 확장자·다른 자리의 항목을 견주는 시험 몇 개가 대소문자만 다른 경로를
+    /// 만들 때 쓴다 — 실제 파일이 아니라 순전히 <see cref="FileItemViewModel.FullPath"/> 값만
+    /// 다른 인스턴스를 흉내 낸다.</summary>
+    private static FileItemViewModel FakeItem(string fullPath, bool isDirectory = false) =>
+        new(new FolderItem(Path.GetFileName(fullPath), fullPath, isDirectory, Size: 0, ModifiedUtc: DateTime.UtcNow));
+
+    [Fact]
+    public async Task PressingAnItemInsideTheSelectionCarriesTheWholeSelection()
+    {
+        using var f = await ReadyAsync();
+        var code = f.ViewModel.Panels[0];
+        Select(code, "Main.cs", "Recipe");
+        var pressed = code.Items.Single(i => i.Name == "Main.cs");
+
+        var payload = code.BuildDragPayload(pressed)!;
+
+        Assert.Equal(2, payload.Items.Count);
+    }
+
+    /// <summary>
+    /// 누른 항목이 선택 밖이면 그 하나만 실린다. <b>대소문자만 다른 경로로도 한 번 더
+    /// 확인한다</b>(§5-3 2번) — 5-1 이 요구한 <c>FullPath</c> 비교 방식(대소문자 무시)이
+    /// 실제로 걸렸는지 무는 자리다. 대소문자 비교가 잘못 걸려 "다른 파일"로 보면, 원래는
+    /// 선택 안이어야 할 것이 여기(선택 밖 → 하나만)로 새어 들어온다 — 그래서 이 판이 함께
+    /// 막는다.
+    /// </summary>
+    [Fact]
+    public async Task PressingAnItemOutsideTheSelectionCarriesOnlyThatItem()
+    {
+        using var f = await ReadyAsync();
+        var code = f.ViewModel.Panels[0];
+        Select(code, "Main.cs");
+        var pressed = code.Items.Single(i => i.Name == "Recipe");
+
+        var payload = code.BuildDragPayload(pressed)!;
+
+        Assert.Equal(f.CodePath, payload.SourceFolder);
+        Assert.Single(payload.Items);
+        Assert.Contains(payload.Items, i => i.Path == Path.Combine(f.CodePath, "Recipe") && i.IsDirectory);
+
+        // 대소문자 갈래 — 선택을 둘로 넓히고, 그중 하나와 경로만 대소문자가 다른 것을
+        // 누른다. 대소문자를 가려 비교했다면 "선택 밖"으로 보여 위 판과 똑같이 1개만
+        // 실렸을 것이다 — 여기서는 "선택 안"으로 보고 둘 다 실려야 5-1 의 비교 방식이
+        // 맞다는 것이 증명된다.
+        Select(code, "Main.cs", "Recipe");
+        var mainCs = code.Items.Single(i => i.Name == "Main.cs");
+        var pressedDifferentCase = FakeItem(mainCs.FullPath.ToUpperInvariant());
+
+        var casePayload = code.BuildDragPayload(pressedDifferentCase)!;
+
+        Assert.Equal(2, casePayload.Items.Count);
+    }
+
+    [Fact]
+    public async Task NoPressedItemMeansTheWholeSelectionAsBefore()
+    {
+        using var f = await ReadyAsync();
+        var code = f.ViewModel.Panels[0];
+        Select(code, "Main.cs", "Recipe");
+
+        var payload = code.BuildDragPayload()!;
+
+        Assert.Equal(2, payload.Items.Count);
+    }
+
+    /// <summary>아무것도 안 골라진 채 파일 하나를 눌러 곧장 끌어도 그 하나가 실린다 —
+    /// D70 Q2 가 확인한 "드래그가 아예 시작되지 않는" 증상이 이 자리다.</summary>
+    [Fact]
+    public async Task PressingAnItemWithNoSelectionAtAllStillCarriesThatOneItem()
+    {
+        using var f = await ReadyAsync();
+        var code = f.ViewModel.Panels[0];
+        var pressed = code.Items.Single(i => i.Name == "Main.cs");
+
+        var payload = code.BuildDragPayload(pressed)!;
+
+        Assert.NotNull(payload);
+        Assert.Single(payload.Items);
+        Assert.Contains(payload.Items, i => i.Path == Path.Combine(f.CodePath, "Main.cs") && !i.IsDirectory);
+    }
+
+    [Fact]
+    public async Task NoCurrentFolderMeansNoPayloadEvenWithAPressedItem()
+    {
+        using var f = await ReadyAsync();
+        var code = f.ViewModel.Panels[0];
+        var pressed = code.Items.Single(i => i.Name == "Main.cs");
+        code.Clear();
+
+        Assert.Null(code.BuildDragPayload(pressed));
     }
 
     // ── 기본 이동 · Ctrl 복사 ────────────────────────────────────────────────

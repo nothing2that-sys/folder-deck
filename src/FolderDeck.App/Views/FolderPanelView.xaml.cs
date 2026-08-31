@@ -26,6 +26,14 @@ public partial class FolderPanelView : UserControl
     private Point? _dragOrigin;
 
     /// <summary>
+    /// 마우스가 눌린 항목 (D72). 임계를 넘겨 드래그를 시작할 때 <c>BuildDragPayload</c> 에
+    /// 넘겨준다 — 누른 뒤부터 임계를 넘기기까지 사이에 <c>SelectedItems</c> 가 바뀌어도
+    /// 누른 그 파일이 끌리게 하려는 것이다(D70 Q2). <c>_dragOrigin</c> 을 비우는 자리마다
+    /// 같이 비운다.
+    /// </summary>
+    private FileItemViewModel? _dragPressedItem;
+
+    /// <summary>
     /// 누른 순간 이미 여럿 중 하나로 선택돼 있던 항목. 끌지 않고 놓았을 때만 단독 선택으로 접는다.
     /// </summary>
     private FileItemViewModel? _pendingSingleSelect;
@@ -243,6 +251,10 @@ public partial class FolderPanelView : UserControl
         _pendingSingleSelect = null;
         _pendingSingleSelectList = null;
 
+        // 「이미 여럿 골라 둔 상태」에서만 거는 아래 e.Handled 분기와는 다른 조건이다 —
+        // 누른 항목을 기억하는 것은 그 분기 밖에서도 필요하다(D72).
+        _dragPressedItem = sender is ListViewItem { DataContext: FileItemViewModel pressed } ? pressed : null;
+
         if (Keyboard.Modifiers != ModifierKeys.None
             || sender is not ListViewItem { IsSelected: true, DataContext: FileItemViewModel item } container
             || ViewModel is not { SelectedItems.Count: > 1 })
@@ -372,11 +384,13 @@ public partial class FolderPanelView : UserControl
             && ItemDragThreshold.PastThreshold(dragOrigin, e.GetPosition(this)))
         {
             // 예전 OnItemPreviewMouseMove 의 몸통 그대로다 — 자리만 옮겼다(D71).
+            var pressedItem = _dragPressedItem;
             _dragOrigin = null;
             _pendingSingleSelect = null;
             _pendingSingleSelectList = null;
+            _dragPressedItem = null;
 
-            if (panel.BuildDragPayload() is not { } payload)
+            if (panel.BuildDragPayload(pressedItem) is not { } payload)
             {
                 return;
             }
@@ -456,6 +470,7 @@ public partial class FolderPanelView : UserControl
     private void OnPanelPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         _dragOrigin = null;
+        _dragPressedItem = null;
 
         // 끌지 않고 놓았다 = 선택을 좁히려던 클릭이었다.
         if (_pendingSingleSelect is { } item && _pendingSingleSelectList is { } list)

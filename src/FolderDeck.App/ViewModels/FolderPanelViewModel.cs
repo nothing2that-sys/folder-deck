@@ -264,12 +264,43 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// <summary>
     /// 지금 선택을 드래그 뭉치로 만든다 (§4.2-2). 선택이 없으면 null — 끌 것이 없다.
     /// </summary>
-    public FileDropPayload? BuildDragPayload() =>
-        CurrentPath is { } path && SelectedItems.Count > 0
+    /// <param name="pressedItem">
+    /// 드래그를 시작한 마우스 다운이 누른 항목 (D72). 누른 뒤 임계를 넘기기까지 사이에
+    /// <see cref="SelectedItems"/> 가 바뀔 수 있어 — 다른 타일을 눌러 선택이 옮겨가거나,
+    /// 아무것도 안 골라진 채 파일 하나를 눌러 곧장 끄는 경우 — 그 순간의 선택만 보면
+    /// 엉뚱한 것이 끌리거나(D70 Q2) 드래그가 아예 시작되지 않는다.
+    /// </param>
+    /// <remarks>
+    /// 누른 항목이 없으면(<see langword="null"/>) 지금까지와 같다 — 선택 전체, 선택이
+    /// 비면 <see langword="null"/>. 누른 항목이 있으면 <b>그것이 선택 안에 있는가</b>로
+    /// 갈린다: 안에 있으면(탐색기처럼 여럿 고른 것 중 하나를 끌면 뭉치째 간다) 선택 전체를,
+    /// 밖이면(선택이 비어 있는 경우를 포함) 그 항목 하나만 싣는다.
+    /// <para>
+    /// <b>참조 같음이 아니라 <see cref="FileItemViewModel.FullPath"/> 로 견준다</b>(대소문자
+    /// 무시) — 목록을 다시 읽으면 같은 파일도 새 인스턴스로 오므로(1450행 근처의 선택
+    /// 복원과 같은 이유·같은 비교자, <see cref="StringComparer.OrdinalIgnoreCase"/>).
+    /// </para>
+    /// </remarks>
+    public FileDropPayload? BuildDragPayload(FileItemViewModel? pressedItem = null)
+    {
+        if (CurrentPath is not { } path)
+        {
+            return null;
+        }
+
+        var pressedIsInSelection = pressedItem is not null && SelectedItems.Any(i =>
+            string.Equals(i.FullPath, pressedItem.FullPath, StringComparison.OrdinalIgnoreCase));
+
+        IReadOnlyList<FileItemViewModel> items = pressedItem is null || pressedIsInSelection
+            ? SelectedItems
+            : [pressedItem];
+
+        return items.Count > 0
             ? new FileDropPayload(
                 path,
-                [.. SelectedItems.Select(i => new Core.Operations.OperationItem(i.FullPath, i.IsDirectory))])
+                [.. items.Select(i => new Core.Operations.OperationItem(i.FullPath, i.IsDirectory))])
             : null;
+    }
 
     /// <summary>
     /// 우클릭 메뉴 "휴지통으로 삭제"가 닿을 통로 (§4.4). 실제 명령은 엔진을 아는
