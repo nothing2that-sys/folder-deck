@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using System.Windows.Media.Imaging;
+using CommunityToolkit.Mvvm.ComponentModel;
+using FolderDeck.App.Services;
 using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Models;
 
@@ -9,10 +12,11 @@ namespace FolderDeck.App.ViewModels;
 /// 표시 문자열은 프로퍼티에서 계산한다. 목록 가상화 덕분에 화면에 보이는 줄만
 /// 실제로 계산되므로, 로그 수천 개짜리 폴더에서도 앞당겨 포맷하지 않는다.
 /// </remarks>
-public sealed class FileItemViewModel(
+public sealed partial class FileItemViewModel(
     FolderItem item,
     string relativeFolder = "",
-    IReadOnlyDictionary<string, string>? extensionGlyphs = null)
+    IReadOnlyDictionary<string, string>? extensionGlyphs = null,
+    ShellIconService? shellIconService = null) : ObservableObject
 {
     private static readonly string[] Units = ["B", "KB", "MB", "GB", "TB"];
 
@@ -20,6 +24,10 @@ public sealed class FileItemViewModel(
         new Dictionary<string, string>();
 
     private readonly IReadOnlyDictionary<string, string> _extensionGlyphs = extensionGlyphs ?? EmptyGlyphs;
+
+    private readonly ShellIconService? _shellIconService = shellIconService;
+
+    private bool _shellIconRequested;
 
     public FolderItem Item { get; } = item;
 
@@ -40,10 +48,82 @@ public sealed class FileItemViewModel(
 
     public bool IsDirectory => Item.IsDirectory;
 
+    /// <summary>취득한 셸 아이콘(② 단). 없으면(못 얻었거나 아직 안 왔으면) <c>null</c> 이다.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShellIcon))]
+    private BitmapSource? icon;
+
+    /// <summary>
+    /// 화면이 바인딩하는 셸 아이콘. getter 가 처음 불릴 때 취득을 한 번만 건다 — 목록
+    /// 가상화 덕분에 보이는 줄에서만 불리므로 여기가 취득이 걸리는 자리다(Phase 11 · D68-c).
+    /// 확장자 커스텀이 걸린 항목(<see cref="HasCustomGlyph"/>)은 ① 단이 이겨 셸을 부르지
+    /// 않는다 — <see cref="Glyph"/> 와 같은 판정이어야 하므로 규칙을 그대로 되풀이한다.
+    /// </summary>
+    public BitmapSource? ShellIcon
+    {
+        get
+        {
+            EnsureShellIconRequested();
+            return Icon;
+        }
+    }
+
+    private void EnsureShellIconRequested()
+    {
+        if (_shellIconRequested || _shellIconService is null)
+        {
+            return;
+        }
+
+        _shellIconRequested = true;
+        var service = _shellIconService;
+
+        if (HasCustomGlyph())
+        {
+            return;
+        }
+
+        if (service.TryGetCached(FullPath, IsDirectory, out var cached))
+        {
+            Icon = cached;
+            return;
+        }
+
+        FetchShellIconAsync(service);
+    }
+
+    private async void FetchShellIconAsync(ShellIconService service)
+    {
+        try
+        {
+            Icon = await service.GetIconAsync(FullPath, IsDirectory);
+        }
+        catch
+        {
+            // 예외를 밖으로 내보내지 않는다 — 실패하면 ③ 단(글리프)으로 남는다.
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Glyph"/> 의 매핑 판정과 <b>같은 규칙</b> — 확장자 커스텀이 걸린 항목인가.
+    /// 걸려 있으면 셸을 부르지 않는다(① 단이 이긴다).
+    /// </summary>
+    private bool HasCustomGlyph()
+    {
+        if (Item.IsDirectory)
+        {
+            return false;
+        }
+
+        var extension = AppSettings.NormalizeExtension(System.IO.Path.GetExtension(Item.Name));
+        return extension.Length > 0 && _extensionGlyphs.TryGetValue(extension, out var glyph) && glyph.Length > 0;
+    }
+
     /// <summary>
     /// 폴더는 늘 <c>📁</c> 다 — 확장자 매핑은 파일에만 걸린다(D59 결정 7). 파일은 사용자
     /// 매핑(<see cref="_extensionGlyphs"/>)에 확장자가 있으면 그 글자, 없으면 <c>📄</c> 다.
-    /// 셸 아이콘·아이콘 폰트·이미지 리소스는 여전히 쓰지 않는다 — <b>유니코드 글리프만</b> 쓴다.
+    /// 이 프로퍼티는 여전히 <b>유니코드 글리프만</b> 준다 — 셸 아이콘(② 단)은 별도 프로퍼티
+    /// (<see cref="ShellIcon"/>)가 맡는다(Phase 11 · D68-c).
     /// </summary>
     /// <remarks>
     /// 두 갈래 어휘(<c>doc/FolderDeck_familylook_spec.md</c> §6 · 폴더 <c>📁</c>(U+1F4C1) ·

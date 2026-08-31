@@ -34,6 +34,14 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     /// <summary>전역 설정 (§7.2). 워크스페이스가 아니라 <b>앱 전체</b>의 값이 여기 있다.</summary>
     private readonly AppSettings _settings;
 
+    /// <summary>
+    /// 파일 목록 아이콘 3단(§3.2) 중 ② 단(셸 아이콘) 취득 계층 — <b>앱 전체에 하나</b>
+    /// (Phase 11 · D68-c). <see cref="ExtensionGlyphs"/> 와 같은 길로 <see cref="CreateTile"/>
+    /// 이 세 패널에 같은 인스턴스를 물려준다. 캐시를 패널마다 갈라 쓰지 않으려면 여기서
+    /// 하나만 만들어야 한다.
+    /// </summary>
+    private readonly ShellIconService _shellIconService = new();
+
     /// <summary>설정 파일이 손상돼 덮어쓰지 않기로 한 실행인가 (<c>App.LoadSettings</c>).</summary>
     private readonly bool _settingsWritable;
 
@@ -337,6 +345,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         foreach (var panel in Panels)
         {
             panel.ExtensionGlyphs = _settings.ExtensionGlyphs;
+            panel.ShellIconService = _shellIconService;
         }
 
         if (_settingsWritable)
@@ -2815,6 +2824,10 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             // 확장자→글리프 매핑(D59). 패널은 설정 저장소를 모른다 — 여기서 스냅샷을 물려주고,
             // 설정 창에서 바뀌면 OpenIconSettingsAsync 가 다시 물려준다.
             ExtensionGlyphs = _settings.ExtensionGlyphs,
+
+            // 셸 아이콘 취득 계층(Phase 11 · D68-c) — 세 패널이 같은 인스턴스를 물려받아
+            // 캐시를 함께 쓴다.
+            ShellIconService = _shellIconService,
 
             // 우클릭 "휴지통으로 삭제"가 닿을 통로. 패널은 엔진을 모른다 (§4.4).
             TrashSelectionCommand = TrashSelectionCommand,

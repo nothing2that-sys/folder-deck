@@ -142,6 +142,14 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public IReadOnlyDictionary<string, string> ExtensionGlyphs { get; set; } =
         new Dictionary<string, string>();
 
+    /// <summary>
+    /// 파일 목록 아이콘 3단(§3.2) 중 <b>② 단</b>(셸 아이콘) 취득 계층(Phase 11 · D68-c).
+    /// <see cref="ExtensionGlyphs"/> 와 같은 길로 들어온다 — 패널은 만들지 않고,
+    /// <see cref="MainViewModel"/> 이 앱 전체에 하나 만들어 물려준다. <c>null</c> 이면
+    /// <see cref="FileItemViewModel"/> 은 셸을 부르지 않고 ③ 단(글리프)만 쓴다.
+    /// </summary>
+    public ShellIconService? ShellIconService { get; set; }
+
     /// <summary>현재 경로를 열거한 원본 목록. 검색·필터는 이걸 건드리지 않는다.</summary>
     [ObservableProperty]
     private IReadOnlyList<FileItemViewModel> items = [];
@@ -1223,7 +1231,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
                 .SearchAsync(root, query, stats, token)
                 .ConfigureAwait(true))
             {
-                buffer.Add(new FileItemViewModel(hit.Item, hit.RelativeFolder, ExtensionGlyphs));
+                buffer.Add(new FileItemViewModel(hit.Item, hit.RelativeFolder, ExtensionGlyphs, ShellIconService));
 
                 if (buffer.Count >= SearchFlushBatch || clock.ElapsedMilliseconds >= SearchFlushMs)
                 {
@@ -1442,7 +1450,8 @@ public sealed partial class FolderPanelViewModel : ObservableObject
                 : SelectedItems.Select(i => i.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             Failure = listing.Failure;
-            Items = [.. listing.Items.Select(i => new FileItemViewModel(i, extensionGlyphs: ExtensionGlyphs))];
+            Items = [.. listing.Items.Select(i =>
+                new FileItemViewModel(i, extensionGlyphs: ExtensionGlyphs, shellIconService: ShellIconService))];
 
             if (chosen is not null)
             {

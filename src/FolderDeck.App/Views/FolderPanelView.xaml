@@ -119,6 +119,23 @@
             </Style.Triggers>
         </Style>
 
+        <!-- 항목 앞 아이콘(Phase 11 · D68-c). 셸 아이콘(② 단)과 글리프(③ 단)를 같은 칸에
+             겹쳐 두고, 셸 아이콘이 왔으면(ShellIcon 이 null 이 아니면) 그것만 보이게 가른다.
+             ItemGlyph 스타일은 그대로 두고 이 템플릿 안에서 재사용한다 — 세 자리에 마크업을
+             세 벌 만들지 않기 위해서다. -->
+        <DataTemplate x:Key="ItemIcon">
+            <Grid>
+                <Image x:Name="ShellIconImage" Source="{Binding ShellIcon}" Width="16" Height="16"
+                       VerticalAlignment="Center" Margin="0,0,5,0" />
+                <TextBlock x:Name="GlyphText" Style="{StaticResource ItemGlyph}" Visibility="Collapsed" />
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding ShellIcon}" Value="{x:Null}">
+                    <Setter TargetName="GlyphText" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
         <!-- 정렬되는 컬럼 머리 (Phase 8-B 1).
 
              GridViewColumn 은 시각 트리 밖이라 DataContext 를 물려받지 않는다 — 그래서
@@ -170,7 +187,7 @@
                 <GridViewColumn.CellTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource ItemGlyph}" />
+                            <ContentControl ContentTemplate="{StaticResource ItemIcon}" Content="{Binding}" />
                             <TextBlock Text="{Binding Name}" />
                         </StackPanel>
                     </DataTemplate>
@@ -201,7 +218,7 @@
                 <GridViewColumn.CellTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource ItemGlyph}" />
+                            <ContentControl ContentTemplate="{StaticResource ItemIcon}" Content="{Binding}" />
                             <TextBlock Text="{Binding Name}" />
                         </StackPanel>
                     </DataTemplate>
@@ -638,7 +655,7 @@
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource ItemGlyph}" />
+                                <ContentControl ContentTemplate="{StaticResource ItemIcon}" Content="{Binding}" />
                                 <!-- list 뷰의 검색 결과는 이름 앞에 상대 폴더를 흐리게 붙인다. -->
                                 <TextBlock Text="{Binding RelativeFolderPrefix}"
                                            Foreground="{StaticResource Brush.TextSecondary}"

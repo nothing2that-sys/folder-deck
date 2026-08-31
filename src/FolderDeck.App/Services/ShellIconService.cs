@@ -38,13 +38,13 @@ public sealed class ShellIconService
     {
         if (isDirectory)
         {
-            return PathKeyPrefix + path;
+            return PathKeyPrefix + path.ToLowerInvariant();
         }
 
         var extension = AppSettings.NormalizeExtension(Path.GetExtension(path));
         if (extension.Length == 0 || PathKeyExtensions.Contains(extension))
         {
-            return PathKeyPrefix + path;
+            return PathKeyPrefix + path.ToLowerInvariant();
         }
 
         return ExtensionKeyPrefix + extension;
