@@ -77,8 +77,13 @@ public sealed class ShellIconService
         {
             var icon = Fetch(path, useFileAttributes);
 
-            // 실패(null)도 캐시한다 — 안 그러면 못 얻는 항목이 스크롤할 때마다 다시 호출된다.
-            _cache[key] = icon;
+            // 실패(null)는 캐시하지 않는다(D74) — 넣으면 확장자 하나가 한 번 헛나갔을 때
+            // 그 확장자가 세션 내내 📄 로 굳는다(D73 이 잰 산발 실패의 원인 하나).
+            if (ShouldCache(icon))
+            {
+                _cache[key] = icon;
+            }
+
             return icon;
         });
     }
@@ -87,11 +92,33 @@ public sealed class ShellIconService
     public void Clear() => _cache.Clear();
 
     /// <summary>
-    /// 호출 자리는 이 하나뿐이다. 확장자 키(<paramref name="useFileAttributes"/>)면
-    /// <see cref="ShellIconNative.SHGFI_USEFILEATTRIBUTES"/> 로 디스크를 건드리지 않는다 —
-    /// NAS 가 끊겨 있거나 경로가 없어도 아이콘이 나온다. 경로 키면 그 파일 고유의 아이콘을
-    /// 얻어야 하므로 이 플래그를 뺀다.
+    /// 얻은 이미지를 캐시에 넣어야 하는가 — <paramref name="icon"/> 이 <see langword="null"/>
+    /// 이 아닐 때만 참이다(D74). <c>null</c>(실패)을 캐시하면 그 키가 다시 물어도 계속
+    /// <c>null</c> 을 돌려주므로 넣지 않는다.
     /// </summary>
+    internal static bool ShouldCache(BitmapSource? icon) => icon is not null;
+
+    /// <summary>
+    /// <see cref="ShellIconNative.SHGetFileInfo"/> 를 다시 불러야 하는가 — <paramref name="result"/>
+    /// 가 <b>성공(0 이 아님)인데 <paramref name="hIcon"/> 만 0</b>일 때만 참이다(D74 · D73 Q2 실측).
+    /// <paramref name="result"/> 가 0이면 API 가 거절한 것이라 다시 부르지 않는다 — D73 계측에서
+    /// 80회 중 한 번도 나오지 않은 경우다.
+    /// </summary>
+    internal static bool ShouldRetryFetch(IntPtr result, IntPtr hIcon) =>
+        result != IntPtr.Zero && hIcon == IntPtr.Zero;
+
+    /// <summary>
+    /// 호출 자리는 이 하나뿐이다 — <b>되풀이로 최대 두 번</b> 돈다(D74). 확장자 키
+    /// (<paramref name="useFileAttributes"/>)면 <see cref="ShellIconNative.SHGFI_USEFILEATTRIBUTES"/>
+    /// 로 디스크를 건드리지 않는다 — NAS 가 끊겨 있거나 경로가 없어도 아이콘이 나온다. 경로
+    /// 키면 그 파일 고유의 아이콘을 얻어야 하므로 이 플래그를 뺀다.
+    /// </summary>
+    /// <remarks>
+    /// <b>왜 다시 부르는가</b> — D73 이 스레드풀 스레드의 첫 호출에서만, API 가 성공을
+    /// 알리면서도 <c>hIcon</c> 을 안 주는 것을 관측했다(80회 중 7회, 전부 그 스레드의 첫
+    /// 호출). 같은 스레드·같은 경로로 곧장 다시 부르면 7/7 이 성공했다 — 그래서 한 번만
+    /// 되풀이한다(§2 "재시도는 한 번만").
+    /// </remarks>
     private static BitmapSource? Fetch(string path, bool useFileAttributes)
     {
         var flags = ShellIconNative.SHGFI_ICON | ShellIconNative.SHGFI_SMALLICON;
@@ -104,12 +131,20 @@ public sealed class ShellIconService
         }
 
         var info = new ShellIconNative.SHFILEINFO();
-        IntPtr result;
+        var result = IntPtr.Zero;
 
         using (FpuGuard.Enter("SHGetFileInfo"))
         {
-            result = ShellIconNative.SHGetFileInfo(
-                path, attributes, ref info, (uint)Marshal.SizeOf<ShellIconNative.SHFILEINFO>(), flags);
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                result = ShellIconNative.SHGetFileInfo(
+                    path, attributes, ref info, (uint)Marshal.SizeOf<ShellIconNative.SHFILEINFO>(), flags);
+
+                if (!ShouldRetryFetch(result, info.hIcon))
+                {
+                    break;
+                }
+            }
         }
 
         if (result == IntPtr.Zero || info.hIcon == IntPtr.Zero)

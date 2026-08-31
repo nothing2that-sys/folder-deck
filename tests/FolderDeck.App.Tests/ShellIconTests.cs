@@ -110,4 +110,41 @@ public sealed class ShellIconTests
         Assert.NotNull(second);
         Assert.NotSame(first, second);
     }
+
+    // ── 다시 불러야 하는가 · 캐시에 넣어야 하는가 (D74 — D73 이 잰 산발 실패를 고친다) ──
+
+    private static readonly IntPtr NonZero = new(1);
+
+    /// <summary>D73 Q2 실측의 7/7 — 반환값은 성공인데 hIcon 만 0이면 다시 불러야 한다.</summary>
+    [Fact]
+    public void ARetriedApiCallIsNeededWhenTheResultSucceedsButTheIconHandleIsZero() =>
+        Assert.True(ShellIconService.ShouldRetryFetch(NonZero, IntPtr.Zero));
+
+    /// <summary>D73 계측에서 한 번도 안 나온 경우 — 반환값 자체가 0이면 API 가 거절한
+    /// 것이라 다시 부르지 않는다(hIcon 값과 무관하다).</summary>
+    [Fact]
+    public void NoRetryWhenTheResultItselfIsZero()
+    {
+        Assert.False(ShellIconService.ShouldRetryFetch(IntPtr.Zero, IntPtr.Zero));
+        Assert.False(ShellIconService.ShouldRetryFetch(IntPtr.Zero, NonZero));
+    }
+
+    /// <summary>hIcon 이 이미 있으면(0이 아니면) 다시 부를 이유가 없다.</summary>
+    [Fact]
+    public void NoRetryWhenTheIconHandleIsAlreadyNonZero() =>
+        Assert.False(ShellIconService.ShouldRetryFetch(NonZero, NonZero));
+
+    [Fact]
+    public void ANullImageIsNotCached() =>
+        Assert.False(ShellIconService.ShouldCache(null));
+
+    [Fact]
+    public async Task ANonNullImageIsCached()
+    {
+        var missing = MissingTxtPath();
+        var icon = await _service.GetIconAsync(missing, isDirectory: false);
+
+        Assert.NotNull(icon);
+        Assert.True(ShellIconService.ShouldCache(icon));
+    }
 }
