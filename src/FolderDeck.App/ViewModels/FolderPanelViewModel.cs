@@ -476,6 +476,17 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public Action<string>? RegisterFolderPath { get; set; }
 
     /// <summary>
+    /// 「지금 보고 있는 폴더」 메뉴의 "새 폴더 만들기"가 띄우는 모달이 닿을 통로 (§4.6 · D75-c).
+    /// 패널은 <c>IPrompt</c> 를 모른다 — <see cref="RenameOnDisk"/> 와 같은 결로 타일을 만들 때
+    /// 걸어 준다.
+    /// </summary>
+    /// <remarks>
+    /// 인자는 <b>모달에 채울 기본 이름</b>(<see cref="SuggestNewFolderName"/> 결과)이고,
+    /// 반환값은 <b>사용자가 적은 이름</b>이다 — 취소면 <c>null</c>.
+    /// </remarks>
+    public Func<string, string?>? PromptForNewFolderName { get; set; }
+
+    /// <summary>
     /// 우클릭 메뉴 「이름 바꾸기」와 <c>F2</c> 가 닿을 통로 (§4.6 309행 · A군 ②). 패널은 확인창도
     /// <c>Workspace</c> 도 모른다 — <see cref="SetAnchorFolder"/> 와 같은 결로 타일을 만들 때 걸어 준다.
     /// </summary>
@@ -1196,6 +1207,41 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         }
 
         // 만든 폴더가 목록에 나타나는 것은 파일 시스템 감시자가 한다(§8) — 여기서 다시 읽지 않는다.
+    }
+
+    /// <summary>
+    /// 「지금 보고 있는 폴더」 메뉴 「새 폴더 만들기」 항목이 실제로 부르는 커맨드 (§4.6 ·
+    /// D75-5 · D75-c). 기본 이름을 제안하고, 모달로 묻고, 취소가 아니면 <see cref="CreateNewFolder"/>
+    /// 로 넘긴다.
+    /// </summary>
+    /// <remarks>
+    /// <b>모달 자체는 <see cref="PromptForNewFolderName"/> 통로 너머(<see cref="MainViewModel"/>)에서
+    /// 뜬다</b> — <c>IPrompt</c> 는 패널이 모른다(<see cref="RenameOnDisk"/> 와 같은 결). 검색
+    /// 타일 가드를 여기서도 먼저 본다 — 모달을 띄우기 전에 걸러야 뜨지도 않을 모달이 안 뜬다.
+    /// 실제 생성·거절 통지는 <see cref="CreateNewFolder"/> 가 그대로 한다 — 이 메서드가 두 번
+    /// 하지 않는다.
+    /// </remarks>
+    [RelayCommand]
+    public void CreateNewFolderInteractive()
+    {
+        if (IsSearchTile)
+        {
+            Reject("검색 타일에는 만들 자리가 없다");
+            return;
+        }
+
+        if (CurrentPath is not { } parent || PromptForNewFolderName is not { } prompt)
+        {
+            return;
+        }
+
+        if (prompt(SuggestNewFolderName(parent)) is not { } typed)
+        {
+            // 취소 — 아무 일도 하지 않는다(폴더도 통지도 저장도 없다).
+            return;
+        }
+
+        CreateNewFolder(typed);
     }
 
     /// <summary>

@@ -363,6 +363,27 @@ public partial class FolderPanelView : UserControl
     }
 
     /// <summary>
+    /// 「지금 보고 있는 폴더」 메뉴(§4.6 · D75)가 열리기 <b>직전</b>에 자리를 가른다 —
+    /// <c>ListArea</c> 에 붙은 <c>ContextMenu</c> 는 항목 위에서도 열리려 하므로(WPF 는 가장
+    /// 가까운 조상의 <c>ContextMenu</c> 를 찾아 연다) 항목·스크롤바 위에서는 여기서 취소한다.
+    /// </summary>
+    /// <remarks>
+    /// <b>고무줄과 같은 판정(<see cref="RubberBand.Classify"/>)을 그대로 쓴다</b>(D75-c) — 새
+    /// 히트테스트를 만들면 같은 자리가 두 뜻을 갖게 된다. 항목 위는 이미
+    /// <see cref="OnItemPreviewRightButtonUp"/> 이 셸 메뉴로 처리한다 — 그 경로는 손대지
+    /// 않는다.
+    /// </remarks>
+    private void OnListContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        var kind = RubberBand.Classify(RubberBand.AncestorTypes(e.OriginalSource, this));
+
+        if (kind != ListHitKind.Empty)
+        {
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
     /// 임계를 넘으면 고무줄을 시작하고, 시작한 뒤에는 사각형과 선택을 갱신한다.
     /// <b>항목 드래그 판정이 이 고무줄 흐름보다 먼저 온다</b> (D71).
     /// </summary>

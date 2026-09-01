@@ -54,6 +54,28 @@
              확장은 IContextMenu2/3 메시지를 받아야 자기 서브메뉴를 채운다.
              자리는 Views/FolderPanelView.xaml.cs 의 OnItemPreviewRightButtonUp 이다. -->
 
+        <!-- 「지금 보고 있는 폴더」 메뉴 (§4.6 · D75). 정의는 여기 하나뿐이고 아래 두 자리
+             (목록의 빈 곳 · breadcrumb)에서 같은 리소스를 연다(D75-c-4). x:Shared="False" 라
+             각 자리가 자기 인스턴스를 받는다 — ContextMenu 는 FrameworkElement 라 논리 부모가
+             하나뿐이므로, 같은 인스턴스를 두 소유자에게 그대로 붙이면 충돌한다.
+             DataContext 는 breadcrumb 의 기존 ContextMenu 가 이미 그래 왔듯 — 코드 비하인드
+             없이 Binding 만으로 소유 요소(PlacementTarget)의 DataContext(FolderPanelViewModel)
+             를 그대로 물려받는다. 정렬 메뉴(§3.2 「정렬」)와 달리 Tag/PlacementTarget 우회가
+             필요 없다.
+             배치는 쓰기(새 폴더 만들기·붙여넣기) → 구분선 → 읽기(경로 복사) → 구분선 →
+             워크스페이스(이 폴더를 앵커로 지정·새 폴더로 등록)다(D75-c-2) — 앞 둘은 파일
+             시스템을, 뒤 둘은 워크스페이스를 바꿔 성격이 다르다. -->
+        <ContextMenu x:Key="CurrentFolderMenu" x:Shared="False">
+            <MenuItem Header="새 폴더 만들기" Command="{Binding CreateNewFolderInteractiveCommand}" />
+            <MenuItem Header="붙여넣기" InputGestureText="Ctrl+V"
+                      Command="{Binding PasteIntoCurrentCommand}" />
+            <Separator />
+            <MenuItem Header="경로 복사" Command="{Binding CopyCurrentPathCommand}" />
+            <Separator />
+            <MenuItem Header="이 폴더를 앵커로 지정" Command="{Binding SetAnchorToCurrentCommand}" />
+            <MenuItem Header="새 폴더로 등록" Command="{Binding RegisterCurrentFolderCommand}" />
+        </ContextMenu>
+
         <Style x:Key="FileItemContainer" TargetType="ListViewItem">
             <!-- 행의 히트 영역을 내용 폭까지로 좁힌다 (§4.2-2 · Stage 3C).
 
@@ -498,23 +520,16 @@
                                        FontWeight="SemiBold"
                                        Foreground="{StaticResource Brush.Accent}" /></TextBlock>
 
-                    <!-- breadcrumb: 첫 조각(앵커) 클릭 = 앵커 복귀. 우클릭 = 현재 경로 복사. -->
+                    <!-- breadcrumb: 첫 조각(앵커) 클릭 = 앵커 복귀. 우클릭 = 「지금 보고 있는
+                         폴더」 메뉴(§4.6 · D75) — 목록의 빈 곳과 같은 메뉴다(D75-c-4).
+                         Background="Transparent" 가 없으면 글자가 없는 자리(검색 타일에서
+                         Breadcrumbs 가 비었을 때 등)는 히트테스트에 안 걸린다(B-0 §B.4 가
+                         [추측]으로 남겨 둔 것을 D75-c 가 실제로 확인하고 고쳤다). -->
                     <ItemsControl ItemsSource="{Binding Breadcrumbs}"
                                   VerticalAlignment="Center" ClipToBounds="True"
-                                  ToolTip="우클릭: 지금 보고 있는 폴더의 경로 복사">
-                        <ItemsControl.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="경로 복사" Command="{Binding CopyCurrentPathCommand}" />
-                                <!-- 붙여넣기 (§4.6 330~336행 · A군 ③ C-2) — 목적지가 "지금 보고
-                                     있는 폴더"라 항목 메뉴가 아니라 이 자리다. 항목을 우클릭한
-                                     것이 아니므로 무엇에 붙여넣을지 헷갈리지 않는다.
-                                     빈 곳(배경) 메뉴를 새로 만들지 않는다 — 고무줄 선택이
-                                     그 자리를 쓴다(§4.2-2). -->
-                                <MenuItem Header="붙여넣기"
-                                          InputGestureText="Ctrl+V"
-                                          Command="{Binding PasteIntoCurrentCommand}" />
-                            </ContextMenu>
-                        </ItemsControl.ContextMenu>
+                                  Background="Transparent"
+                                  ToolTip="우클릭: 지금 보고 있는 폴더 메뉴"
+                                  ContextMenu="{StaticResource CurrentFolderMenu}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <StackPanel Orientation="Horizontal" />
@@ -638,8 +653,21 @@
             </StackPanel>
 
             <!-- ListArea — 고무줄의 유일한 좌표계다 (§4.2-2 · Stage 3B). 사각형도 항목 사각형도
-                 이 요소 기준으로만 잰다. 두 좌표계를 섞으면 스크롤된 목록에서 어긋난다. -->
-            <Grid x:Name="ListArea">
+                 이 요소 기준으로만 잰다. 두 좌표계를 섞으면 스크롤된 목록에서 어긋난다.
+
+                 「지금 보고 있는 폴더」 메뉴(§4.6 · D75)도 여기 하나에 붙인다 — 아래
+                 DetailsList·SimpleList 어느 쪽이 보이든(Background="Transparent" 라 둘 다
+                 빈 곳까지 히트테스트된다) ContextMenu 탐색이 이 Grid 까지 거슬러 올라와 열린다.
+                 항목(ListViewItem) 위에서는 열리면 안 된다 — OnListContextMenuOpening 이
+                 RubberBand.Classify(B-0 §A.1 · 고무줄과 같은 판정)로 걸러 그 자리에서는
+                 e.Handled = true 로 취소한다. 새 히트테스트를 만들지 않는다(D75-c).
+
+                 예전에는 "빈 곳(배경) 메뉴를 새로 만들지 않는다 — 고무줄 선택이 그 자리를
+                 쓴다"고 여기 적어 두었었다. 그 근거는 틀렸다 — 고무줄은 좌클릭 드래그고 이
+                 메뉴는 우클릭이라 애초에 자리를 다투지 않는다. design.md §4.6 「지금 보고
+                 있는 폴더」 메뉴(D75) 절이 이 뒤집음의 근거를 갖는다. -->
+            <Grid x:Name="ListArea" ContextMenu="{StaticResource CurrentFolderMenu}"
+                  ContextMenuOpening="OnListContextMenuOpening">
                 <!-- "검색 안 함"(평소 빈 폴더)과 구분되는 "결과 없음" -->
                 <TextBlock Text="결과 없음" Foreground="{StaticResource Brush.TextSecondary}"
                            HorizontalAlignment="Center" VerticalAlignment="Center"

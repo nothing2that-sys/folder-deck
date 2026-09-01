@@ -2746,6 +2746,13 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     /// <see cref="FolderPathRules.RejectLeafName"/> 한 곳이 본다.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// 「새 폴더 만들기」모달을 띄운다 (§4.6 · D75-5 · D75-c). <see cref="RenameFromItem"/> 이
+    /// 쓰는 <b>같은 <c>IPrompt.AskName</c></b> 을 그대로 쓴다 — 새 대화상자를 만들지 않는다.
+    /// </summary>
+    private string? PromptNewFolderName(string suggested) =>
+        _prompt.AskName("새 폴더 만들기", "새 폴더의 이름을 적어라.", suggested);
+
     private string? RenameFromItem(FileItemViewModel item)
     {
         var oldPath = FolderPathRules.Normalize(item.FullPath);
@@ -2948,6 +2955,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             // 통로 (§4.6 · D75). 위 둘과 같은 실제 동작 위에 얹힌, 경로만 받는 자리다.
             SetAnchorFolderToPath = SetAnchorFromPath,
             RegisterFolderPath = RegisterFolderAtPath,
+
+            // 「새 폴더 만들기」모달이 닿을 통로 (§4.6 · D75-c). 패널은 IPrompt 를 모른다.
+            PromptForNewFolderName = PromptNewFolderName,
 
             // 항목 우클릭 「이름 바꾸기」와 F2 가 닿을 통로 (§4.6 309행 · D12~D15). 확인창과
             // folders[] 를 아는 쪽이 여기다 — 패널은 둘 다 모른다.
