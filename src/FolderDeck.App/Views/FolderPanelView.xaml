@@ -208,13 +208,29 @@
                             v:ColumnSort.SortKey="{x:Static models:SortBy.Modified}" />
         </GridView>
 
-        <!-- 재귀 검색 중 details 뷰 — "위치" 열이 붙는다(탐색기 방식).
-             여기서 늘리는 것은 `위치` 다 — 가장 긴 내용이 거기다(하위 폴더 상대 경로). -->
+        <!-- 재귀 검색·전역 검색 중 details 뷰 — "위치" 열이 붙는다(탐색기 방식). 재귀 검색과
+             검색 타일이 이 자원 하나를 나눠 쓴다(D69-e 결정 1과 같은 결 — 복제하지 않는다).
+             여기서 늘리는 것은 `위치` 다 — 가장 긴 내용이 거기다(하위 폴더 상대 경로 또는
+             검색 타일의 부모 폴더).
+
+             이름·크기·수정에는 NormalGridView 와 똑같은 HeaderTemplate·SortKey 를 붙인다
+             (D69-g) — 전역 검색 타일에서는 실제로 눌러서 정렬된다. 재귀 검색에서는
+             OnColumnHeaderClick 의 IsRecursiveSearch 게이트가 누름을 막고,
+             HeaderTextFor 가 같은 판정으로 화살표를 안 붙인다 — 같은 뷰가 검색 타일에서만
+             정렬되므로 화살표를 다는 판정이 그 둘을 갈라야 한다(결정 4). -->
         <GridView x:Key="SearchGridView" x:Shared="False">
-            <!-- 여기 컬럼에는 v:ColumnSort.SortKey 를 붙이지 않는다 — 재귀 검색 결과는 찾은
-                 순서대로 흘러들고 정렬하지 않으므로(4.10) 눌러도 순서가 안 바뀐다.
-                 헤더 메타의 정렬 글자를 그동안 잠그는 것과 같은 이유다. -->
-            <GridViewColumn Header="이름" Width="220">
+            <GridView.ColumnHeaderContainerStyle>
+                <Style TargetType="GridViewColumnHeader"
+                       BasedOn="{StaticResource {x:Type GridViewColumnHeader}}">
+                    <Setter Property="HorizontalContentAlignment" Value="Left" />
+                    <Setter Property="ToolTip"
+                            Value="눌러서 이 열로 정렬 — 같은 열을 다시 누르면 오름/내림이 뒤집힌다" />
+                </Style>
+            </GridView.ColumnHeaderContainerStyle>
+
+            <GridViewColumn Header="이름" Width="220"
+                            HeaderTemplate="{StaticResource NameColumnHeader}"
+                            v:ColumnSort.SortKey="{x:Static models:SortBy.Name}">
                 <GridViewColumn.CellTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal">
@@ -224,6 +240,8 @@
                     </DataTemplate>
                 </GridViewColumn.CellTemplate>
             </GridViewColumn>
+            <!-- 위치는 누를 수 없다(결정 2) — SortBy 열거자에 경로 값이 없다. HeaderTemplate·
+                 SortKey 를 붙이지 않은 채 그대로 둔다. -->
             <GridViewColumn Header="위치" Width="180" v:ColumnLayout.IsFlexible="True">
                 <GridViewColumn.CellTemplate>
                     <DataTemplate>
@@ -233,7 +251,9 @@
                     </DataTemplate>
                 </GridViewColumn.CellTemplate>
             </GridViewColumn>
-            <GridViewColumn Header="크기" Width="80">
+            <GridViewColumn Header="크기" Width="80"
+                            HeaderTemplate="{StaticResource SizeColumnHeader}"
+                            v:ColumnSort.SortKey="{x:Static models:SortBy.Size}">
                 <GridViewColumn.CellTemplate>
                     <DataTemplate>
                         <TextBlock Text="{Binding SizeText}" TextAlignment="Right"
@@ -241,7 +261,9 @@
                     </DataTemplate>
                 </GridViewColumn.CellTemplate>
             </GridViewColumn>
-            <GridViewColumn Header="수정" Width="120" DisplayMemberBinding="{Binding ModifiedText}" />
+            <GridViewColumn Header="수정" Width="120" DisplayMemberBinding="{Binding ModifiedText}"
+                            HeaderTemplate="{StaticResource ModifiedColumnHeader}"
+                            v:ColumnSort.SortKey="{x:Static models:SortBy.Modified}" />
         </GridView>
     </UserControl.Resources>
 

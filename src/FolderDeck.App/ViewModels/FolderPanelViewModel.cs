@@ -777,9 +777,17 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// 가 null)은 <b>어느 컬럼과도 매치하지 않는다</b> — 화살표 없이 라벨만 그린다(기존
     /// 동작). <see cref="CurrentSortBy"/> 는 그 경우 편의상 <c>SortBy.Name</c> 으로
     /// 떨어지므로(<see cref="SortLabel"/> 용) 여기서는 직접 <c>Entry?.SortBy</c> 를 본다.
+    /// <b>재귀 검색 중에는 어느 컬럼에도 화살표를 붙이지 않는다</b>(D69-g 결정 4·6-1) —
+    /// 그 결과는 찾은 순서 그대로라 정렬돼 있지 않다. 헤더 메타의 정렬 글자를 잠그는
+    /// <see cref="IsRecursiveSearch"/> 판정을 그대로 재사용한다 — 새 규칙을 만들지 않는다.
     /// </summary>
     private string HeaderTextFor(SortBy column, string label)
     {
+        if (IsRecursiveSearch)
+        {
+            return label;
+        }
+
         SortBy? activeSort = IsSearchTile ? searchSortBy : Entry?.SortBy;
         return activeSort == column ? label + SortArrow : label;
     }
