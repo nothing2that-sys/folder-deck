@@ -248,6 +248,232 @@ public sealed class SearchTileTests
 }
 
 /// <summary>
+/// D69-f — 손 확인이 잡은 둘(정렬 · 드래그)의 시험. §6-4 표의 10개를 정확히 그대로 옮긴다 —
+/// 더 만들지도 합치지도 않는다.
+/// </summary>
+public sealed class SearchTileDragAndSortTests
+{
+    private static FileItemViewModel MakeItem(string path, bool isDirectory = false) =>
+        new(new FolderItem(Path.GetFileName(path), path, isDirectory, isDirectory ? null : 0, DateTime.UtcNow));
+
+    private static FolderPanelViewModel MakePanel(bool isSearchTile) => new(
+        new FolderEnumerator(), new FakeShellLauncher(), new FakeClipboardService(),
+        isRotating: false, isSearchTile);
+
+    private static FolderPanelViewModel MakeSearchPanel(RecordingEverythingNative native, int maxResults = 500)
+    {
+        var panel = MakePanel(isSearchTile: true);
+        panel.EverythingSearchService = new EverythingSearchService(native);
+        panel.EverythingMaxResults = maxResults;
+        return panel;
+    }
+
+    /// <summary>재사용 — <see cref="SearchTileTests"/> 것과 같은 이유·같은 모양이다.</summary>
+    private static async Task<bool> WaitUntilAsync(
+        FolderPanelViewModel panel, Func<bool> predicate, TimeSpan timeout)
+    {
+        if (predicate())
+        {
+            return true;
+        }
+
+        var tcs = new TaskCompletionSource<bool>();
+
+        void Handler(object? sender, PropertyChangedEventArgs e)
+        {
+            if (predicate())
+            {
+                tcs.TrySetResult(true);
+            }
+        }
+
+        panel.PropertyChanged += Handler;
+        try
+        {
+            if (predicate())
+            {
+                return true;
+            }
+
+            var completed = await Task.WhenAny(tcs.Task, Task.Delay(timeout)).ConfigureAwait(true);
+            return completed == tcs.Task;
+        }
+        finally
+        {
+            panel.PropertyChanged -= Handler;
+        }
+    }
+
+    // ── 드래그(1~4) ──────────────────────────────────────────────────────────
+
+    // 1
+    [Fact]
+    public void SearchTileDragPayloadIsNotNullEvenWithoutCurrentPath()
+    {
+        var panel = MakePanel(isSearchTile: true);
+        Assert.Null(panel.CurrentPath);
+        panel.SelectedItems = [MakeItem(@"C:\a\one.txt")];
+
+        var payload = panel.BuildDragPayload();
+
+        Assert.NotNull(payload);
+    }
+
+    // 2 — 「깨졌나」를 무는 시험. 빼지 마라.
+    [Fact]
+    public void FolderTileDragPayloadIsStillNullWhenCurrentPathIsNull()
+    {
+        var panel = MakePanel(isSearchTile: false);
+        Assert.Null(panel.CurrentPath);
+        panel.SelectedItems = [MakeItem(@"C:\a\one.txt")];
+
+        var payload = panel.BuildDragPayload();
+
+        Assert.Null(payload);
+    }
+
+    // 3
+    [Fact]
+    public void SearchTilePayloadItemsMatchTheDraggedItem()
+    {
+        var panel = MakePanel(isSearchTile: true);
+        var inSelection = MakeItem(@"C:\a\one.txt");
+        var outsideSelection = MakeItem(@"C:\a\two.txt");
+        panel.SelectedItems = [inSelection];
+
+        // 누른 항목이 선택 밖이면 그 하나만 실린다 — 기존 규칙(D70~D72), 손대지 않았다.
+        var payload = panel.BuildDragPayload(pressedItem: outsideSelection);
+
+        Assert.NotNull(payload);
+        var item = Assert.Single(payload!.Items);
+        Assert.Equal(outsideSelection.FullPath, item.Path);
+    }
+
+    // 4
+    [Fact]
+    public void SearchTilePayloadSourceFolderIsTheFirstItemsParent()
+    {
+        var panel = MakePanel(isSearchTile: true);
+        var first = MakeItem(@"C:\a\sub\one.txt");
+        var second = MakeItem(@"C:\other\two.txt");
+        panel.SelectedItems = [first, second];
+
+        var payload = panel.BuildDragPayload();
+
+        Assert.NotNull(payload);
+        Assert.Equal(@"C:\a\sub", payload!.SourceFolder);
+    }
+
+    // ── 정렬(5~10) ───────────────────────────────────────────────────────────
+
+    // 5
+    [Fact]
+    public async Task SettingSortToSizeRequeriesInSizeAscendingOrder()
+    {
+        const uint sortSizeAscending = 5;
+        var native = new RecordingEverythingNative();
+        var panel = MakeSearchPanel(native);
+        panel.SearchText = "x";
+        await WaitUntilAsync(panel, () => native.LastSetSort is not null, TimeSpan.FromSeconds(3));
+
+        await panel.SetSortCommand.ExecuteAsync(SortBy.Size);
+        var arrived = await WaitUntilAsync(
+            panel, () => native.LastSetSort == sortSizeAscending, TimeSpan.FromSeconds(3));
+
+        Assert.True(arrived, "재질의가 일어나지 않았다.");
+    }
+
+    // 6
+    [Fact]
+    public async Task ClickingTheSameCriterionAgainRequeriesDescending()
+    {
+        const uint sortSizeAscending = 5;
+        const uint sortSizeDescending = 6;
+        var native = new RecordingEverythingNative();
+        var panel = MakeSearchPanel(native);
+        panel.SearchText = "x";
+        await WaitUntilAsync(panel, () => native.LastSetSort is not null, TimeSpan.FromSeconds(3));
+
+        await panel.SetSortCommand.ExecuteAsync(SortBy.Size);
+        await WaitUntilAsync(panel, () => native.LastSetSort == sortSizeAscending, TimeSpan.FromSeconds(3));
+
+        await panel.SetSortCommand.ExecuteAsync(SortBy.Size);
+        var arrived = await WaitUntilAsync(
+            panel, () => native.LastSetSort == sortSizeDescending, TimeSpan.FromSeconds(3));
+
+        Assert.True(arrived, "내림차순 재질의가 일어나지 않았다.");
+    }
+
+    // 7
+    [Fact]
+    public async Task SwitchingToADifferentCriterionGoesBackToAscending()
+    {
+        const uint sortSizeAscending = 5;
+        const uint sortSizeDescending = 6;
+        const uint sortDateModifiedAscending = 13;
+        var native = new RecordingEverythingNative();
+        var panel = MakeSearchPanel(native);
+        panel.SearchText = "x";
+        await WaitUntilAsync(panel, () => native.LastSetSort is not null, TimeSpan.FromSeconds(3));
+
+        await panel.SetSortCommand.ExecuteAsync(SortBy.Size);
+        await WaitUntilAsync(panel, () => native.LastSetSort == sortSizeAscending, TimeSpan.FromSeconds(3));
+        await panel.SetSortCommand.ExecuteAsync(SortBy.Size);
+        await WaitUntilAsync(panel, () => native.LastSetSort == sortSizeDescending, TimeSpan.FromSeconds(3));
+
+        await panel.SetSortCommand.ExecuteAsync(SortBy.Modified);
+        var arrived = await WaitUntilAsync(
+            panel, () => native.LastSetSort == sortDateModifiedAscending, TimeSpan.FromSeconds(3));
+
+        Assert.True(arrived, "다른 기준으로 바뀌며 오름차순으로 재질의되지 않았다.");
+    }
+
+    // 8
+    [Fact]
+    public async Task SearchTileSortNeverTouchesEntryEvenIfOneIsForced()
+    {
+        var panel = MakePanel(isSearchTile: true);
+        var entry = new FolderEntry { Path = @"C:\forced", DisplayName = "억지로 넣은 Entry" };
+        panel.Entry = entry;
+        var originalSortBy = entry.SortBy;
+        var originalSortDesc = entry.SortDesc;
+
+        await panel.SetSortCommand.ExecuteAsync(SortBy.Size);
+
+        Assert.Equal(originalSortBy, entry.SortBy);
+        Assert.Equal(originalSortDesc, entry.SortDesc);
+    }
+
+    // 9
+    [Fact]
+    public void SearchTileDefaultSortIsNameAscending()
+    {
+        var panel = MakePanel(isSearchTile: true);
+
+        Assert.Equal("이름 ↑", panel.NameHeaderText);
+        Assert.Equal("크기", panel.SizeHeaderText);
+        Assert.Equal("수정", panel.ModifiedHeaderText);
+    }
+
+    // 10 — 「깨졌나」를 무는 시험. 빼지 마라.
+    [Fact]
+    public async Task FolderTileSortStillMutatesEntryAndSaves()
+    {
+        var entry = new FolderEntry { Path = @"C:\a", DisplayName = "a", SortBy = SortBy.Name, SortDesc = false };
+        var panel = MakePanel(isSearchTile: false);
+        panel.Entry = entry;
+        var saveCalls = 0;
+        panel.SaveFolderEntry = () => saveCalls++;
+
+        await panel.SetSortCommand.ExecuteAsync(SortBy.Size);
+
+        Assert.Equal(SortBy.Size, entry.SortBy);
+        Assert.False(entry.SortDesc);
+        Assert.Equal(1, saveCalls);
+    }
+}
+
+/// <summary>
 /// 검색어·상한을 실제로 기록하는 <see cref="IEverythingNative"/> 가짜 — 전역 검색 타일이
 /// <see cref="EverythingSearchService"/> 에 무엇을 넘기는지까지 확인해야 해서(§6-5 시험
 /// 9·10), <c>EverythingSearchServiceTests</c> 의 <c>FakeEverythingNative</c>(호출 순서만
@@ -258,6 +484,8 @@ internal sealed class RecordingEverythingNative : IEverythingNative
     public string? LastSearch { get; private set; }
 
     public uint? LastMax { get; private set; }
+
+    public uint? LastSetSort { get; private set; }
 
     public bool IsDbLoadedResult { get; set; } = true;
 
@@ -273,9 +501,7 @@ internal sealed class RecordingEverythingNative : IEverythingNative
 
     public void SetMax(uint max) => LastMax = max;
 
-    public void SetSort(uint sort)
-    {
-    }
+    public void SetSort(uint sort) => LastSetSort = sort;
 
     public void SetRequestFlags(uint flags)
     {

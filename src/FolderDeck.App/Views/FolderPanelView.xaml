@@ -425,12 +425,18 @@
                                          그것이 목록을 다시 읽는다. 양방향으로 묶으면 메뉴가 값만
                                          바꾸고 목록은 옛 순서로 남는 길이 생긴다.
                                          저장하지 않는다: 워크스페이스 스키마에 슬롯이 없다. -->
+                                    <!-- 검색 타일은 이 토글이 뜻이 없다 — ToggleFoldersFirstAsync
+                                         가 Entry 를 써서 아무 일도 안 한다(D69-f 결정 6). 죽은
+                                         손잡이를 보이는 채로 두지 않는다. -->
                                     <MenuItem Header="폴더 먼저" IsCheckable="True"
                                               IsChecked="{Binding PlacementTarget.Tag.FoldersFirst,
                                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
                                                           Mode=OneWay}"
                                               Command="{Binding PlacementTarget.Tag.ToggleFoldersFirstCommand,
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Visibility="{Binding PlacementTarget.Tag.IsSearchTile,
+                                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                           Converter={StaticResource InverseBoolToVisibility}}"
                                               ToolTip="끄면 폴더와 파일을 한 덩어리로 정렬한다 — 아이콘에 ∪ 가 붙는다 (창을 다시 열면 켜진 상태로 돌아온다)" />
                                 </ContextMenu>
                             </Button.ContextMenu>

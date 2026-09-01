@@ -207,6 +207,22 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// <summary>전역 검색이 실제로 찾은 전체 개수 — <see cref="everythingTruncated"/> 일 때만 뜻이 있다.</summary>
     private int everythingTotalCount;
 
+    /// <summary>
+    /// 검색 타일이 스스로 드는 정렬 기준(D69-f 결정 2) — <c>Entry</c> 가 없어 폴더 타일처럼
+    /// <c>FolderEntry.SortBy</c>/<c>SortDesc</c> 에 저장할 자리가 없다. 저장하지 않는다 —
+    /// 질의 문자열을 저장하지 않는 것과 같은 이유다. 기본값은 이름 오름차순(D69-e 가 고정으로
+    /// 쓰던 값 그대로).
+    /// </summary>
+    private SortBy searchSortBy = SortBy.Name;
+
+    private bool searchSortDesc;
+
+    /// <summary>지금 정렬 기준 — 검색 타일은 자체 상태, 폴더 타일은 <see cref="Entry"/> 것.</summary>
+    private SortBy CurrentSortBy => IsSearchTile ? searchSortBy : Entry?.SortBy ?? SortBy.Name;
+
+    /// <summary>지금 정렬 방향 — 검색 타일은 자체 상태, 폴더 타일은 <see cref="Entry"/> 것.</summary>
+    private bool CurrentSortDesc => IsSearchTile ? searchSortDesc : Entry?.SortDesc == true;
+
     /// <summary>현재 경로를 열거한 원본 목록. 검색·필터는 이걸 건드리지 않는다.</summary>
     [ObservableProperty]
     private IReadOnlyList<FileItemViewModel> items = [];
@@ -340,7 +356,9 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// </remarks>
     public FileDropPayload? BuildDragPayload(FileItemViewModel? pressedItem = null)
     {
-        if (CurrentPath is not { } path)
+        // 검색 타일은 CurrentPath 가 늘 null 이다(Entry 가 없다) — 이 가드를 검색 타일에서만
+        // 푼다(D69-f 결정 4). 폴더 타일은 지금 그대로 막는다.
+        if (!IsSearchTile && CurrentPath is null)
         {
             return null;
         }
@@ -352,12 +370,28 @@ public sealed partial class FolderPanelViewModel : ObservableObject
             ? SelectedItems
             : [pressedItem];
 
-        return items.Count > 0
-            ? new FileDropPayload(
-                path,
-                [.. items.Select(i => new Core.Operations.OperationItem(i.FullPath, i.IsDirectory))])
-            : null;
+        if (items.Count == 0)
+        {
+            return null;
+        }
+
+        // 검색 타일은 결과가 여러 볼륨에서 섞여 와 뭉치의 출처가 하나로 안 정해진다(D69-f) —
+        // 끌린 첫 항목의 부모 폴더를 넣는다. 이동/복사 판정은 항목마다 하므로 안 깨진다.
+        var sourceFolder = IsSearchTile ? SourceFolderFor(items[0]) : CurrentPath!;
+
+        return new FileDropPayload(
+            sourceFolder,
+            [.. items.Select(i => new Core.Operations.OperationItem(i.FullPath, i.IsDirectory))]);
     }
+
+    /// <summary>
+    /// 검색 타일에서 끌린 뭉치의 출처(D69-f 결정 5) — 끌린 첫 항목의 부모 폴더. 부모를 못
+    /// 구하면(드라이브 루트 자체가 끌렸을 때 등) 그 항목의 전체 경로로 대신한다. 이 값은
+    /// 문구·진단에만 쓰이고 실제 파일 조작에는 안 쓰인다(§6-1 감사) — 그래서 이 대체가
+    /// 안전하다.
+    /// </summary>
+    private static string SourceFolderFor(FileItemViewModel item) =>
+        IoPath.GetDirectoryName(item.FullPath) is { Length: > 0 } parent ? parent : item.FullPath;
 
     /// <summary>
     /// 우클릭 메뉴 "휴지통으로 삭제"가 닿을 통로 (§4.4). 실제 명령은 엔진을 아는
@@ -614,7 +648,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// 이미 「이름 ↑」처럼 적고 있다.
     /// </para>
     /// </remarks>
-    public string SortIcon => (FoldersFirst ? string.Empty : "∪") + (Entry?.SortDesc == true ? "▾" : "▴");
+    public string SortIcon => (FoldersFirst ? string.Empty : "∪") + (CurrentSortDesc ? "▾" : "▴");
 
     /// <summary>정렬 아이콘의 툴팁 — 아이콘이 못 담는 기준과 통합 여부를 글자로 적는다.</summary>
     public string SortTip =>
@@ -648,10 +682,10 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         $" · {SortLabel}{SortArrow}{(FoldersFirst ? string.Empty : " · 통합")}";
 
     /// <summary>지금 정렬 기준의 이름 한 단어. 메뉴 라벨·컬럼 머리글과 <b>같은 어휘</b>다.</summary>
-    public string SortLabel => LabelOf(Entry?.SortBy ?? SortBy.Name);
+    public string SortLabel => LabelOf(CurrentSortBy);
 
     /// <summary>지금 정렬 방향 한 글자. 앞에 공백이 붙어 라벨에 그대로 이어 붙는다.</summary>
-    public string SortArrow => Entry?.SortDesc == true ? " ↓" : " ↑";
+    public string SortArrow => CurrentSortDesc ? " ↓" : " ↑";
 
     // ── 상세 뷰 컬럼 머리글 (Phase 8-B ①) ────────────────────────────────────
     //
@@ -738,9 +772,17 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         OnPropertyChanged(nameof(SortTip));
     }
 
-    /// <summary>지금 정렬 컬럼이면 화살표를 붙이고, 아니면 라벨만.</summary>
-    private string HeaderTextFor(SortBy column, string label) =>
-        Entry?.SortBy == column ? label + SortArrow : label;
+    /// <summary>
+    /// 지금 정렬 컬럼이면 화살표를 붙이고, 아니면 라벨만. 폴더를 안 띄운 순환 칸(<c>Entry</c>
+    /// 가 null)은 <b>어느 컬럼과도 매치하지 않는다</b> — 화살표 없이 라벨만 그린다(기존
+    /// 동작). <see cref="CurrentSortBy"/> 는 그 경우 편의상 <c>SortBy.Name</c> 으로
+    /// 떨어지므로(<see cref="SortLabel"/> 용) 여기서는 직접 <c>Entry?.SortBy</c> 를 본다.
+    /// </summary>
+    private string HeaderTextFor(SortBy column, string label)
+    {
+        SortBy? activeSort = IsSearchTile ? searchSortBy : Entry?.SortBy;
+        return activeSort == column ? label + SortArrow : label;
+    }
 
     private static string LabelOf(SortBy sort) => sort switch
     {
@@ -815,6 +857,26 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [RelayCommand(AllowConcurrentExecutions = true)]
     public async Task SetSortAsync(SortBy sort)
     {
+        if (IsSearchTile)
+        {
+            // 검색 타일은 Entry 가 없다 — 저장하지 않는 자체 상태를 바꾸고 재질의만 한다
+            // (D69-f 결정 1·2·3). 받아 온 목록을 지역 정렬하지 않는다 — Everything 이 상한
+            // 밖까지 반영된 정렬을 주는 유일한 길이라서다.
+            if (searchSortBy == sort)
+            {
+                searchSortDesc = !searchSortDesc;
+            }
+            else
+            {
+                searchSortBy = sort;
+                searchSortDesc = false;
+            }
+
+            NotifySortChanged();
+            RestartSearch();
+            return;
+        }
+
         if (Entry is null)
         {
             return;
@@ -1449,9 +1511,10 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
         try
         {
-            // 검색 타일에는 정렬 기준을 고를 자리가 없다(§6-2) — 이름 오름차순 고정.
+            // D69-f — 컬럼 머리로 고른 정렬 기준을 Everything 에 그대로 넘긴다. 기본은
+            // 이름 오름차순(searchSortBy 필드 초기값).
             result = await EverythingSearchService
-                .SearchAsync(query, SortBy.Name, sortDesc: false, EverythingMaxResults, token)
+                .SearchAsync(query, searchSortBy, searchSortDesc, EverythingMaxResults, token)
                 .ConfigureAwait(true);
         }
         catch (OperationCanceledException)
