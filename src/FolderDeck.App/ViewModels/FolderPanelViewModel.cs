@@ -1305,9 +1305,17 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         }
     }
 
-    partial void OnSearchTextChanged(string value) => RestartSearch();
+    partial void OnSearchTextChanged(string value)
+    {
+        RestartSearch();
+        NotifySortChanged();
+    }
 
-    partial void OnIncludeSubfoldersChanged(bool value) => RestartSearch();
+    partial void OnIncludeSubfoldersChanged(bool value)
+    {
+        RestartSearch();
+        NotifySortChanged();
+    }
 
     partial void OnItemsChanged(IReadOnlyList<FileItemViewModel> value) => RestartSearch();
 
