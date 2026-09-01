@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FolderDeck.App.Interop;
 using FolderDeck.App.Services;
 using FolderDeck.App.Watching;
 using FolderDeck.Core.Enumeration;
@@ -41,6 +42,14 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     /// 하나만 만들어야 한다.
     /// </summary>
     private readonly ShellIconService _shellIconService = new();
+
+    /// <summary>
+    /// 전역 검색 타일(§4.12)의 질의 계층 — <b>검색 타일이 하나라도 생길 때만 만든다</b>
+    /// (D69-e 결정 6-4 · §4.12-1: 안 만들면 Everything64.dll 을 한 번도 안 부른다).
+    /// <see cref="_shellIconService"/> 와 같은 길로 앱 전체에 하나만 두고 모든 검색 타일이
+    /// 공유한다. <see cref="Shutdown"/> 이 정리한다.
+    /// </summary>
+    private EverythingSearchService? _everythingSearchService;
 
     /// <summary>설정 파일이 손상돼 덮어쓰지 않기로 한 실행인가 (<c>App.LoadSettings</c>).</summary>
     private readonly bool _settingsWritable;
@@ -354,6 +363,10 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         {
             panel.ExtensionGlyphs = _settings.ExtensionGlyphs;
             panel.ShellIconService = _settings.ShowShellIcons ? _shellIconService : null;
+
+            // 검색 타일이 아닌 패널에는 뜻 없는 값이지만 해가 없다 — ExtensionGlyphs 와 같은
+            // 자리다(D69-e 6-4). 다시 질의하지는 않는다 — 다음 검색어부터 새 상한이 먹는다.
+            panel.EverythingMaxResults = _settings.EverythingMaxResults;
         }
 
         if (_settingsWritable)
@@ -683,6 +696,23 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         }
     }
 
+    /// <summary>이 워크스페이스에 이미 전역 검색 타일이 있는가(D69-e 6-4) — 팝업이 이걸 읽어
+    /// 「전역 검색」 버튼을 잠근다. 폴더 쪽과 같은 처리다: 목록에서 지우지 않고 옆에 적는다.</summary>
+    public bool HasSearchTile => Tiles.Any(t => t.Spec.Kind == TileKind.Search);
+
+    /// <summary>기다리던 칸을 전역 검색 타일로 만든다. 이미 하나 있으면 아무 일도 안 한다(6-4).</summary>
+    [RelayCommand]
+    public void PlaceSearch()
+    {
+        var cell = PendingCell;
+        CancelPlace();
+
+        if (cell is not null)
+        {
+            PlaceSearchInCell(cell);
+        }
+    }
+
     /// <summary>왼쪽 리스트에서 빈 칸으로 끌어다 놓기, 그리고 클릭 선택의 공통 종착지.</summary>
     public async Task<bool> PlaceFolderInCellAsync(FolderRowViewModel row, GridCellViewModel cell)
     {
@@ -744,6 +774,29 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
         AddTile(spec);
         Inform($"순환{spec.RotationIndex} 칸을 만들었다 — 폴더 행 우클릭으로 이 번호를 지정한다.");
+        return true;
+    }
+
+    public bool PlaceSearchInCell(GridCellViewModel cell)
+    {
+        ArgumentNullException.ThrowIfNull(cell);
+
+        if (!IsEditingLayout || !CanPlaceTile(null, cell.X, cell.Y, 1, 1) || HasSearchTile)
+        {
+            return false;
+        }
+
+        var spec = new TileSpec
+        {
+            Kind = TileKind.Search,
+            CellX = cell.X,
+            CellY = cell.Y,
+            SpanX = 1,
+            SpanY = 1,
+        };
+
+        AddTile(spec);
+        Inform("이 칸을 전역 검색으로 만들었다.");
         return true;
     }
 
@@ -2211,6 +2264,8 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
         _watchers.Clear();
 
+        _everythingSearchService?.Dispose();
+
         _store.SaveFailed -= OnSaveFailed;
         _store.Flush();
     }
@@ -2826,8 +2881,18 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
     private TileViewModel CreateTile(TileSpec spec)
     {
+        var isSearchTile = spec.Kind == TileKind.Search;
+
+        // 검색 타일이 하나라도 생길 때만 만든다(§4.12-1) — 그래야 Everything64.dll 을 한 번도
+        // 안 부르는 실행이 그대로 남는다(D69-e 결정 6-4).
+        if (isSearchTile)
+        {
+            _everythingSearchService ??= new EverythingSearchService(new EverythingNative());
+        }
+
         var panel = new FolderPanelViewModel(
-            _enumerator, _shell, _clipboard, spec.Kind == TileKind.Rotating, ReportError, ReportRejection)
+            _enumerator, _shell, _clipboard, spec.Kind == TileKind.Rotating, isSearchTile,
+            ReportError, ReportRejection)
         {
             // 확장자→글리프 매핑(D59). 패널은 설정 저장소를 모른다 — 여기서 스냅샷을 물려주고,
             // 설정 창에서 바뀌면 OpenSettingsAsync 가 다시 물려준다.
@@ -2866,6 +2931,12 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             // 클립보드를 읽고 판정하고 엔진에 얹는 일은 전부 이쪽이다 — 패널은 목적지만 안다.
             PasteInto = PasteIntoAsync,
         };
+
+        if (isSearchTile)
+        {
+            panel.EverythingSearchService = _everythingSearchService;
+            panel.EverythingMaxResults = _settings.EverythingMaxResults;
+        }
 
         if (spec.Kind == TileKind.Pinned && spec.FolderId is { } id)
         {
@@ -2970,6 +3041,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         OnPropertyChanged(nameof(RotatingPanel));
         OnPropertyChanged(nameof(StatusPath));
         OnPropertyChanged(nameof(StatusLabel));
+        OnPropertyChanged(nameof(HasSearchTile));
     }
 
     /// <summary>

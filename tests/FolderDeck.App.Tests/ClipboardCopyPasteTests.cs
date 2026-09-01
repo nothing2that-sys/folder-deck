@@ -126,6 +126,7 @@ public sealed class ClipboardCopyPasteTests
             new FakeShellLauncher(),
             new FakeClipboardService(),
             isRotating: false,
+            isSearchTile: false,
             reportError,
             reportRejection);
 

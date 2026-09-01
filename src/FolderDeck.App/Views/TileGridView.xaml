@@ -141,13 +141,21 @@
                         <!-- 편집 손잡이 층 — 여기를 잡으면 이동, 오른쪽 아래 그립은 리사이즈. -->
                         <Border Background="{StaticResource Brush.EditOverlay}"
                                 CornerRadius="4" Cursor="SizeAll"
+                                Tag="{Binding}"
                                 Margin="{Binding DataContext.TileGap, ElementName=Root,
                                          Converter={StaticResource TileMargin}}"
                                 MouseLeftButtonDown="OnTileMouseDown"
                                 Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}">
+                            <!-- ContextMenu 는 시각 트리 밖이라 DataContext 가 안 내려온다 —
+                                 Tag 로 타일 뷰모델을 잡는다(FolderPanelView.xaml 의 정렬 메뉴와
+                                 같은 우회). 검색 타일은 「상시 ↔ 순환 바꾸기」가 뜻이 없다
+                                 (§2.3 · D69-e 6-3) — 목록에서 지우지 않고 접는다. -->
                             <Border.ContextMenu>
                                 <ContextMenu>
-                                    <MenuItem Header="상시 ↔ 순환 바꾸기" Click="OnToggleKindClick" />
+                                    <MenuItem Header="상시 ↔ 순환 바꾸기" Click="OnToggleKindClick"
+                                              Visibility="{Binding PlacementTarget.Tag.IsSearch,
+                                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                           Converter={StaticResource InverseBoolToVisibility}}" />
                                     <MenuItem Header="이 타일 빼기 (폴더 등록은 남는다)"
                                               Click="OnRemoveTileClick" />
                                 </ContextMenu>
@@ -170,12 +178,32 @@
                                                     <Setter Property="BorderBrush"
                                                             Value="{StaticResource Brush.Rotating}" />
                                                 </DataTrigger>
+                                                <!-- 검색 칩의 세 번째 모양(D69-e 6-3) — 색만이
+                                                     아니라 왼쪽 글리프도 🔍 로 바뀐다(아래
+                                                     TextBlock.Style) — 색맹 대비. -->
+                                                <DataTrigger Binding="{Binding IsSearch}" Value="True">
+                                                    <Setter Property="Background"
+                                                            Value="{StaticResource Brush.SearchSurface}" />
+                                                    <Setter Property="BorderBrush"
+                                                            Value="{StaticResource Brush.Search}" />
+                                                </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="⠿" Margin="0,0,5,0"
-                                                   Foreground="{StaticResource Brush.TextSecondary}" />
+                                        <TextBlock Margin="0,0,5,0"
+                                                   Foreground="{StaticResource Brush.TextSecondary}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="⠿" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsSearch}" Value="True">
+                                                            <Setter Property="Text" Value="🔍" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                         <TextBlock Text="{Binding EditLabel}" FontWeight="SemiBold"
                                                    TextTrimming="CharacterEllipsis" />
                                         <TextBlock Text="{Binding SizeText}" Margin="6,0,0,0"
@@ -244,7 +272,7 @@
                     BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
                     Padding="6" MinWidth="220">
                 <StackPanel>
-                    <TextBlock Text="이 칸에 넣을 폴더" FontWeight="SemiBold" Margin="4,2,4,6" />
+                    <TextBlock Text="이 칸에 넣을 것" FontWeight="SemiBold" Margin="4,2,4,6" />
 
                     <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding Rows}">
@@ -281,6 +309,24 @@
                             ToolTip="폴더를 못박지 않는 칸. 왼쪽 리스트에서 이 번호를 지정한 폴더가 여기에 뜬다."
                             Command="{Binding DataContext.PlaceRotatingCommand, ElementName=Root}">
                         <TextBlock Text="빈 순환 칸 만들기" FontStyle="Italic" />
+                    </Button>
+
+                    <!-- 전역 검색 타일(D69-e). 워크스페이스 전체에서 하나뿐이라 이미 있으면
+                         잠근다 — 폴더 쪽("이미 상시 칸")과 같은 처리: 목록에서 지우지 않고
+                         옆에 왜 못 고르는지 적는다. -->
+                    <Button Style="{StaticResource FolderRowButton}" Padding="6,4" Margin="0,2,0,0"
+                            IsEnabled="{Binding DataContext.HasSearchTile, ElementName=Root,
+                                        Converter={StaticResource InverseBool}}"
+                            ToolTip="이 워크스페이스 전체에서 파일을 찾는 칸. Everything(voidtools) 이 설치·실행 중이어야 한다."
+                            Command="{Binding DataContext.PlaceSearchCommand, ElementName=Root}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Text="이미 있다"
+                                       FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"
+                                       Foreground="{StaticResource Brush.TextSecondary}"
+                                       Visibility="{Binding DataContext.HasSearchTile, ElementName=Root,
+                                            Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Text="전역 검색" FontStyle="Italic" />
+                        </DockPanel>
                     </Button>
                 </StackPanel>
             </Border>

@@ -32,6 +32,15 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// <summary>검색어를 타이핑하는 동안 트리를 반복해서 걷지 않도록 두는 여유.</summary>
     private const int RecursiveSearchDebounceMs = 250;
 
+    /// <summary>
+    /// 전역 검색 타일(D69-e)이 타이핑마다 Everything 을 부르지 않도록 두는 여유. Everything
+    /// 색인 질의 자체는 보통 즉시 끝나지만, 서비스가 단일 전용 스레드로 질의를 직렬화한다
+    /// (D69-b) — 디바운스가 없으면 빠르게 치는 글자 수만큼 그 스레드에 작업이 쌓인다.
+    /// <see cref="RecursiveSearchDebounceMs"/> 와 같은 값을 골랐다 — 이 파일 안에 이미 검증된
+    /// 여유이고, 굳이 다른 값을 새로 정할 근거가 없었다(보고문 §5).
+    /// </summary>
+    private const int EverythingSearchDebounceMs = 250;
+
     private static readonly char[] Separators =
         [IoPath.DirectorySeparatorChar, IoPath.AltDirectorySeparatorChar];
 
@@ -65,6 +74,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         IShellLauncher shell,
         IClipboardService clipboard,
         bool isRotating,
+        bool isSearchTile = false,
         Action<string>? reportError = null,
         Action<string>? reportRejection = null)
     {
@@ -74,6 +84,13 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         _reportError = reportError;
         _reportRejection = reportRejection;
         this.isRotating = isRotating;
+        this.isSearchTile = isSearchTile;
+
+        // 검색 줄이 늘 펴져 있다(D69-e 6-2) — 접거나 펴는 손잡이 자체가 이 타일엔 없다.
+        if (isSearchTile)
+        {
+            isSearchExpanded = true;
+        }
     }
 
     private readonly record struct HistoryPosition(FolderEntry Entry, string Path);
@@ -84,6 +101,15 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private bool isRotating;
+
+    /// <summary>
+    /// 전역 검색 타일인가(D69-e 결정 2·3). <c>Entry</c>·<c>CurrentPath</c> 가 늘 null 인
+    /// 자리라 <see cref="IsEmpty"/> 하나만 새로 가른다 — 나머지(<see cref="CanGoUp"/> 등)는
+    /// 이미 null 로 막혀 있다. 생성자로만 정해지고 타일의 남은 수명 동안 바뀌지 않는다
+    /// (<see cref="IsRotating"/> 과 같은 자리).
+    /// </summary>
+    [ObservableProperty]
+    private bool isSearchTile;
 
     /// <summary>
     /// 빈 칸에 뜨는 제목. 순환 칸이 여럿이면 어느 번호인지 여기서 말한다
@@ -149,6 +175,37 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// <see cref="FileItemViewModel"/> 은 셸을 부르지 않고 ③ 단(글리프)만 쓴다.
     /// </summary>
     public ShellIconService? ShellIconService { get; set; }
+
+    /// <summary>
+    /// 전역 검색 타일(§4.12)의 질의 계층. <see cref="ExtensionGlyphs"/>·<see cref="ShellIconService"/>
+    /// 와 같은 길이다 — 패널은 만들지 않고 <see cref="MainViewModel"/> 이 앱 전체에 하나 만들어
+    /// 물려준다(D69-e 결정 5·6-4). 검색 타일이 아니면 늘 <c>null</c> 이다.
+    /// </summary>
+    public EverythingSearchService? EverythingSearchService { get; set; }
+
+    /// <summary>
+    /// 전역 검색 한 번의 결과 상한. 타일을 만들 때 <c>settings.EverythingMaxResults</c> 의
+    /// 스냅숏으로 받는다(D69-e 결정 5) — 설정 창에서 값이 바뀌면 <see cref="MainViewModel"/> 이
+    /// 떠 있는 검색 타일에 다시 물려준다.
+    /// </summary>
+    public int EverythingMaxResults { get; set; } = AppSettings.DefaultEverythingMaxResults;
+
+    /// <summary>
+    /// 전역 검색이 정상이 아닐 때의 안내 문구(D69-e 결정 7) — <see cref="EverythingStatus.Describe"/>
+    /// 와 같은 말을 쓴다. 검색이 정상이거나 검색 타일이 아니면 <c>null</c> 이다.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNoResults))]
+    [NotifyPropertyChangedFor(nameof(HasEverythingStatusText))]
+    private string? everythingStatusText;
+
+    public bool HasEverythingStatusText => EverythingStatusText is not null;
+
+    /// <summary>전역 검색 결과가 상한에 잘렸는가(D69-e 결정 6) — 잘렸으면 개수 문구가 총계도 적는다.</summary>
+    private bool everythingTruncated;
+
+    /// <summary>전역 검색이 실제로 찾은 전체 개수 — <see cref="everythingTruncated"/> 일 때만 뜻이 있다.</summary>
+    private int everythingTotalCount;
 
     /// <summary>현재 경로를 열거한 원본 목록. 검색·필터는 이걸 건드리지 않는다.</summary>
     [ObservableProperty]
@@ -426,8 +483,11 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// </remarks>
     public string? ShellDropDestination => HasFailure ? null : CurrentPath;
 
-        /// <summary>아직 아무 폴더도 안 띄운 순환 칸.</summary>
-    public bool IsEmpty => Entry is null;
+        /// <summary>
+        /// 아직 아무 폴더도 안 띄운 순환 칸. 전역 검색 타일은 <c>Entry</c> 가 늘 null 이어도
+        /// 빈 상태가 아니다(D69-e 결정 3) — 이것이 검색 타일 모드가 새로 막는 유일한 자리다.
+        /// </summary>
+    public bool IsEmpty => Entry is null && !IsSearchTile;
 
     public string AnchorName => Entry is null
         ? string.Empty
@@ -457,17 +517,25 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         _ => "읽을 수 없다",
     };
 
-    public bool IsDetailsView => Entry?.ViewMode == FolderViewMode.Details;
+    /// <summary>검색 타일은 <c>Entry</c> 가 없어도 늘 details 뷰다(D69-e 6-2) — 위치 열이 필요하다.</summary>
+    public bool IsDetailsView => IsSearchTile || Entry?.ViewMode == FolderViewMode.Details;
 
-    public bool IsListView => Entry is not null && Entry.ViewMode == FolderViewMode.List;
+    public bool IsListView => !IsSearchTile && Entry is not null && Entry.ViewMode == FolderViewMode.List;
 
     public bool HasSearchText => !string.IsNullOrEmpty(SearchText);
 
     /// <summary>재귀 검색이 걸린 상태 — details 뷰에 "위치" 열을 띄우는 조건이기도 하다.</summary>
     public bool IsRecursiveSearch => HasSearchText && IncludeSubfolders;
 
-    /// <summary>"검색 안 함"(평소 목록)과 "결과 없음"을 구분한다.</summary>
-    public bool ShowNoResults => HasSearchText && !IsSearching && DisplayItems.Count == 0;
+    /// <summary>
+    /// "위치" 열(<c>SearchGridView</c>)이 필요한 상태 — 재귀 검색 결과나 전역 검색 결과처럼
+    /// 서로 다른 폴더가 한 목록에 섞일 때(D69-e). 전역 검색은 늘 이 열이 필요하다(6-2).
+    /// </summary>
+    public bool NeedsLocationColumn => IsRecursiveSearch || IsSearchTile;
+
+    /// <summary>"검색 안 함"(평소 목록)과 "결과 없음"을 구분한다. 전역 검색 상태 문구가 떠 있을 때는
+    /// 그쪽이 대신 말하므로 겹치지 않는다(D69-e 결정 7).</summary>
+    public bool ShowNoResults => HasSearchText && !IsSearching && DisplayItems.Count == 0 && EverythingStatusText is null;
 
     public bool HasSkippedFolders => SearchSkippedFolders > 0;
 
@@ -491,8 +559,13 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public string? MetaText =>
         Entry is null ? null : $"{MetaCountText}{ViewModeText}{MetaSortText}";
 
-    /// <summary>메타의 앞 조각 — 개수와 구분점("7개 · ").</summary>
-    public string MetaCountText => $"{DisplayItems.Count}개 · ";
+    /// <summary>
+    /// 메타의 앞 조각 — 개수와 구분점("7개 · "). 전역 검색 결과가 상한에 잘렸으면 총계도
+    /// 함께 적는다("120개 중 100개 · ") — 안 적으면 목록이 조용히 거짓말을 한다(D69-e 결정 6).
+    /// </summary>
+    public string MetaCountText => everythingTruncated
+        ? $"{everythingTotalCount}개 중 {DisplayItems.Count}개 · "
+        : $"{DisplayItems.Count}개 · ";
 
     // ── 헤더 1줄이 그리는 것들 (Phase 8-C ③) ─────────────────────────────────
     //
@@ -511,7 +584,9 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// <see cref="MetaText"/> 가 세 조각을 <b>이어 붙인 것</b>이라는 규약을 그대로 두기
     /// 위해서다 — 구분점을 떼면 그 이음매가 "7개list" 가 된다.
     /// </remarks>
-    public string ItemCountText => $"{DisplayItems.Count}개";
+    public string ItemCountText => everythingTruncated
+        ? $"{everythingTotalCount}개 중 {DisplayItems.Count}개"
+        : $"{DisplayItems.Count}개";
 
     /// <summary>뷰 방식 아이콘 — list 는 줄 셋, details 는 격자 (§1.2 유니코드 글리프만).</summary>
     public string ViewModeIcon => Entry?.ViewMode == FolderViewMode.Details ? "▦" : "☰";
@@ -1111,18 +1186,32 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
     // ── 검색 ─────────────────────────────────────────────────────────────────
 
-    /// <summary>검색창을 편다 (🔍 클릭·포커스·<c>Ctrl+F</c>).</summary>
+    /// <summary>검색창을 편다 (🔍 클릭·포커스·<c>Ctrl+F</c>). 검색 타일은 늘 펴져 있어 아무 일도 안 한다(D69-e 6-2).</summary>
     [RelayCommand]
-    public void ExpandSearch() => IsSearchExpanded = true;
+    public void ExpandSearch()
+    {
+        if (IsSearchTile)
+        {
+            return;
+        }
+
+        IsSearchExpanded = true;
+    }
 
     /// <summary>
     /// 명시적으로 닫는다 (✕ · 🔍 다시 누르기). <b>검색어도 같이 비운다</b> —
     /// 입력줄이 사라졌는데 목록만 걸러진 채로 남으면 왜 이것만 보이는지 알 수 없다.
     /// 포커스가 빠지는 경우(<see cref="CollapseSearchIfEmpty"/>)와 달리 검색어가 있어도 닫는다.
+    /// 검색 타일은 늘 펴져 있어 아무 일도 안 한다(D69-e 6-2).
     /// </summary>
     [RelayCommand]
     public void CloseSearch()
     {
+        if (IsSearchTile)
+        {
+            return;
+        }
+
         SearchText = string.Empty;
         IsSearchExpanded = false;
     }
@@ -1130,10 +1219,16 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// <summary>
     /// 포커스가 빠졌을 때 접는다. <b>검색어가 남아 있으면 접지 않는다</b> —
     /// 결과를 보는 중에 접히면 무엇을 보고 있는지 알 수 없게 된다.
+    /// 검색 타일은 늘 펴져 있어 아무 일도 안 한다(D69-e 6-2).
     /// </summary>
     [RelayCommand]
     public void CollapseSearchIfEmpty()
     {
+        if (IsSearchTile)
+        {
+            return;
+        }
+
         if (!HasSearchText)
         {
             IsSearchExpanded = false;
@@ -1170,6 +1265,15 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         CancelSearch();
 
         var query = SearchText;
+
+        // 전역 검색 타일은 완전히 다른 길로 간다(D69-e) — 로컬 열거·재귀 검색은 CurrentPath 가
+        // 늘 null 이라 어차피 못 쓴다(결정 2). "하위 포함" 개념도 없다 — Everything 은 이미
+        // 전체를 본다.
+        if (IsSearchTile)
+        {
+            RestartEverythingSearch(query);
+            return;
+        }
 
         // 검색어를 비우면 원래 목록으로 복귀.
         if (string.IsNullOrEmpty(query))
@@ -1299,6 +1403,116 @@ public sealed partial class FolderPanelViewModel : ObservableObject
             cts.Dispose();
         }
     }
+
+    /// <summary>
+    /// 전역 검색 타일의 검색 시작(D69-e 6-2). 로컬 재귀 검색(<see cref="SearchRecursivelyAsync"/>)
+    /// 과 달리 <c>CurrentPath</c> 가 필요 없다 — Everything 은 색인 전체를 본다.
+    /// </summary>
+    private void RestartEverythingSearch(string query)
+    {
+        EverythingStatusText = null;
+        everythingTruncated = false;
+        everythingTotalCount = 0;
+
+        if (string.IsNullOrEmpty(query) || EverythingSearchService is null)
+        {
+            DisplayItems = [];
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _searchCts = cts;
+
+        _ = RunEverythingSearchAsync(query, cts);
+    }
+
+    private async Task RunEverythingSearchAsync(string query, CancellationTokenSource cts)
+    {
+        var token = cts.Token;
+
+        try
+        {
+            // 타이핑 중에 Everything 을 반복해서 부르지 않도록 잠깐 기다린다.
+            await Task.Delay(EverythingSearchDebounceMs, token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(_searchCts, cts) || EverythingSearchService is null)
+        {
+            return;
+        }
+
+        EverythingSearchResult result;
+
+        try
+        {
+            // 검색 타일에는 정렬 기준을 고를 자리가 없다(§6-2) — 이름 오름차순 고정.
+            result = await EverythingSearchService
+                .SearchAsync(query, SortBy.Name, sortDesc: false, EverythingMaxResults, token)
+                .ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            if (ReferenceEquals(_searchCts, cts))
+            {
+                _searchCts = null;
+            }
+
+            _reportError?.Invoke($"검색 실패: {ex.Message}");
+            return;
+        }
+
+        if (!ReferenceEquals(_searchCts, cts))
+        {
+            // 더 새로운 검색이 이 검색을 대체했다.
+            return;
+        }
+
+        _searchCts = null;
+
+        if (result.Outcome != EverythingSearchOutcome.Ok)
+        {
+            EverythingStatusText = DescribeOutcome(result.Outcome);
+            DisplayItems = [];
+            return;
+        }
+
+        // 잘림 여부를 DisplayItems 대입보다 먼저 정한다 — MetaCountText·ItemCountText 의
+        // NotifyPropertyChangedFor 가 DisplayItems 대입에 걸려 있으므로, 그 대입이 일어날 때
+        // 이미 최신 값이어야 문구와 목록이 한 번에 갈린다(D69-e 결정 6).
+        everythingTruncated = result.Truncated;
+        everythingTotalCount = result.TotalCount;
+
+        DisplayItems = [.. result.Items.Select(item => new FileItemViewModel(
+            item,
+            IoPath.GetDirectoryName(item.FullPath) ?? string.Empty,
+            ExtensionGlyphs,
+            ShellIconService))];
+    }
+
+    /// <summary>
+    /// 검색 실패 갈래를 안내 문구로 바꾼다(D69-e 결정 7) — 설정 창의 <see cref="EverythingStatus.
+    /// Describe"/> 와 같은 말을 쓴다. <see cref="EverythingSearchOutcome.Failed"/> 는
+    /// <see cref="EverythingAvailability"/> 에 짝이 없는 질의 자체의 실패라 따로 적는다.
+    /// </summary>
+    private static string DescribeOutcome(EverythingSearchOutcome outcome) => outcome switch
+    {
+        EverythingSearchOutcome.DllMissing =>
+            new EverythingStatus(EverythingAvailability.DllMissing, null).Describe(),
+        EverythingSearchOutcome.NotRunning =>
+            new EverythingStatus(EverythingAvailability.NotRunning, null).Describe(),
+        EverythingSearchOutcome.IndexNotLoaded =>
+            new EverythingStatus(EverythingAvailability.IndexNotLoaded, null).Describe(),
+        EverythingSearchOutcome.Failed => "검색에 실패했다 — 다시 시도하세요.",
+        _ => "알 수 없는 상태다.",
+    };
 
     private async Task TrackSearchProgressAsync(FolderSearchStats stats, CancellationToken token)
     {

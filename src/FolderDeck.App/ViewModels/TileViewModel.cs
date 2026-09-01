@@ -36,14 +36,17 @@ public sealed partial class TileViewModel : ObservableObject
 
     public bool IsPinned => Spec.Kind == TileKind.Pinned;
 
-    /// <summary>순환 칸의 번호. 상시 칸은 null.</summary>
+    /// <summary>전역 검색 타일인가(D69-e 6-3).</summary>
+    public bool IsSearch => Spec.Kind == TileKind.Search;
+
+    /// <summary>순환 칸의 번호. 상시 칸·검색 칸은 null.</summary>
     public int? RotationIndex => Spec.RotationIndex;
 
-    /// <summary>칸에 붙는 태그 — "순환2". 상시 칸은 "상시".</summary>
-    public string KindTag => IsRotating ? $"순환{RotationIndex ?? 1}" : "상시";
+    /// <summary>칸에 붙는 태그 — "순환2". 상시 칸은 "상시", 검색 칸은 "검색".</summary>
+    public string KindTag => IsSearch ? "검색" : IsRotating ? $"순환{RotationIndex ?? 1}" : "상시";
 
-    /// <summary>편집 모드 헤더에 쓰는 이름 — 상시는 폴더 이름, 순환은 번호 태그.</summary>
-    public string EditLabel => IsRotating
+    /// <summary>편집 모드 헤더에 쓰는 이름 — 상시는 폴더 이름, 순환·검색은 태그만.</summary>
+    public string EditLabel => IsRotating || IsSearch
         ? KindTag
         : $"{KindTag} · {(string.IsNullOrEmpty(Panel.AnchorName) ? "(폴더 없음)" : Panel.AnchorName)}";
 
@@ -88,8 +91,14 @@ public sealed partial class TileViewModel : ObservableObject
     private void SyncPanel()
     {
         Panel.IsRotating = IsRotating;
-        Panel.EmptyTitle = IsRotating
-            ? $"{KindTag} — 폴더를 지정하세요"
-            : "폴더를 지정하세요";
+
+        // 검색 타일에는 EmptyTitle 을 세우지 않는다(D69-e 6-3) — IsEmpty 가 늘 false 라 뜰 일이
+        // 없는 문구다.
+        if (!IsSearch)
+        {
+            Panel.EmptyTitle = IsRotating
+                ? $"{KindTag} — 폴더를 지정하세요"
+                : "폴더를 지정하세요";
+        }
     }
 }

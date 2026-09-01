@@ -25,16 +25,19 @@
     <SolidColorBrush x:Key="Brush.TextPrimary" Color="#1F1F1F" />
     <SolidColorBrush x:Key="Brush.TextSecondary" Color="#767676" />
 
-    <!-- ── 의미색: 색은 뜻 하나씩 (§3.2). 호박 = 상시, 보라 = 순환.
-             테두리 실선/점선으로 색 없이도 구분되게 하는 원칙은 그대로 유지한다. ── -->
+    <!-- ── 의미색: 색은 뜻 하나씩 (§3.2). 호박 = 상시, 보라 = 순환, 청록 = 검색(D69-e).
+             테두리 실선/점선으로 색 없이도 구분되게 하는 원칙은 그대로 유지한다 — 검색은
+             이름표 칩의 글리프(🔍)가 그 역할을 한다(색만으로 가르지 않는다). ── -->
     <SolidColorBrush x:Key="Brush.Pinned" Color="#FFB300" />
     <SolidColorBrush x:Key="Brush.Rotating" Color="#7E57C2" />
+    <SolidColorBrush x:Key="Brush.Search" Color="#00897B" />
 
     <!-- 칩 배경 — 위 의미색의 옅은 짝.
              RotatingSurface 는 아래 RowActive 와 값이 같지만 의도된 별개 키다 — 뜻이
              둘이라(타일 면 / 행 활성) 다크에서 갈릴 수 있다. 합치지 말 것. -->
     <SolidColorBrush x:Key="Brush.PinnedSurface" Color="#FFF6E0" />
     <SolidColorBrush x:Key="Brush.RotatingSurface" Color="#EDE7F6" />
+    <SolidColorBrush x:Key="Brush.SearchSurface" Color="#E0F2F1" />
 
     <!-- ── 파일 목록 항목의 종류 (Phase 8-C 1) ──
              폴더와 파일을 가르는 색이다. WPF 는 컬러 폰트를 그리지 않아 목록 글자 크기에서

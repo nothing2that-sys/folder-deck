@@ -259,6 +259,12 @@
                             <Setter Property="Stroke" Value="{StaticResource Brush.Rotating}" />
                             <Setter Property="StrokeDashArray" Value="4 2.5" />
                         </DataTrigger>
+                        <!-- 전역 검색 타일(D69-e) — 세 번째 색이자 세 번째 테두리 모양이다
+                             (촘촘한 점선으로 순환 칸의 점선과도 갈린다). -->
+                        <DataTrigger Binding="{Binding IsSearchTile}" Value="True">
+                            <Setter Property="Stroke" Value="{StaticResource Brush.Search}" />
+                            <Setter Property="StrokeDashArray" Value="1 2" />
+                        </DataTrigger>
                         <!-- 셸에서 끌어온 것이 이 타일 위에 있다 (§4.9). 폴더 행·대상함과 같은
                              파랑이라 "여기에 놓인다"가 같은 색으로 읽힌다. 상시/순환 강조보다
                              뒤에 둬서 이긴다 — 드래그 중에는 이쪽이 답이다. -->
@@ -562,9 +568,12 @@
                             Command="{Binding CloseSearchCommand}"
                             AutomationProperties.Name="검색 닫기"
                             ToolTip="검색 닫기" Content="✕" />
+                    <!-- 전역 검색 타일은 이 토글이 뜻이 없다 — Everything 이 이미 전체를
+                         본다(D69-e 6-2). -->
                     <CheckBox DockPanel.Dock="Right" Content="하위 포함" VerticalAlignment="Center"
                               Margin="8,0,4,0" FontSize="11"
                               IsChecked="{Binding IncludeSubfolders}"
+                              Visibility="{Binding IsSearchTile, Converter={StaticResource InverseBoolToVisibility}}"
                               ToolTip="켜면 이 폴더 아래 트리를 재귀로 검색한다" />
                     <TextBox x:Name="SearchBox"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
@@ -608,6 +617,15 @@
                            HorizontalAlignment="Center" VerticalAlignment="Center"
                            Visibility="{Binding ShowNoResults, Converter={StaticResource BoolToVisibility}}" />
 
+                <!-- 전역 검색이 정상이 아닐 때의 안내(D69-e 결정 7) — 검색하지 않고 이유를
+                     적는다. EverythingStatus.Describe() 와 같은 말이라 설정 창과 어긋나지
+                     않는다. -->
+                <TextBlock Text="{Binding EverythingStatusText}" TextWrapping="Wrap"
+                           Foreground="{StaticResource Brush.TextSecondary}"
+                           TextAlignment="Center" Margin="20,0"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Visibility="{Binding HasEverythingStatusText, Converter={StaticResource BoolToVisibility}}" />
+
                 <!-- ── 파일 목록 · 가상화 켬 (§8 — 로그 수천 개 폴더에서 UI 멈춤 방지) ──
                      View 는 Style 로만 정한다(로컬 값을 주면 검색 시 열 교체 트리거가 이기지 못한다). -->
                 <ListView x:Name="DetailsList" ItemsSource="{Binding DisplayItems}"
@@ -629,11 +647,12 @@
                                 <DataTrigger Binding="{Binding IsDetailsView}" Value="True">
                                     <Setter Property="Visibility" Value="Visible" />
                                 </DataTrigger>
-                                <!-- 재귀 검색 중에는 "위치" 열이 붙은 뷰로 갈아탄다. -->
+                                <!-- 재귀 검색·전역 검색 중에는 "위치" 열이 붙은 뷰로 갈아탄다
+                                     (D69-e — NeedsLocationColumn 이 둘을 함께 가른다). -->
                                 <MultiDataTrigger>
                                     <MultiDataTrigger.Conditions>
                                         <Condition Binding="{Binding IsDetailsView}" Value="True" />
-                                        <Condition Binding="{Binding IsRecursiveSearch}" Value="True" />
+                                        <Condition Binding="{Binding NeedsLocationColumn}" Value="True" />
                                     </MultiDataTrigger.Conditions>
                                     <Setter Property="View" Value="{StaticResource SearchGridView}" />
                                 </MultiDataTrigger>
