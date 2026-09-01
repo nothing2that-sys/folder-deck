@@ -4,31 +4,35 @@ using FolderDeck.App.ViewModels;
 
 namespace FolderDeck.App.Views;
 
-/// <summary>설정 창 — 지금은 「아이콘」 탭 하나(D59).</summary>
+/// <summary>설정 창 — 「아이콘」·「검색」 두 탭(D59 · D65 · D69-d).</summary>
 public partial class IconSettingsDialog : Window
 {
-    public IconSettingsDialog(IReadOnlyDictionary<string, string> current)
+    public IconSettingsDialog(SettingsEditRequest request)
     {
         InitializeComponent();
-        DataContext = new IconSettingsViewModel(current);
-        EverythingTabContent.DataContext = new EverythingSettingsViewModel(EverythingProbe.Detect());
+        DataContext = new IconSettingsViewModel(request.ExtensionGlyphs, request.ShowShellIcons);
+        EverythingTabContent.DataContext =
+            new EverythingSettingsViewModel(request.EverythingStatus, request.EverythingMaxResults);
     }
 
-    public IReadOnlyDictionary<string, string>? Result { get; private set; }
+    public SettingsEditResult? Result { get; private set; }
 
     private void OnAccept(object sender, RoutedEventArgs e)
     {
-        Result = ((IconSettingsViewModel)DataContext!).ToDictionary();
+        var iconVm = (IconSettingsViewModel)DataContext!;
+        var everythingVm = (EverythingSettingsViewModel)EverythingTabContent.DataContext!;
+
+        Result = new SettingsEditResult(iconVm.ToDictionary(), iconVm.ShowShellIcons, everythingVm.EverythingMaxResults);
         DialogResult = true;
     }
 }
 
 /// <inheritdoc/>
-public sealed class IconSettingsEditor : IIconSettingsEditor
+public sealed class IconSettingsEditor : ISettingsEditor
 {
-    public IReadOnlyDictionary<string, string>? Edit(IReadOnlyDictionary<string, string> current)
+    public SettingsEditResult? Edit(SettingsEditRequest request)
     {
-        var dialog = new IconSettingsDialog(current)
+        var dialog = new IconSettingsDialog(request)
         {
             Owner = Application.Current?.MainWindow is { IsLoaded: true } owner ? owner : null,
         };

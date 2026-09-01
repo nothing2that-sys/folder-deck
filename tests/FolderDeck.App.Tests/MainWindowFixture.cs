@@ -220,14 +220,14 @@ internal sealed class MainWindowFixture : IDisposable
         Prompt = new FakeUserPrompt();
         MacroEditor = new FakeMacroEditor();
         FolderEditor = new FakeFolderEditor();
-        IconSettingsEditor = new FakeIconSettingsEditor();
+        SettingsEditor = new FakeSettingsEditor();
         Engine = new FileOperationEngine(RecycleBin);
         SelfLauncher = new FakeSelfLauncher();
         Settings = settings;
 
         ViewModel = new MainViewModel(
             Workspace, Store, new FolderEnumerator(), Shell, Clipboard, Engine, Prompt, MacroEditor,
-            FolderEditor, SelfLauncher, settings, settingsWritable, IconSettingsEditor);
+            FolderEditor, SelfLauncher, settings, settingsWritable, SettingsEditor);
     }
 
     /// <summary>이 픽스처가 뷰모델에 넘긴 전역 설정. 안 넘겼으면 null 이다.</summary>
@@ -260,7 +260,7 @@ internal sealed class MainWindowFixture : IDisposable
 
     public FakeFolderEditor FolderEditor { get; }
 
-    public FakeIconSettingsEditor IconSettingsEditor { get; }
+    public FakeSettingsEditor SettingsEditor { get; }
 
     public FileOperationEngine Engine { get; }
 

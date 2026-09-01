@@ -94,18 +94,18 @@ internal sealed class FakeFolderEditor : IFolderEditor
     }
 }
 
-/// <summary>설정 창 대신 답만 돌려준다 (D59).</summary>
-internal sealed class FakeIconSettingsEditor : IIconSettingsEditor
+/// <summary>설정 창 대신 답만 돌려준다 (D59 · D69-d 가 이름·계약을 넓힘).</summary>
+internal sealed class FakeSettingsEditor : ISettingsEditor
 {
     /// <summary>창이 돌려줄 값. <b>null 이면 사용자가 취소한 것</b> — 기본은 취소다.</summary>
-    public IReadOnlyDictionary<string, string>? Answer { get; set; }
+    public SettingsEditResult? Answer { get; set; }
 
-    /// <summary>창이 뜬 횟수와 그때 미리 채워져 있던 값.</summary>
-    public List<IReadOnlyDictionary<string, string>> Opened { get; } = [];
+    /// <summary>창이 뜬 횟수와 그때 넘어온 요청.</summary>
+    public List<SettingsEditRequest> Opened { get; } = [];
 
-    public IReadOnlyDictionary<string, string>? Edit(IReadOnlyDictionary<string, string> current)
+    public SettingsEditResult? Edit(SettingsEditRequest request)
     {
-        Opened.Add(current);
+        Opened.Add(request);
         return Answer;
     }
 }

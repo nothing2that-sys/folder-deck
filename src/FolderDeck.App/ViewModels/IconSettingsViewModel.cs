@@ -23,13 +23,19 @@ public sealed partial class IconMappingRowViewModel : ObservableObject
 /// </summary>
 public sealed partial class IconSettingsViewModel : ObservableObject
 {
-    public IconSettingsViewModel(IReadOnlyDictionary<string, string> current)
+    public IconSettingsViewModel(IReadOnlyDictionary<string, string> current, bool showShellIcons)
     {
+        ShowShellIcons = showShellIcons;
+
         foreach (var pair in current.OrderBy(kv => kv.Key, StringComparer.Ordinal))
         {
             Rows.Add(new IconMappingRowViewModel { Extension = pair.Key, Glyph = pair.Value });
         }
     }
+
+    /// <summary>파일 목록에 셸 아이콘을 쓸지(§3.2 ② 단 · D69-d). 꺼지면 ③ 단 글리프만 쓴다.</summary>
+    [ObservableProperty]
+    private bool showShellIcons;
 
     public ObservableCollection<IconMappingRowViewModel> Rows { get; } = [];
 

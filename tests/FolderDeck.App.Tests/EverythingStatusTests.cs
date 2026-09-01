@@ -44,4 +44,40 @@ public sealed class EverythingStatusTests
 
         Assert.Equal(3, new[] { missing, notRunning, running }.Distinct().Count());
     }
+
+    // ── D69-d — 판이 낡음 · 색인 미적재 ──────────────────────────────────────
+
+    [Fact]
+    public void VersionTooOldMessageIncludesTheReadVersion()
+    {
+        var status = new EverythingStatus(EverythingAvailability.VersionTooOld, "1.4.0.1000");
+
+        Assert.Contains("1.4.0.1000", status.Describe());
+    }
+
+    [Fact]
+    public void IndexNotLoadedHasADifferentMessageThanNotRunning()
+    {
+        var indexNotLoaded = new EverythingStatus(EverythingAvailability.IndexNotLoaded, null).Describe();
+        var notRunning = new EverythingStatus(EverythingAvailability.NotRunning, null).Describe();
+
+        Assert.NotEqual(notRunning, indexNotLoaded);
+    }
+
+    /// <summary>다섯 갈래가 서로 다른 문구인지 — 하나로 뭉개지지 않았는지 확인한다(D69-d).</summary>
+    [Fact]
+    public void TheFiveAvailabilitiesProduceDistinctNonEmptyMessages()
+    {
+        var messages = new[]
+        {
+            new EverythingStatus(EverythingAvailability.DllMissing, null).Describe(),
+            new EverythingStatus(EverythingAvailability.VersionTooOld, "1.4.0.1000").Describe(),
+            new EverythingStatus(EverythingAvailability.NotRunning, null).Describe(),
+            new EverythingStatus(EverythingAvailability.IndexNotLoaded, null).Describe(),
+            new EverythingStatus(EverythingAvailability.Running, "1.4.1.1024").Describe(),
+        };
+
+        Assert.Equal(5, messages.Distinct().Count());
+        Assert.All(messages, m => Assert.False(string.IsNullOrEmpty(m)));
+    }
 }

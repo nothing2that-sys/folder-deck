@@ -28,7 +28,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     private readonly IUserPrompt _prompt;
     private readonly IMacroEditor _macroEditor;
     private readonly IFolderEditor _folderEditor;
-    private readonly IIconSettingsEditor _iconSettingsEditor;
+    private readonly ISettingsEditor _settingsEditor;
     private readonly ISelfLauncher _selfLauncher;
 
     /// <summary>전역 설정 (§7.2). 워크스페이스가 아니라 <b>앱 전체</b>의 값이 여기 있다.</summary>
@@ -64,7 +64,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         ISelfLauncher selfLauncher,
         AppSettings? settings = null,
         bool settingsWritable = true,
-        IIconSettingsEditor? iconSettingsEditor = null)
+        ISettingsEditor? settingsEditor = null)
     {
         Workspace = workspace;
         _store = store;
@@ -78,7 +78,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         _selfLauncher = selfLauncher;
 
         // 안 넘기면 늘 취소로 답하는 안전한 기본값 — 설정 창을 모르는 기존 시험이 이걸로 선다.
-        _iconSettingsEditor = iconSettingsEditor ?? NullIconSettingsEditor.Instance;
+        _settingsEditor = settingsEditor ?? NullSettingsEditor.Instance;
 
         // 설정을 안 넘기면 기본값 한 벌로 선다 — 그러면 간격이 8 이라 이 회차 전과 같다.
         _settings = settings ?? new AppSettings();
@@ -320,32 +320,40 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     }
 
     /// <summary>설정 파일이 손상돼 덮어쓰지 않기로 한 실행이면 잠근다 — <c>CanChangeSkipLauncher</c> 와 같은 결.</summary>
-    public bool CanOpenIconSettings => _settingsWritable;
+    public bool CanOpenSettings => _settingsWritable;
 
     /// <summary>
-    /// 설정 창을 연다(D59). 지금은 「아이콘」탭 하나 — 확장자→글리프 매핑을 편집한다.
-    /// 취소면 아무것도 안 바뀐다. 저장은 워크스페이스가 아니라 앱 전역 설정이라
-    /// <see cref="AppSettings"/> 쪽 디바운스 저장을 쓴다(§7.2 · SkipLauncher 와 같은 통로).
+    /// 설정 창을 연다(D59 · D65 · D69-d 로 「아이콘」 전용에서 확장). 취소면 아무것도 안 바뀐다.
+    /// 저장은 워크스페이스가 아니라 앱 전역 설정이라 <see cref="AppSettings"/> 쪽 디바운스
+    /// 저장을 쓴다(§7.2 · SkipLauncher 와 같은 통로).
     /// </summary>
     /// <remarks>
     /// 이미 떠 있는 타일의 패널은 새 매핑을 스스로 알아채지 못한다 — <see cref="FolderPanelViewModel.
     /// ExtensionGlyphs"/> 는 평범한 get/set 이라 통지를 내지 않는다. 그래서 여기서 다시 물려주고
     /// <see cref="RefreshAllAsync"/> 로 목록을 다시 읽어(F5 와 같은 길) 새 글리프가 바로 보이게 한다.
+    /// <see cref="EverythingProbe.Detect"/> 를 여기서 부른다(D69-d 6-1) — 대화상자가 직접 부르면
+    /// 창을 띄우지 않고는 상태 문구를 시험할 수 없다.
     /// </remarks>
     [RelayCommand]
-    public async Task OpenIconSettingsAsync()
+    public async Task OpenSettingsAsync()
     {
-        if (_iconSettingsEditor.Edit(_settings.ExtensionGlyphs) is not { } updated)
+        var request = new SettingsEditRequest(
+            _settings.ExtensionGlyphs, _settings.ShowShellIcons, _settings.EverythingMaxResults,
+            EverythingProbe.Detect());
+
+        if (_settingsEditor.Edit(request) is not { } updated)
         {
             return;
         }
 
-        _settings.ExtensionGlyphs = new Dictionary<string, string>(updated);
+        _settings.ExtensionGlyphs = new Dictionary<string, string>(updated.ExtensionGlyphs);
+        _settings.ShowShellIcons = updated.ShowShellIcons;
+        _settings.EverythingMaxResults = updated.EverythingMaxResults;
 
         foreach (var panel in Panels)
         {
             panel.ExtensionGlyphs = _settings.ExtensionGlyphs;
-            panel.ShellIconService = _shellIconService;
+            panel.ShellIconService = _settings.ShowShellIcons ? _shellIconService : null;
         }
 
         if (_settingsWritable)
@@ -2822,12 +2830,13 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             _enumerator, _shell, _clipboard, spec.Kind == TileKind.Rotating, ReportError, ReportRejection)
         {
             // 확장자→글리프 매핑(D59). 패널은 설정 저장소를 모른다 — 여기서 스냅샷을 물려주고,
-            // 설정 창에서 바뀌면 OpenIconSettingsAsync 가 다시 물려준다.
+            // 설정 창에서 바뀌면 OpenSettingsAsync 가 다시 물려준다.
             ExtensionGlyphs = _settings.ExtensionGlyphs,
 
-            // 셸 아이콘 취득 계층(Phase 11 · D68-c) — 세 패널이 같은 인스턴스를 물려받아
-            // 캐시를 함께 쓴다.
-            ShellIconService = _shellIconService,
+            // 셸 아이콘 취득 계층(Phase 11 · D68-c). 토글이 꺼져 있으면 null 을 물려준다
+            // (D69-d 결정 3) — FileItemViewModel 이 ② 단을 건너뛰고 ③ 단 글리프로 대신한다.
+            // 세 패널이 같은 인스턴스를 물려받아 캐시를 함께 쓴다.
+            ShellIconService = _settings.ShowShellIcons ? _shellIconService : null,
 
             // 우클릭 "휴지통으로 삭제"가 닿을 통로. 패널은 엔진을 모른다 (§4.4).
             TrashSelectionCommand = TrashSelectionCommand,

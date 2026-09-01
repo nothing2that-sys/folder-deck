@@ -16,9 +16,12 @@
         Foreground="{StaticResource Brush.TextPrimary}">
 
     <!--
-        D59 — 설정 창. 지금은 탭 하나(「아이콘」)뿐이다. skipLauncher(런처 하단 체크박스)와
-        타일 간격 고르개(배치 편집 툴바)는 이번 회차에 옮기지 않는다(결정 2) — 그래서 둘 다
-        여기 없다.
+        D59 — 설정 창. D65 가 「검색」 탭을 더해 지금은 탭이 둘(「아이콘」·「검색」)이고,
+        D69-d 가 「아이콘」 탭에 셸 아이콘 토글을, 「검색」 탭에 결과 상한 고르개를 더했다 —
+        클래스 이름(IconSettingsDialog)은 더는 「아이콘 전용」이라는 뜻을 갖지 않지만, 이름을
+        바꾸면 XAML·x:Class·partial 이 함께 움직여 diff 가 이유 없이 커지므로 그대로 둔다
+        (D69-d 결정 3). skipLauncher(런처 하단 체크박스)와 타일 간격 고르개(배치 편집 툴바)는
+        옮기지 않는다(결정 2) — 그래서 둘 다 여기 없다.
 
         FontFamily 를 여기서 새로 지정하지 않는다 — WPF 기본 글꼴이 이미 Segoe UI 라 지정한
         자리 수를 늘리지 않고도(결정 8 검산표) 나머지 창과 같은 모양이 나온다.
@@ -41,6 +44,11 @@
                     <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,8"
                                FontSize="11" Foreground="{StaticResource Brush.TextSecondary}"
                                Text="확장자에 글리프 한 글자를 매핑한다. 비워 두면 지금과 같다 — 매핑에 없는 확장자는 그대로 📄 다. 폴더는 이 매핑과 무관하게 늘 📁 다." />
+
+                    <CheckBox DockPanel.Dock="Top" Margin="0,0,0,8"
+                              Content="파일 형식별 시스템 아이콘 보이기 — 끄면 📁/📄 글자만 쓴다"
+                              IsChecked="{Binding ShowShellIcons}"
+                              AutomationProperties.Name="셸 아이콘 보이기" />
 
                     <Button DockPanel.Dock="Bottom" Content="＋ 행 추가" Padding="10,4"
                             HorizontalAlignment="Left" Margin="0,8,0,0"
@@ -93,10 +101,21 @@
                 </DockPanel>
             </TabItem>
 
-            <!-- D65 — 검색 타일은 이 회차에서 만들지 않는다(결정 8). 상태 한 줄뿐이다. -->
+            <!-- D65 — 검색 타일은 이 회차에서 만들지 않는다(결정 8). D69-d 가 상태 문구를
+                 다섯 갈래로 늘리고 결과 상한 고르개를 더했다(§4.12). -->
             <TabItem Header="검색">
                 <StackPanel x:Name="EverythingTabContent" Margin="10">
-                    <TextBlock TextWrapping="Wrap" Text="{Binding StatusText}" />
+                    <TextBlock TextWrapping="Wrap" Text="{Binding StatusText}" Margin="0,0,0,12" />
+
+                    <TextBlock Text="검색 결과 상한" FontSize="11"
+                               Foreground="{StaticResource Brush.TextSecondary}" Margin="0,0,0,4" />
+                    <ComboBox ItemsSource="{Binding MaxResultsChoices}"
+                              SelectedItem="{Binding EverythingMaxResults}"
+                              HorizontalAlignment="Left" Width="120"
+                              AutomationProperties.Name="검색 결과 상한" />
+                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" FontSize="11"
+                               Foreground="{StaticResource Brush.TextSecondary}"
+                               Text="한 번의 질의가 돌려줄 결과 개수의 최대값이다. 크게 잡을수록 늦게 뜬다." />
                 </StackPanel>
             </TabItem>
         </TabControl>

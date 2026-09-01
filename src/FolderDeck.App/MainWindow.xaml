@@ -75,11 +75,11 @@
                      관리 열기」와 같은 자리(오른쪽 끝)에 텍스트 버튼으로 둔다 — 나머지 둘을
                      옮기지 않으므로(결정 2) 셋 중 안쪽(가운데에 더 가까운 쪽)에 붙는다. -->
                 <Button DockPanel.Dock="Right" Padding="12,4" Margin="6,0,0,0"
-                        Command="{Binding OpenIconSettingsCommand}"
-                        IsEnabled="{Binding CanOpenIconSettings}"
+                        Command="{Binding OpenSettingsCommand}"
+                        IsEnabled="{Binding CanOpenSettings}"
                         Content="설정"
                         AutomationProperties.Name="설정"
-                        ToolTip="확장자별 글리프 매핑을 편집한다." />
+                        ToolTip="확장자별 글리프 매핑·셸 아이콘·검색 결과 상한을 편집한다." />
 
                 <!-- 남는 가운데. 두 내용이 번갈아 들어서므로 Grid 로 겹쳐 둔다 —
                      DockPanel 은 마지막 자식 하나만 남는 폭을 먹기 때문이다. -->

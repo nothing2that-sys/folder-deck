@@ -1,3 +1,4 @@
+using FolderDeck.App.Services;
 using FolderDeck.Core.Models;
 
 namespace FolderDeck.App.Tests;
@@ -86,8 +87,9 @@ public sealed class ExtensionGlyphTests
         var code = f.ViewModel.Panels[0];
         Assert.Equal("\U0001F4C4", code.Items.Single(i => i.Name == "Main.cs").Glyph);
 
-        f.IconSettingsEditor.Answer = new Dictionary<string, string> { [".cs"] = "🧩" };
-        await f.ViewModel.OpenIconSettingsCommand.ExecuteAsync(null);
+        f.SettingsEditor.Answer = new SettingsEditResult(
+            new Dictionary<string, string> { [".cs"] = "🧩" }, ShowShellIcons: true, EverythingMaxResults: 1000);
+        await f.ViewModel.OpenSettingsCommand.ExecuteAsync(null);
 
         Assert.Equal("🧩", code.Items.Single(i => i.Name == "Main.cs").Glyph);
     }
@@ -99,10 +101,10 @@ public sealed class ExtensionGlyphTests
         using var f = new MainWindowFixture();
         await f.ViewModel.InitializeAsync();
 
-        await f.ViewModel.OpenIconSettingsCommand.ExecuteAsync(null);
+        await f.ViewModel.OpenSettingsCommand.ExecuteAsync(null);
 
         var code = f.ViewModel.Panels[0];
         Assert.Equal("\U0001F4C4", code.Items.Single(i => i.Name == "Main.cs").Glyph);
-        Assert.Single(f.IconSettingsEditor.Opened);
+        Assert.Single(f.SettingsEditor.Opened);
     }
 }

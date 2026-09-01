@@ -9,7 +9,7 @@ public sealed class IconSettingsViewModelTests
     [Fact]
     public void StartsWithOneRowPerExistingMapping()
     {
-        var vm = new IconSettingsViewModel(new Dictionary<string, string> { [".pdf"] = "📕" });
+        var vm = new IconSettingsViewModel(new Dictionary<string, string> { [".pdf"] = "📕" }, showShellIcons: true);
 
         var row = Assert.Single(vm.Rows);
         Assert.Equal(".pdf", row.Extension);
@@ -19,7 +19,7 @@ public sealed class IconSettingsViewModelTests
     [Fact]
     public void AddRowAddsAnEmptyRow()
     {
-        var vm = new IconSettingsViewModel(new Dictionary<string, string>());
+        var vm = new IconSettingsViewModel(new Dictionary<string, string>(), showShellIcons: true);
 
         vm.AddRow();
 
@@ -31,7 +31,7 @@ public sealed class IconSettingsViewModelTests
     [Fact]
     public void RemoveRowTakesItOutOfTheList()
     {
-        var vm = new IconSettingsViewModel(new Dictionary<string, string> { [".pdf"] = "📕" });
+        var vm = new IconSettingsViewModel(new Dictionary<string, string> { [".pdf"] = "📕" }, showShellIcons: true);
         var row = vm.Rows[0];
 
         vm.RemoveRow(row);
@@ -43,7 +43,7 @@ public sealed class IconSettingsViewModelTests
     [Fact]
     public void ToDictionaryNormalizesKeysAndSkipsBlankRows()
     {
-        var vm = new IconSettingsViewModel(new Dictionary<string, string>());
+        var vm = new IconSettingsViewModel(new Dictionary<string, string>(), showShellIcons: true);
         vm.Rows.Add(new IconMappingRowViewModel { Extension = "PDF", Glyph = "📕" });
         vm.Rows.Add(new IconMappingRowViewModel { Extension = "  ", Glyph = "🗑" });
         vm.Rows.Add(new IconMappingRowViewModel { Extension = ".zip", Glyph = "  " });
@@ -59,7 +59,7 @@ public sealed class IconSettingsViewModelTests
     [Fact]
     public void ToDictionaryLetsTheLaterRowWinOnDuplicateKeys()
     {
-        var vm = new IconSettingsViewModel(new Dictionary<string, string>());
+        var vm = new IconSettingsViewModel(new Dictionary<string, string>(), showShellIcons: true);
         vm.Rows.Add(new IconMappingRowViewModel { Extension = ".pdf", Glyph = "🥇" });
         vm.Rows.Add(new IconMappingRowViewModel { Extension = ".PDF", Glyph = "🥈" });
 
