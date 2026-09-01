@@ -10,6 +10,8 @@ using FolderDeck.App.Interop;
 using FolderDeck.App.Services;
 using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Models;
+using FolderDeck.Core.Operations;
+using FolderDeck.Core.Paths;
 using IoDirectory = System.IO.Directory;
 using IoPath = System.IO.Path;
 
@@ -457,6 +459,21 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// </para>
     /// </remarks>
     public Func<FolderPanelViewModel, FileItemViewModel, bool>? SetAnchorFolder { get; set; }
+
+    /// <summary>
+    /// 「지금 보고 있는 폴더」 메뉴의 "이 폴더를 앵커로 지정"이 닿을 통로 (§4.6 · D75).
+    /// <see cref="SetAnchorFolder"/> 와 같은 결이지만 인자가 항목이 아니라 <b>경로 문자열</b>이다
+    /// — 지금 보고 있는 폴더는 목록의 행이 아니라 그 목록의 컨테이너라
+    /// <see cref="FileItemViewModel"/> 로 표현되지 않는다(B-0 §C.2).
+    /// </summary>
+    /// <remarks>반환값은 <see cref="SetAnchorFolder"/> 와 같다 — 앵커가 실제로 바뀌었는가.</remarks>
+    public Func<FolderPanelViewModel, string, bool>? SetAnchorFolderToPath { get; set; }
+
+    /// <summary>
+    /// 「지금 보고 있는 폴더」 메뉴의 "새 폴더로 등록"이 닿을 통로 (§4.6 · D75).
+    /// <see cref="RegisterFolderCommand"/> 와 같은 결이지만 인자가 항목이 아니라 경로 문자열이다.
+    /// </summary>
+    public Action<string>? RegisterFolderPath { get; set; }
 
     /// <summary>
     /// 우클릭 메뉴 「이름 바꾸기」와 <c>F2</c> 가 닿을 통로 (§4.6 309행 · A군 ②). 패널은 확인창도
@@ -1121,6 +1138,112 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         }
 
         await GoToAnchorAsync().ConfigureAwait(true);
+    }
+
+    // ── 「지금 보고 있는 폴더」 메뉴 (§4.6 · D75 · Phase 13) ────────────────────
+    //
+    // 대상이 목록의 행이 아니라 그 목록의 컨테이너(CurrentPath 자신)라 위 항목 우클릭
+    // 커맨드들과는 별도 진입점이다. 이 회차(D75-b)는 이 계층만 연다 — 메뉴 XAML 배선은
+    // D75-c 다(B-0 §C.2 · §D).
+
+    /// <summary>
+    /// 「새 폴더 만들기」모달에 채울 기본 이름 — §4.3 의 이름 규칙을 그대로 태운다(B-0 §D.3).
+    /// 같은 이름이 있으면 "새 폴더 (2)".
+    /// </summary>
+    /// <remarks>
+    /// <see cref="FileOperationEngine.PreviewUniqueName"/> 은 <b>이미 겹친다는 것을 아는 자리</b>
+    /// 에서만 쓴다 — n=2 부터 세므로 원래 이름 자체가 비어 있는지는 스스로 보지 않는다(§4.3
+    /// 「둘 다 두기」는 항상 겹친 뒤에만 불린다). 그래서 겹치는지부터 여기서 직접 본다.
+    /// <para>모달을 띄우는 것은 이 회차가 아니다 — 기본값을 계산하는 자리만 연다.</para>
+    /// </remarks>
+    public static string SuggestNewFolderName(string parentPath)
+    {
+        const string baseName = "새 폴더";
+        var candidate = IoPath.Combine(parentPath, baseName);
+
+        return IoDirectory.Exists(candidate) || System.IO.File.Exists(candidate)
+            ? IoPath.GetFileName(FileOperationEngine.PreviewUniqueName(candidate))
+            : baseName;
+    }
+
+    /// <summary>
+    /// 「지금 보고 있는 폴더」 메뉴의 "새 폴더 만들기" (§4.6 · D75). 실제 생성은
+    /// <see cref="FolderCreator"/>(Core) 가 한다 — 저장되는 값이 늘지 않으므로
+    /// <see cref="MainViewModel"/> 통로를 거치지 않는다(B-0 §D).
+    /// </summary>
+    /// <remarks>
+    /// 검색 타일에는 만들 자리가 없다 — <see cref="IsSearchTile"/> 을 <b>직접</b> 본다.
+    /// <c>CurrentPath == null</c> 부작용에 기대지 않는다(D75-b-3) — 그 부작용은 이름이 의도를
+    /// 말하지 않는다.
+    /// </remarks>
+    [RelayCommand]
+    public void CreateNewFolder(string? name)
+    {
+        if (IsSearchTile)
+        {
+            Reject("검색 타일에는 만들 자리가 없다");
+            return;
+        }
+
+        if (CurrentPath is not { } parent)
+        {
+            return;
+        }
+
+        if (FolderCreator.Create(parent, name) is { } reason)
+        {
+            Reject($"폴더를 만들지 못했다 — {reason}");
+        }
+
+        // 만든 폴더가 목록에 나타나는 것은 파일 시스템 감시자가 한다(§8) — 여기서 다시 읽지 않는다.
+    }
+
+    /// <summary>
+    /// 「지금 보고 있는 폴더」 메뉴의 "이 폴더를 앵커로 지정" (§4.6 · D75). 대상은
+    /// <see cref="CurrentPath"/> 자신이다 — 항목 우클릭의 <see cref="SetAnchorToItemAsync"/> 와
+    /// 다른 진입점이다.
+    /// </summary>
+    /// <remarks>검색 타일 가드는 <see cref="CreateNewFolder"/> 와 같은 이유·같은 판정이다.</remarks>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    public async Task SetAnchorToCurrentAsync()
+    {
+        if (IsSearchTile)
+        {
+            Reject("검색 타일에는 앵커로 지정할 폴더가 없다");
+            return;
+        }
+
+        if (CurrentPath is not { } path || SetAnchorFolderToPath is null)
+        {
+            return;
+        }
+
+        if (!SetAnchorFolderToPath(this, path))
+        {
+            return;
+        }
+
+        await GoToAnchorAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 「지금 보고 있는 폴더」 메뉴의 "새 폴더로 등록" (§4.6 · D75). 대상은
+    /// <see cref="CurrentPath"/> 자신이다 — 항목 우클릭의 <see cref="RegisterFolderCommand"/> 와
+    /// 다른 진입점이다.
+    /// </summary>
+    [RelayCommand]
+    public void RegisterCurrentFolder()
+    {
+        if (IsSearchTile)
+        {
+            Reject("검색 타일에는 등록할 폴더가 없다");
+            return;
+        }
+
+        if (CurrentPath is { } path)
+        {
+            RegisterFolderPath?.Invoke(path);
+        }
     }
 
     /// <summary>

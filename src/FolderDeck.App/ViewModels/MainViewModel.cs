@@ -2424,15 +2424,26 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             return;
         }
 
-        if (!TryRegisterFolderPath(item.FullPath))
+        RegisterFolderAtPath(item.FullPath);
+    }
+
+    /// <summary>
+    /// 경로 하나를 등록한다 (§4.6 · D75) — 위 <see cref="RegisterFolder"/>(항목 우클릭)와
+    /// 「지금 보고 있는 폴더」 메뉴의 "새 폴더로 등록"이 공유하는 실제 동작이다.
+    /// <see cref="RegisterFolder"/> 는 이 메서드 위에 얹힌 얇은 어댑터로 남았다(D75-b-4) —
+    /// 동작이 한 줄도 바뀌지 않았다.
+    /// </summary>
+    private void RegisterFolderAtPath(string path)
+    {
+        if (!TryRegisterFolderPath(path))
         {
-            Warn($"이미 등록된 폴더다: {FolderPathRules.Normalize(item.FullPath)}", transient: true);
+            Warn($"이미 등록된 폴더다: {FolderPathRules.Normalize(path)}", transient: true);
             return;
         }
 
         RefreshRotationChoices();
         Save();
-        Inform($"등록했다: {FolderPathRules.LeafName(item.FullPath)}");
+        Inform($"등록했다: {FolderPathRules.LeafName(path)}");
     }
 
     /// <summary>
@@ -2644,9 +2655,19 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     /// (§4.11-1 D3 과 같은 규칙).
     /// </para>
     /// </remarks>
-    private bool SetAnchorFromItem(FolderPanelViewModel panel, FileItemViewModel item)
+    private bool SetAnchorFromItem(FolderPanelViewModel panel, FileItemViewModel item) =>
+        item.IsDirectory && SetAnchorFromPath(panel, item.FullPath);
+
+    /// <summary>
+    /// 경로 하나를 그 패널의 앵커로 지정한다 (§4.6 · D75). 반환값은 <b>앵커가 실제로
+    /// 바뀌었는가</b>다. 위 <see cref="SetAnchorFromItem"/>(항목 우클릭)와 「지금 보고 있는
+    /// 폴더」 메뉴의 "이 폴더를 앵커로 지정"이 공유하는 실제 동작이다.
+    /// <see cref="SetAnchorFromItem"/> 은 이 메서드 위에 얹힌 얇은 어댑터로 남았다(D75-b-4) —
+    /// 동작이 한 줄도 바뀌지 않았다.
+    /// </summary>
+    private bool SetAnchorFromPath(FolderPanelViewModel panel, string path)
     {
-        if (!item.IsDirectory || panel.Entry is not { } entry)
+        if (panel.Entry is not { } entry)
         {
             return false;
         }
@@ -2658,7 +2679,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             return false;
         }
 
-        var normalized = FolderPathRules.Normalize(item.FullPath);
+        var normalized = FolderPathRules.Normalize(path);
 
         // 앵커 위로 올라가 있으면 목록에 앵커 자신이 보인다 — 제자리 지정은 할 일이 없다.
         if (PathsEqual(entry.Path, normalized))
@@ -2922,6 +2943,11 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             // 항목 우클릭 "이 폴더를 앵커로 지정"이 닿을 통로 (§4.6 · D8). 커맨드가 아니라
             // 델리게이트다 — 어느 타일의 앵커인지는 부르는 패널만 안다.
             SetAnchorFolder = SetAnchorFromItem,
+
+            // 「지금 보고 있는 폴더」 메뉴의 "이 폴더를 앵커로 지정"·"새 폴더로 등록"이 닿을
+            // 통로 (§4.6 · D75). 위 둘과 같은 실제 동작 위에 얹힌, 경로만 받는 자리다.
+            SetAnchorFolderToPath = SetAnchorFromPath,
+            RegisterFolderPath = RegisterFolderAtPath,
 
             // 항목 우클릭 「이름 바꾸기」와 F2 가 닿을 통로 (§4.6 309행 · D12~D15). 확인창과
             // folders[] 를 아는 쪽이 여기다 — 패널은 둘 다 모른다.
