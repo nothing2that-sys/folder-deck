@@ -364,7 +364,7 @@ public sealed class ShellDropTests
     public void APrivateFormatDropTakesTheInternalRuleAndStopsThere()
     {
         var data = new DataObject();
-        data.SetData(FolderPanelView.FileDragFormat, new FileDropPayload("C:\\x", []));
+        data.SetData(FolderPanelView.FileDragFormat, DragPayloadCodec.Pack(new FileDropPayload("C:\\x", [])));
 
         Assert.Equal(DropRoute.Internal, DropRouter.Route(data));
     }
@@ -377,7 +377,7 @@ public sealed class ShellDropTests
     public void BothFormatsOnOneDropStillTakeTheInternalRule()
     {
         var data = new DataObject();
-        data.SetData(FolderPanelView.FileDragFormat, new FileDropPayload("C:\\x", []));
+        data.SetData(FolderPanelView.FileDragFormat, DragPayloadCodec.Pack(new FileDropPayload("C:\\x", [])));
         data.SetData(DataFormats.FileDrop, new[] { "C:\\x\\a.txt" });
 
         Assert.Equal(DropRoute.Internal, DropRouter.Route(data));

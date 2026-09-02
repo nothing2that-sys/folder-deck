@@ -43,7 +43,7 @@ public sealed class TileDropTests
     {
         var payload = from.BuildDragPayload()!;
         var data = new DataObject();
-        data.SetData(FolderPanelView.FileDragFormat, payload);
+        data.SetData(FolderPanelView.FileDragFormat, DragPayloadCodec.Pack(payload));
         ShellExport.Attach(data, payload.Items);
         return data;
     }
@@ -403,9 +403,18 @@ public sealed class TileDropTests
             DropRouter.ShellDropCopies(DragDropKeyStates.ControlKey | DragDropKeyStates.ShiftKey));
     }
 
-    /// <summary>사설 포맷이 실린 드롭은 항목을 <b>그대로</b> 낸다 — 변환 계층이 없다.</summary>
+    /// <summary>
+    /// 사설 포맷이 실린 드롭은 항목을 <b>그대로</b> 낸다 — 값이 바뀌지 않는다.
+    /// </summary>
+    /// <remarks>
+    /// 예전 이름은 <c>AnInternalDropCarriesItsItemsWithNoConversion</c> 이었고 <c>Assert.Same</c>
+    /// 으로 <b>참조</b> 동일성까지 지켰다. Phase 14 D77-b 가 사설 포맷에 객체 대신 글자(JSON)를
+    /// 싣게 되면서 그 불변은 실제로 죽었다 — <c>Pack</c>·<c>Unpack</c> 왕복은 구조적으로 항상
+    /// 새 객체를 낸다. 죽은 불변을 지키는 시험을 남기지 않는다 — 이름과 단정을 남은 불변
+    /// (값이 같다)에 맞춰 다시 적는다.
+    /// </remarks>
     [Fact]
-    public void AnInternalDropCarriesItsItemsWithNoConversion()
+    public void AnInternalDropCarriesItsItemsUnchanged()
     {
         var items = new[]
         {
@@ -414,9 +423,11 @@ public sealed class TileDropTests
         };
 
         var data = new DataObject();
-        data.SetData(FolderPanelView.FileDragFormat, new FileDropPayload(@"C:\deck\work", items));
+        data.SetData(
+            FolderPanelView.FileDragFormat,
+            DragPayloadCodec.Pack(new FileDropPayload(@"C:\deck\work", items)));
 
-        Assert.Same(
+        Assert.Equal(
             items, DropRouter.Resolve(data, DragDropKeyStates.None, @"C:\deck\out")!.Value.Items);
     }
 

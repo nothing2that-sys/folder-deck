@@ -445,7 +445,7 @@ public partial class FolderPanelView : UserControl
             }
 
             var data = new DataObject();
-            data.SetData(FileDragFormat, payload);
+            data.SetData(FileDragFormat, DragPayloadCodec.Pack(payload));
 
             // 같은 드래그를 앱 밖에서도 읽을 수 있게 셸 포맷을 더 싣는다 (§4.9 · Stage 2).
             // 시작은 하나이고 갈림은 받는 쪽에서 일어난다 — 앱 안에서는 사설 포맷이 먼저 읽힌다.

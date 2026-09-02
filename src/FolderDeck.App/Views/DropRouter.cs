@@ -164,8 +164,11 @@ public static class DropRouter
         switch (Route(data))
         {
             case DropRoute.Internal:
-                // 앱 안에서 시작한 드래그 — 사설 포맷에 항목이 이미 실려 있어 변환이 없다.
-                return data!.GetData(FolderPanelView.FileDragFormat) is FileDropPayload payload
+                // 앱 안에서 시작한 드래그 — 사설 포맷에는 글자가 실린다(Phase 14 D77-b).
+                // 프로세스 경계를 넘어도 글자는 마샬링되므로 못 풀면(Unpack null) 셸로
+                // 내려가지 않고 거절한다(§4.9) — Route 가 이미 Internal 로 확정했다.
+                return data!.GetData(FolderPanelView.FileDragFormat) is string packed
+                    && DragPayloadCodec.Unpack(packed) is { } payload
                     ? (payload.Items,
                         InternalDropCopies(keys, AllOnSameVolume(payload.Items, destination)))
                     : null;

@@ -34,7 +34,7 @@ public sealed class ShellExportTests
     {
         var payload = Picked();
         var data = new DataObject();
-        data.SetData(FolderPanelView.FileDragFormat, payload);
+        data.SetData(FolderPanelView.FileDragFormat, DragPayloadCodec.Pack(payload));
         ShellExport.Attach(data, payload.Items);
         return data;
     }
