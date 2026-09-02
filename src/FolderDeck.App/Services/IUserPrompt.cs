@@ -39,9 +39,17 @@ public interface IUserPrompt
     /// <see cref="Confirm"/> 로는 안 된다 — 글자를 받아야 한다. <b>여기서 판정하지 않는다</b>:
     /// 빈 이름·금칙 문자·예약 이름·중복은 부르는 쪽이 <c>FolderPathRules</c> 로 보고 상태 바에
     /// 이유를 적는다(D4). 창은 사람이 적은 것을 <b>다듬지 않고</b> 그대로 돌려준다.
+    /// <para>
+    /// 이 창은 「이름 바꾸기」·「새 폴더 만들기」양쪽이 나눠 쓴다(D75-c) — 확인 버튼이 하는
+    /// 일이 호출부마다 다르므로(<b>바꾸기</b> 대 <b>만들기</b>) 문구를 여기서 정하지 않고
+    /// <paramref name="acceptButtonText"/> 로 받는다. <b>기본값을 두지 않는다</b> — 두면 다음
+    /// 호출부가 문구를 안 정하고도 컴파일돼 같은 결함(회수됐다: 「바꾸기」가 새 폴더 만들기에도
+    /// 그대로 뜬 것, D75-e)이 조용히 재발한다.
+    /// </para>
     /// </remarks>
     /// <param name="current">미리 채워 둘 지금 이름.</param>
-    string? AskName(string title, string message, string current);
+    /// <param name="acceptButtonText">확인 버튼에 그릴 문구(예: "바꾸기"·"만들기").</param>
+    string? AskName(string title, string message, string current, string acceptButtonText);
 }
 
 /// <inheritdoc/>
@@ -76,9 +84,9 @@ public sealed class UserPrompt : IUserPrompt
     }
 
     /// <inheritdoc/>
-    public string? AskName(string title, string message, string current)
+    public string? AskName(string title, string message, string current, string acceptButtonText)
     {
-        var dialog = new RenameDialog(title, message, current)
+        var dialog = new RenameDialog(title, message, current, acceptButtonText)
         {
             Owner = Application.Current?.MainWindow is { IsLoaded: true } owner ? owner : null,
         };

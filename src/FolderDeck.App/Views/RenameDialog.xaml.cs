@@ -5,13 +5,14 @@ namespace FolderDeck.App.Views;
 /// <summary>이름 바꾸기 입력 창 (§4.6 309행 · A군 ②).</summary>
 public partial class RenameDialog : Window
 {
-    public RenameDialog(string title, string message, string current)
+    public RenameDialog(string title, string message, string current, string acceptButtonText)
     {
         InitializeComponent();
 
         Title = title;
         MessageText.Text = message;
         NameBox.Text = current;
+        AcceptButton.Content = acceptButtonText;
 
         Loaded += (_, _) =>
         {

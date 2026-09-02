@@ -116,6 +116,26 @@ public sealed class RenameTests
         Assert.Equal("Main.cs", Assert.Single(f.Prompt.NamesAsked));
     }
 
+    /// <summary>
+    /// 모달의 확인 버튼 문구는 그대로 「바꾸기」다(회귀, §4.6 · D75-e) — 새 폴더 만들기가
+    /// 같은 모달을 「만들기」로 재사용하게 되면서, 이름 바꾸기 쪽이 실수로 따라 바뀌지
+    /// 않는지를 본다.
+    /// </summary>
+    [Fact]
+    public async Task AcceptButtonTextIsStillChange()
+    {
+        using var f = new MainWindowFixture();
+        f.Prompt.NameAnswer = null; // 취소해도 뜬 순간에 넘어간 문구만 본다
+        await f.ViewModel.InitializeAsync();
+        await f.ViewModel.ShowFolderAsync(f.Row("작업"));
+        var panel = f.Rotating;
+
+        await panel.RenameItemCommand.ExecuteAsync(
+            panel.DisplayItems.Single(i => i.Name == "Recipe"));
+
+        Assert.Equal("바꾸기", Assert.Single(f.Prompt.AcceptButtonTextsAsked));
+    }
+
     /// <summary>대소문자만 바꾸는 것은 같은 파일이라 "이미 있다"로 막지 않는다.</summary>
     [Fact]
     public async Task ChangingOnlyTheCaseIsAllowed()

@@ -67,9 +67,16 @@ internal sealed class FakeUserPrompt : IUserPrompt
     /// <summary>창이 뜬 횟수와 그때 미리 채워져 있던 이름 — 무엇을 바꾸려 했는지 확인용.</summary>
     public List<string> NamesAsked { get; } = [];
 
-    public string? AskName(string title, string message, string current)
+    /// <summary>
+    /// 창이 뜰 때 확인 버튼에 넘어온 문구(D75-e) — <see cref="NamesAsked"/> 와 같은 순서로
+    /// 쌓인다. 호출부가 「바꾸기」·「만들기」중 무엇을 넘겼는지 확인용.
+    /// </summary>
+    public List<string> AcceptButtonTextsAsked { get; } = [];
+
+    public string? AskName(string title, string message, string current, string acceptButtonText)
     {
         NamesAsked.Add(current);
+        AcceptButtonTextsAsked.Add(acceptButtonText);
         return NameAnswer;
     }
 }

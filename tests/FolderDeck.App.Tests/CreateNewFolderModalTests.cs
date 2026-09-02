@@ -73,4 +73,21 @@ public sealed class CreateNewFolderModalTests
         // 내용은 그대로 — 거절이 파일 시스템을 건드리지 않는다(FolderCreatorTests 와 같은 결).
         Assert.True(File.Exists(Path.Combine(f.WorkPath, "Recipe", "Recipe.cs")));
     }
+
+    // 5
+    /// <summary>모달의 확인 버튼 문구 (§4.6 · D75-e). 「바꾸기」모달을 재사용하므로 호출부가
+    /// 문구를 정해 넘겨야 한다 — 안 넘기면 「바꾸기」가 새 폴더 만들기에도 그대로 뜬다.</summary>
+    [Fact]
+    public async Task AcceptButtonTextIsMakeIt()
+    {
+        using var f = new MainWindowFixture();
+        f.Prompt.NameAnswer = null; // 취소해도 뜬 순간에 넘어간 문구만 본다
+        await f.ViewModel.InitializeAsync();
+        await f.ViewModel.ShowFolderAsync(f.Row("작업"));
+        var panel = f.Rotating;
+
+        panel.CreateNewFolderInteractiveCommand.Execute(null);
+
+        Assert.Equal("만들기", Assert.Single(f.Prompt.AcceptButtonTextsAsked));
+    }
 }

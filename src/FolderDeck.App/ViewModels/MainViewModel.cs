@@ -2749,9 +2749,10 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     /// <summary>
     /// 「새 폴더 만들기」모달을 띄운다 (§4.6 · D75-5 · D75-c). <see cref="RenameFromItem"/> 이
     /// 쓰는 <b>같은 <c>IPrompt.AskName</c></b> 을 그대로 쓴다 — 새 대화상자를 만들지 않는다.
+    /// 확인 버튼은 「만들기」다(D75-e) — 「바꾸기」는 이 자리의 동작을 말하지 않는다.
     /// </summary>
     private string? PromptNewFolderName(string suggested) =>
-        _prompt.AskName("새 폴더 만들기", "새 폴더의 이름을 적어라.", suggested);
+        _prompt.AskName("새 폴더 만들기", "새 폴더의 이름을 적어라.", suggested, "만들기");
 
     private string? RenameFromItem(FileItemViewModel item)
     {
@@ -2768,7 +2769,8 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         var typed = _prompt.AskName(
             "이름 바꾸기",
             $"'{oldLeaf}' 의 새 이름을 적어라. {(item.IsDirectory ? "폴더" : "파일")}가 실제로 바뀐다.",
-            oldLeaf);
+            oldLeaf,
+            "바꾸기"); // 지금 실물 문구 그대로다(D75-e) — 사용자에게 보이는 것이 바뀌면 안 된다.
 
         // 취소 — 아무 일도 없었다. 상태 바에도 적지 않는다(사용자가 스스로 그만둔 것이다).
         if (typed is null)
