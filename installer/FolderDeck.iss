@@ -4,7 +4,7 @@
 [Setup]
 AppId=FolderDeck
 AppName=Folder Deck
-AppVersion=1.1.0
+AppVersion=1.2.0
 AppPublisher=JH
 DefaultDirName={localappdata}\FolderDeck\app
 DefaultGroupName=Folder Deck
