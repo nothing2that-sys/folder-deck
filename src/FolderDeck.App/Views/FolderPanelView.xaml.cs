@@ -365,19 +365,47 @@ public partial class FolderPanelView : UserControl
     /// <summary>
     /// 「지금 보고 있는 폴더」 메뉴(§4.6 · D75)가 열리기 <b>직전</b>에 자리를 가른다 —
     /// <c>ListArea</c> 에 붙은 <c>ContextMenu</c> 는 항목 위에서도 열리려 하므로(WPF 는 가장
-    /// 가까운 조상의 <c>ContextMenu</c> 를 찾아 연다) 항목·스크롤바 위에서는 여기서 취소한다.
+    /// 가까운 조상의 <c>ContextMenu</c> 를 찾아 연다) 항목·스크롤바·컬럼 머리 위에서는
+    /// 여기서 취소한다. <b>breadcrumb 도 이 핸들러를 그대로 쓴다</b>(D75-d) — 검색 타일
+    /// 가드가 두 자리 모두에 필요하기 때문이다.
     /// </summary>
     /// <remarks>
+    /// <b>검색 타일은 <see cref="FolderPanelViewModel.IsSearchTile"/> 을 직접 본다</b>(D75-d) —
+    /// <c>design.md</c> §4.6 이 「검색 타일에서는 이 메뉴를 열지 않는다」고 못박았다.
+    /// <c>CurrentPath == null</c> 부작용에는 기대지 않는다(D75-b-3 과 같은 이유). 커맨드
+    /// 안쪽의 <c>IsSearchTile</c> 가드(D75-b)는 그대로 둔다 — 이중 방어다.
+    /// <para>
     /// <b>고무줄과 같은 판정(<see cref="RubberBand.Classify"/>)을 그대로 쓴다</b>(D75-c) — 새
     /// 히트테스트를 만들면 같은 자리가 두 뜻을 갖게 된다. 항목 위는 이미
     /// <see cref="OnItemPreviewRightButtonUp"/> 이 셸 메뉴로 처리한다 — 그 경로는 손대지
     /// 않는다.
+    /// </para>
+    /// <para>
+    /// <b>컬럼 머리는 <c>Classify</c> 로 안 걸린다</b>(D75-d) — <c>GridViewColumnHeader</c> 는
+    /// <c>ListView</c> 의 헤더 행 자손이지 <c>ListViewItem</c>·<c>ScrollBar</c>·<c>Thumb</c> 조상을
+    /// 갖지 않으므로 <c>Classify</c> 는 <see cref="ListHitKind.Empty"/> 를 돌려준다(FolderPanelView.xaml:161-166
+    /// 의 주석이 그 자손 관계를 이미 적어 두었다). 컬럼 머리는 「지금 보고 있는 폴더」가 아니라
+    /// 목록의 표시 방식을 다루는 자리라 별도로 걸러 낸다 — <c>Classify</c> 자체는 고치지 않는다
+    /// (D75-d-3, §4.8 고무줄이 함께 움직이지 않게).
+    /// </para>
     /// </remarks>
     private void OnListContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        var kind = RubberBand.Classify(RubberBand.AncestorTypes(e.OriginalSource, this));
+        if (ViewModel is { IsSearchTile: true })
+        {
+            e.Handled = true;
+            return;
+        }
 
-        if (kind != ListHitKind.Empty)
+        var ancestors = RubberBand.AncestorTypes(e.OriginalSource, this);
+
+        if (ancestors.Any(t => typeof(GridViewColumnHeader).IsAssignableFrom(t)))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (RubberBand.Classify(ancestors) != ListHitKind.Empty)
         {
             e.Handled = true;
         }
