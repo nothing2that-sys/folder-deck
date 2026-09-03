@@ -283,11 +283,13 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasSearchText))]
     [NotifyPropertyChangedFor(nameof(IsRecursiveSearch))]
     [NotifyPropertyChangedFor(nameof(ShowNoResults))]
+    [NotifyPropertyChangedFor(nameof(NeedsLocationColumn))]
     private string searchText = string.Empty;
 
     /// <summary>"하위 포함" 체크. 끄면 즉석 필터, 켜면 재귀 검색.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRecursiveSearch))]
+    [NotifyPropertyChangedFor(nameof(NeedsLocationColumn))]
     private bool includeSubfolders;
 
     [ObservableProperty]
@@ -869,13 +871,29 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 검색 뷰의 `위치` 열을 끄고 켠다 (Phase 15 · D79). <see cref="Entry"/> 쪽에는 이 열
-    /// 자체가 없어 — 검색 타일이 아니면 아무 일도 하지 않는다.
+    /// `위치` 열을 끄고 켠다 (Phase 15 · D79 · D80-b). <see cref="Entry"/> 쪽에는 이 열 자체가
+    /// 없어 — <see cref="NeedsLocationColumn"/> 이 거짓이면(그 열이 붙는 뷰가 아니면) 아무
+    /// 일도 하지 않는다.
     /// </summary>
+    /// <remarks>
+    /// <b>보이는 조건과 먹는 조건이 같아야 한다</b>(D80-b B-1) — 컬럼 메뉴의 `위치` 항목
+    /// <c>Visibility</c> 가 이미 <see cref="NeedsLocationColumn"/> 이다(`FolderPanelView.xaml:106`).
+    /// 예전엔 <c>IsSearchTile</c> 하나만 봐서, **재귀 검색**(폴더 타일이 검색 중인 것 — 검색
+    /// 타일이 아니다) 중에는 메뉴 항목이 보이는데도 눌러도 아무 일이 없었다.
+    /// <para>
+    /// <b>가드를 없애지는 않는다</b>(B-2) — 열이 없는 뷰(재귀 검색도 검색 타일도 아닌 평소
+    /// 폴더 타일)에서 값이 뒤집히면, 나중에 검색을 켰을 때 끈 적 없는 열이 꺼진 채로 나온다.
+    /// </para>
+    /// <para>
+    /// <b>여전히 저장하지 않는다</b>(B-4) — 재귀 검색 중인 폴더 타일에는 <see cref="Entry"/> 가
+    /// 있지만, `위치` 는 검색 중일 때만 존재하는 열이지 그 폴더의 항구적 성질이 아니다.
+    /// <c>Entry</c> 에 넣으면 검색을 안 할 때도 값이 남는다(§7.1 v8).
+    /// </para>
+    /// </remarks>
     [RelayCommand]
     public void ToggleShowPosition()
     {
-        if (!IsSearchTile)
+        if (!NeedsLocationColumn)
         {
             return;
         }

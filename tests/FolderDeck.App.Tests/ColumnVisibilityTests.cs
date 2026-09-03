@@ -299,4 +299,85 @@ public sealed class ColumnVisibilityTests
         panel.ToggleShowPositionCommand.Execute(null);
         Assert.False(panel.CurrentShowPosition);
     }
+
+    private static async Task WaitForSearchToSettle(FolderPanelViewModel panel)
+    {
+        for (var i = 0; i < 200 && panel.IsSearching; i++)
+        {
+            await Task.Delay(25);
+        }
+    }
+
+    /// <summary>
+    /// 재귀 검색 중인 <b>폴더 타일</b>에서 `위치` 토글이 실제로 값을 바꾸는지(Phase 15 ·
+    /// D80-b) — 가드가 <c>IsSearchTile</c> 하나만 봐서 재귀 검색(검색 타일이 아니다 — 폴더
+    /// 타일이 검색 중인 것)에서는 조기 반환에 걸렸었다. `크기`/`수정` 은 <c>else</c> 가지가
+    /// <see cref="FolderPanelViewModel.Entry"/> 를 보므로 이 결함과 무관했다(D80-b §2).
+    /// </summary>
+    [Fact]
+    public async Task TogglingShowPositionDuringARecursiveSearchFlipsCurrentShowPosition()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+        await f.ViewModel.ShowFolderAsync(f.Row("작업"));
+        var panel = f.Rotating;
+
+        panel.SearchText = "Recipe";
+        panel.IncludeSubfolders = true;
+        await WaitForSearchToSettle(panel);
+        Assert.True(panel.NeedsLocationColumn);
+        Assert.True(panel.CurrentShowPosition);
+
+        panel.ToggleShowPositionCommand.Execute(null);
+
+        Assert.False(panel.CurrentShowPosition);
+    }
+
+    /// <summary>
+    /// 값만 바뀌고 통지가 없으면 <c>ApplyColumnVisibility</c> 가 안 깨어나 화면은 그대로다 —
+    /// 값 전이와 통지를 갈라서 문다(D80-b §2).
+    /// </summary>
+    [Fact]
+    public async Task TogglingShowPositionDuringARecursiveSearchNotifiesCurrentShowPosition()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+        await f.ViewModel.ShowFolderAsync(f.Row("작업"));
+        var panel = f.Rotating;
+
+        panel.SearchText = "Recipe";
+        panel.IncludeSubfolders = true;
+        await WaitForSearchToSettle(panel);
+
+        var seen = new List<string?>();
+        panel.PropertyChanged += (_, e) => seen.Add(e.PropertyName);
+
+        panel.ToggleShowPositionCommand.Execute(null);
+
+        Assert.Contains(nameof(FolderPanelViewModel.CurrentShowPosition), seen);
+    }
+
+    /// <summary>
+    /// 재귀 검색도 아니고 검색 타일도 아니면 여전히 아무 일도 안 한다(B-2) — 가드를
+    /// 없애지 않았다는 것을 못박는다. 값도 안 바뀌고 통지도 없다.
+    /// </summary>
+    [Fact]
+    public async Task TogglingShowPositionOnAnOrdinaryFolderTileStillDoesNothing()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+        await f.ViewModel.ShowFolderAsync(f.Row("작업"));
+        var panel = f.Rotating;
+
+        Assert.False(panel.NeedsLocationColumn);
+        var before = panel.CurrentShowPosition;
+
+        var seen = new List<string?>();
+        panel.PropertyChanged += (_, e) => seen.Add(e.PropertyName);
+
+        panel.ToggleShowPositionCommand.Execute(null);
+
+        Assert.Equal(before, panel.CurrentShowPosition);
+        Assert.DoesNotContain(nameof(FolderPanelViewModel.CurrentShowPosition), seen);
+    }
 }
