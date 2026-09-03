@@ -31,9 +31,12 @@ public sealed class Workspace
     /// 7 — <see cref="TileKind"/> 에 <c>Search</c> 추가(Phase 12 · D69-c). 기존 값 뒤에 붙는
     /// 새 열거자 값이라 필드가 는 것은 아니지만, <c>kind: "search"</c> 를 모르는 채 읽던
     /// 구버전 앱이 이 값을 만나면 <c>JsonException</c> 으로 파일 전체를 못 여니 버전을 올린다.
+    /// 8 — <c>folders[].showSize</c>·<c>folders[].showModified</c> 추가(Phase 15 · D79). 6 과
+    /// 같은 이유로 올린다: <b>필드 추가뿐</b>이고 둘 다 없으면 기본값(둘 다 보인다)이 되는데
+    /// 그것이 Phase 15 전의 실제 동작이라 <b>구파일에 마이그레이션이 필요 없다.</b>
     /// </para>
     /// </summary>
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 8;
 
     /// <summary>
     /// 스키마 버전은 저장소 소유다. 저장할 때 <see cref="CurrentSchemaVersion"/> 이 찍히고,

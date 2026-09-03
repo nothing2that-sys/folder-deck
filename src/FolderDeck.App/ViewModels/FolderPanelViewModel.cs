@@ -225,6 +225,39 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// <summary>지금 정렬 방향 — 검색 타일은 자체 상태, 폴더 타일은 <see cref="Entry"/> 것.</summary>
     private bool CurrentSortDesc => IsSearchTile ? searchSortDesc : Entry?.SortDesc == true;
 
+    /// <summary>
+    /// 검색 타일이 스스로 드는 컬럼 표시 상태(Phase 15 · D79) — <c>Entry</c> 가 없어 폴더
+    /// 타일처럼 <c>FolderEntry.ShowSize</c>/<c>ShowModified</c> 에 저장할 자리가 없다.
+    /// 저장하지 않는다 — <see cref="searchSortBy"/> 를 저장하지 않는 것과 같은 이유다.
+    /// 셋 다 초기값은 「보인다」.
+    /// </summary>
+    private bool searchShowPosition = true;
+
+    private bool searchShowSize = true;
+
+    private bool searchShowModified = true;
+
+    /// <summary>지금 `크기` 열 표시 여부 — 검색 타일은 자체 상태, 폴더 타일은 <see cref="Entry"/> 것.</summary>
+    /// <remarks>
+    /// <b>공개다</b>(D79-b-fix F-1) — <see cref="CurrentSortBy"/> 와 달리 이 값 자체를 D79-c 가
+    /// 컬럼 메뉴의 체크 상태에 바깥에서 묶어야 한다. WPF 바인딩·다른 클래스의 코드비하인드는
+    /// 공개 멤버만 본다.
+    /// </remarks>
+    public bool CurrentShowSize => IsSearchTile ? searchShowSize : Entry?.ShowSize ?? true;
+
+    /// <summary>지금 `수정` 열 표시 여부 — 검색 타일은 자체 상태, 폴더 타일은 <see cref="Entry"/> 것.</summary>
+    /// <remarks><see cref="CurrentShowSize"/> 와 같은 이유로 공개다.</remarks>
+    public bool CurrentShowModified => IsSearchTile ? searchShowModified : Entry?.ShowModified ?? true;
+
+    /// <summary>
+    /// 지금 `위치` 열 표시 여부 — <b>검색 타일에만 있는 개념이라 <see cref="Entry"/> 쪽 짝이
+    /// 없다</b>(D78 B-0 §4). <see cref="CurrentSortBy"/> 처럼 타일 종류로 가르지 않는다 —
+    /// 가를 대상 자체가 없어서, 물으면 항상 검색 상태를 그대로 준다. 폴더 타일 쪽 진입점은
+    /// 이 프로퍼티를 아예 묻지 않는 방식으로 짠다(D79-b §6-3).
+    /// </summary>
+    /// <remarks><see cref="CurrentShowSize"/> 와 같은 이유로 공개다(D79-b-fix F-1).</remarks>
+    public bool CurrentShowPosition => searchShowPosition;
+
     /// <summary>현재 경로를 열거한 원본 목록. 검색·필터는 이걸 건드리지 않는다.</summary>
     [ObservableProperty]
     private IReadOnlyList<FileItemViewModel> items = [];
@@ -776,6 +809,79 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         SaveFolderEntry?.Invoke();
 
         await RefreshAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 상세 뷰 `크기` 열을 끄고 켠다 (Phase 15 · D79 · 컬럼 머리글 우클릭 메뉴, 진입점은
+    /// D79-c 가 붙인다).
+    /// </summary>
+    /// <remarks>
+    /// 폴더 타일은 <see cref="FolderEntry.ShowSize"/> 를 뒤집고 저장한다 —
+    /// <see cref="ToggleFoldersFirstAsync"/> 와 같은 결이나, <b>목록을 다시 읽지 않는다.</b>
+    /// 컬럼 표시는 열거 결과를 바꾸지 않는다 — 정렬·「폴더 먼저」와 달리 재조회할 이유가 없다.
+    /// 검색 타일은 <see cref="searchShowSize"/> 만 뒤집고 저장하지 않는다 — <see cref="Entry"/>
+    /// 가 없어 저장할 자리가 없다(D78 B-0 §5).
+    /// </remarks>
+    [RelayCommand]
+    public void ToggleShowSize()
+    {
+        if (IsSearchTile)
+        {
+            searchShowSize = !searchShowSize;
+        }
+        else
+        {
+            if (Entry is null)
+            {
+                return;
+            }
+
+            Entry.ShowSize = !Entry.ShowSize;
+            SaveFolderEntry?.Invoke();
+        }
+
+        OnPropertyChanged(nameof(CurrentShowSize));
+    }
+
+    /// <summary>
+    /// 상세 뷰 `수정` 열을 끄고 켠다 (Phase 15 · D79).
+    /// </summary>
+    /// <remarks><see cref="ToggleShowSize"/> 와 같은 결·같은 이유다.</remarks>
+    [RelayCommand]
+    public void ToggleShowModified()
+    {
+        if (IsSearchTile)
+        {
+            searchShowModified = !searchShowModified;
+        }
+        else
+        {
+            if (Entry is null)
+            {
+                return;
+            }
+
+            Entry.ShowModified = !Entry.ShowModified;
+            SaveFolderEntry?.Invoke();
+        }
+
+        OnPropertyChanged(nameof(CurrentShowModified));
+    }
+
+    /// <summary>
+    /// 검색 뷰의 `위치` 열을 끄고 켠다 (Phase 15 · D79). <see cref="Entry"/> 쪽에는 이 열
+    /// 자체가 없어 — 검색 타일이 아니면 아무 일도 하지 않는다.
+    /// </summary>
+    [RelayCommand]
+    public void ToggleShowPosition()
+    {
+        if (!IsSearchTile)
+        {
+            return;
+        }
+
+        searchShowPosition = !searchShowPosition;
+        OnPropertyChanged(nameof(CurrentShowPosition));
     }
 
     /// <summary>

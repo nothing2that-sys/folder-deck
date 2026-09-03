@@ -151,6 +151,33 @@ public sealed class WorkspaceRoundTripTests
         Assert.True(macro.Confirm);
     }
 
+    /// <summary>
+    /// `showSize`·`showModified` 가 섞인 값(하나는 꺼짐, 하나는 기본값)으로 저장 → 로드를
+    /// 왕복해도 그대로다(§7.1 v8 · Phase 15 · D79).
+    /// </summary>
+    [Fact]
+    public void ShowSizeAndShowModifiedSurviveARoundTrip()
+    {
+        using var temp = new TempStore();
+        var workspace = new Workspace
+        {
+            Title = "컬럼 표시 왕복",
+            Folders =
+            [
+                new FolderEntry { Path = @"D:\some\code", ShowSize = false, ShowModified = true },
+                new FolderEntry { Path = @"D:\some\logs", ShowSize = true, ShowModified = false },
+            ],
+        };
+
+        temp.Store.SaveWorkspace(workspace);
+        var reloaded = temp.Store.LoadWorkspace(workspace.Id).ValueOrThrow();
+
+        Assert.False(reloaded.Folders[0].ShowSize);
+        Assert.True(reloaded.Folders[0].ShowModified);
+        Assert.True(reloaded.Folders[1].ShowSize);
+        Assert.False(reloaded.Folders[1].ShowModified);
+    }
+
     /// <summary>검색 타일이 든 워크스페이스가 저장 → 로드를 무손실로 왕복한다(§7.1 v7 · D69-c).</summary>
     [Fact]
     public void ASearchTileSurvivesARoundTrip()

@@ -54,12 +54,13 @@ public sealed class AppSettingsSchemaTests : IDisposable
         Assert.Equal(4, AppSettings.CurrentSchemaVersion);
 
     /// <summary>
-    /// 두 스키마는 독립적으로 버전이 오른다 — 이 회차에서 워크스페이스가 7 로 오른 것은
-    /// <c>TileKind.Search</c> 때문이지 <see cref="AppSettings"/> 의 새 필드들과는 무관하다(결정 4).
+    /// 두 스키마는 독립적으로 버전이 오른다 — 워크스페이스는 지금 8(Phase 15 · D79 ·
+    /// <c>folders[].showSize</c>/<c>showModified</c>)이고, 그것은 <see cref="AppSettings"/> 의
+    /// 새 필드들과는 무관하다(결정 4).
     /// </summary>
     [Fact]
     public void TheWorkspaceSchemaMovesForItsOwnReasons() =>
-        Assert.Equal(7, Workspace.CurrentSchemaVersion);
+        Assert.Equal(8, Workspace.CurrentSchemaVersion);
 
     // ── 왕복 ─────────────────────────────────────────────────────────────────
 

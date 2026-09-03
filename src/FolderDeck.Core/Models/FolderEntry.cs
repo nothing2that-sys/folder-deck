@@ -41,6 +41,18 @@ public sealed class FolderEntry
     /// </remarks>
     public bool FoldersFirst { get; set; } = true;
 
+    /// <summary>상세 뷰 `크기` 열을 보일지 (schemaVersion 8 · Phase 15 · D79).</summary>
+    /// <remarks>
+    /// <b>기본값이 <c>true</c> 라 초기화자로 준다</b> — <see cref="FoldersFirst"/> 와 같은 이유다.
+    /// 키가 없는 구파일은 이 값이 그대로 남아 「보인다」로 읽힌다, Phase 15 전의 실제 동작이다.
+    /// 폭이 아니라 표시 여부다 — 자동 폭 계산은 이 슬롯을 모른다.
+    /// </remarks>
+    public bool ShowSize { get; set; } = true;
+
+    /// <summary>상세 뷰 `수정` 열을 보일지 (schemaVersion 8 · Phase 15 · D79).</summary>
+    /// <remarks><see cref="ShowSize"/> 와 같은 이유·같은 기본값이다.</remarks>
+    public bool ShowModified { get; set; } = true;
+
     /// <summary>상시(고정) 칸 대상인지 (§2.3).</summary>
     public bool Pinned { get; set; }
 

@@ -132,10 +132,45 @@ public sealed class SchemaMigrationTests : IDisposable
         return id;
     }
 
-    [Fact]
-    public void CurrentSchemaVersionIsSeven()
+    /// <summary>
+    /// 8 이 여는 두 슬롯(<c>folders[].showSize</c> · <c>folders[].showModified</c>)만 없는
+    /// <b>바로 앞 버전</b> 파일.
+    /// </summary>
+    private Guid WriteV7File()
     {
-        Assert.Equal(7, Workspace.CurrentSchemaVersion);
+        var id = Guid.NewGuid();
+        var json = $$"""
+        {
+          "schemaVersion": 7,
+          "id": "{{id}}",
+          "title": "v7 워크스페이스",
+          "lastUsed": "2026-06-07T08:09:10+09:00",
+          "folders": [
+            {
+              "id": "{{Guid.NewGuid()}}",
+              "path": "D:\\work\\src",
+              "displayName": "src",
+              "viewMode": "details",
+              "sortBy": "modified",
+              "sortDesc": true,
+              "foldersFirst": false,
+              "pinned": true
+            }
+          ],
+          "leftLayout": { "foldersCollapsed": true, "lowerCollapsed": false, "leftPanelCollapsed": true },
+          "grid": { "cols": 4, "rows": 4 },
+          "window": { "x": 10, "y": 20, "width": 800, "height": 600, "maximized": false }
+        }
+        """;
+
+        File.WriteAllText(_paths.WorkspaceFile(id), json);
+        return id;
+    }
+
+    [Fact]
+    public void CurrentSchemaVersionIsEight()
+    {
+        Assert.Equal(8, Workspace.CurrentSchemaVersion);
     }
 
     [Fact]
@@ -756,13 +791,87 @@ public sealed class SchemaMigrationTests : IDisposable
     }
 
     [Fact]
-    public void SavingStampsWorkspaceSchemaVersionSeven()
+    public void SavingStampsWorkspaceSchemaVersionEight()
     {
         var workspace = new Workspace { Title = "버전 찍힘" };
 
         Assert.Null(_store.SaveWorkspace(workspace));
 
         var json = File.ReadAllText(_paths.WorkspaceFile(workspace.Id));
-        Assert.Contains("\"schemaVersion\": 7", json);
+        Assert.Contains("\"schemaVersion\": 8", json);
+    }
+
+    // ── schemaVersion 8 (Phase 15 · D79) ─────────────────────────────────────
+    //
+    // 두 슬롯이 늘었다: folders[].showSize · folders[].showModified.
+    // 둘 다 필드 추가뿐이라 구파일을 거부하지 않는다 — 없으면 기본값으로 읽히고
+    // 그 기본값이 Phase 15 전의 실제 동작이다. 그래서 마이그레이션 코드가 없다.
+
+    /// <summary>
+    /// <b>「크기」·「수정」이 없으면 켜진 것으로 읽힌다.</b> 그냥 <c>bool</c> 이면 <c>false</c>
+    /// (숨김)로 읽혀 구파일의 두 열이 조용히 사라진다. 모델의 초기화자(<c>= true</c>)가 그것을
+    /// 막는다 — v6 <c>foldersFirst</c> 와 같은 함정이다.
+    /// </summary>
+    [Fact]
+    public void AMissingShowSizeAndShowModifiedReadAsOn()
+    {
+        var id = WriteV7File();
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        var folder = Assert.Single(workspace.Folders);
+        Assert.True(folder.ShowSize);
+        Assert.True(folder.ShowModified);
+    }
+
+    /// <summary>v1 파일도 마찬가지다 — 슬롯이 없던 시절이 더 길다.</summary>
+    [Fact]
+    public void AV1FileAlsoReadsShowSizeAndShowModifiedAsDefaults()
+    {
+        var id = WriteV1File();
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        var folder = Assert.Single(workspace.Folders);
+        Assert.True(folder.ShowSize);
+        Assert.True(folder.ShowModified);
+    }
+
+    /// <summary>저장하면 지금 판(8)으로 승격되고 두 슬롯이 파일에 적힌다.</summary>
+    [Fact]
+    public void SavingAV7FilePromotesItToTheCurrentVersionAndWritesTheNewSlots()
+    {
+        var id = WriteV7File();
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        workspace.Folders[0].ShowSize = false;
+        Assert.Null(_store.SaveWorkspace(workspace));
+
+        var json = File.ReadAllText(_paths.WorkspaceFile(id));
+        Assert.Contains($"\"schemaVersion\": {Workspace.CurrentSchemaVersion}", json);
+        Assert.Contains("\"showSize\": false", json);
+        Assert.Contains("\"showModified\": true", json);
+
+        var reloaded = _store.LoadWorkspace(id).ValueOrThrow();
+        Assert.Equal(Workspace.CurrentSchemaVersion, reloaded.SchemaVersion);
+        Assert.False(reloaded.Folders[0].ShowSize);
+        Assert.True(reloaded.Folders[0].ShowModified);
+
+        // 옆 슬롯(v6 의 foldersFirst)은 건드리지 않았다.
+        Assert.False(reloaded.Folders[0].FoldersFirst);
+    }
+
+    /// <summary>기본값 그대로여도 파일에는 적힌다 — 형제 슬롯(foldersFirst 등)과 같은 규칙이다.</summary>
+    [Fact]
+    public void TheNewV8SlotsAreWrittenEvenAtTheirDefaults()
+    {
+        var id = WriteV7File();
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        Assert.Null(_store.SaveWorkspace(workspace));
+
+        var json = File.ReadAllText(_paths.WorkspaceFile(id));
+        Assert.Contains("\"showSize\": true", json);
+        Assert.Contains("\"showModified\": true", json);
     }
 }
