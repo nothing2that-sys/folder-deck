@@ -1749,7 +1749,7 @@ dotnet publish src/FolderDeck.App/FolderDeck.App.csproj -c Release -r win-x64 \
 | `RootNamespace` | `FolderDeck.App` | `AssemblyName` 과 다르므로 명시해 둔다 |
 | `ApplicationIcon` | `Assets\FolderDeck.ico` | §1.2 의 예외. 창 아이콘도 이것을 따라간다(실측) |
 | `Company` · `Product` | `JH` · `Folder Deck` | exe 속성 창·작업 관리자 표시 |
-| `Version` | `1.0.0` | |
+| `Version` | `1.3.0` | `.iss` 의 `AppVersion` 과 손으로 맞춘다(§12.3). 자리가 둘이다 |
 
 **인스턴스 이름은 어셈블리 이름과 무관하다.** `InstanceNames.cs` 가 뮤텍스
 `Local\FolderDeck.{id}` · 파이프 `FolderDeck.s{세션}.{id}` 를 문자열 리터럴로 박아 둔다(§6.2).
@@ -1770,8 +1770,13 @@ dotnet publish src/FolderDeck.App/FolderDeck.App.csproj -c Release -r win-x64 \
   사용자별로 깔린다.
 - 시작 메뉴 `{group}\Folder Deck`, 산출물 `artifacts/installer/FolderDeck-Setup.exe`.
   실측 **46,485,750 바이트**.
-- **`.iss` 는 순수 ASCII 로 쓴다.** Inno Setup 7 이 BOM 없는 파일을 어떤 코드페이지로 읽는지
-  확인된 바 없다. 비ASCII 를 안 넣으면 그 문제가 생기지 않는다.
+- **`AppVersion` 은 `FolderDeck.App.csproj` 의 `<Version>` 과 같은 값이어야 한다.** 두 자리가
+  따로 들고 있어 판을 올릴 때 둘 다 손으로 고친다. 어긋나도 빌드는 통과한다 — 갈라진 값은 exe
+  속성 창과 「프로그램 추가/제거」 목록에서만 드러난다.
+- **`.iss` 는 순수 ASCII 가 아니다.** 지금 파일은 BOM 없이 한글 주석을 담고 있다(실측
+  2026-09-03 — 1,919 바이트 중 비ASCII 702 바이트 · BOM 없음). 이 자리에 있던 「순수 ASCII 로
+  쓴다」는 실물과 어긋나 있었다. **한글은 주석에만 있고 지시자 줄은 ASCII 다** — 주석이 깨져도
+  컴파일 결과가 갈리지 않는 자리다. 코드페이지 판정 자체는 안 쟀다(§12.5).
 - **예제에 실물로 나온 지시자만 쓴다.** `Examples\Example1.iss` 기준이다. 7 의 문법은 확인된
   범위 밖이라 기억으로 지시자를 늘리지 않는다.
 
@@ -1797,3 +1802,7 @@ Inno Setup 7.1.0 컴파일러가 배너에 `Non-commercial use only` 를 찍는�
 - **앱이 실행 중일 때 덮어쓰기가 어떻게 되는지 확인하지 않았다.** 401 개 중 `FolderDeck.exe`
   가 잠긴 상태의 재설치는 밟아 본 적이 없다.
 - 설치본이 마법사 화면에 `Non-commercial` 문구를 보이는지 확인하지 않았다.
+- **Inno Setup 7 이 BOM 없는 비ASCII `.iss` 를 어떤 코드페이지로 읽는지 안 쟀다.** 지금 파일의
+  한글은 주석에만 있어 컴파일 결과를 가르지 않는다고 보나 그것도 실측이 아니다.
+- **`FolderDeck.Core.csproj` 에 `<Version>` 이 없다.** Core.dll 은 어느 빌드에서나 1.0.0.0 이다.
+  `.iss` 의 `ignoreversion` 이 덮어쓰기를 강제해 지금은 물리지 않으나 그 깃발이 유일한 방벽이다.
