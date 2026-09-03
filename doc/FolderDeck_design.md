@@ -1749,7 +1749,13 @@ dotnet publish src/FolderDeck.App/FolderDeck.App.csproj -c Release -r win-x64 \
 | `RootNamespace` | `FolderDeck.App` | `AssemblyName` 과 다르므로 명시해 둔다 |
 | `ApplicationIcon` | `Assets\FolderDeck.ico` | §1.2 의 예외. 창 아이콘도 이것을 따라간다(실측) |
 | `Company` · `Product` | `JH` · `Folder Deck` | exe 속성 창·작업 관리자 표시 |
-| `Version` | `1.3.0` | `.iss` 의 `AppVersion` 과 손으로 맞춘다(§12.3). 자리가 둘이다 |
+| `Version` | (여기 없다) | 루트 `Directory.Build.props` 가 정한다 — 아래 |
+
+**판 번호는 저장소 루트 `Directory.Build.props` 한 자리에 있다**(D82). `App.csproj` ·
+`Core.csproj` · 시험 프로젝트가 모두 물려받으므로 `Core.dll` 도 더는 1.0.0.0 이 아니다 —
+`Core.dll` 이 어느 빌드에서나 1.0.0.0 이라 옛 판이 남아 죽었던 사고(§12.3 의 `ignoreversion`
+주석)의 뿌리가 여기였다. **MSBuild 가 안 읽는 자리는 `installer/FolderDeck.iss` 뿐이므로 판을
+올릴 때 손댈 자리는 `Directory.Build.props` 와 `.iss` 둘이다.**
 
 **인스턴스 이름은 어셈블리 이름과 무관하다.** `InstanceNames.cs` 가 뮤텍스
 `Local\FolderDeck.{id}` · 파이프 `FolderDeck.s{세션}.{id}` 를 문자열 리터럴로 박아 둔다(§6.2).
@@ -1804,5 +1810,5 @@ Inno Setup 7.1.0 컴파일러가 배너에 `Non-commercial use only` 를 찍는�
 - 설치본이 마법사 화면에 `Non-commercial` 문구를 보이는지 확인하지 않았다.
 - **Inno Setup 7 이 BOM 없는 비ASCII `.iss` 를 어떤 코드페이지로 읽는지 안 쟀다.** 지금 파일의
   한글은 주석에만 있어 컴파일 결과를 가르지 않는다고 보나 그것도 실측이 아니다.
-- **`FolderDeck.Core.csproj` 에 `<Version>` 이 없다.** Core.dll 은 어느 빌드에서나 1.0.0.0 이다.
-  `.iss` 의 `ignoreversion` 이 덮어쓰기를 강제해 지금은 물리지 않으나 그 깃발이 유일한 방벽이다.
+- **게시·설치를 거친 `Core.dll` 이 판 번호를 달고 있는지 확인하지 않았다.** D82 가 빌드
+  산출물에서 읽었을 뿐 설치본 안의 사본은 안 봤다.
