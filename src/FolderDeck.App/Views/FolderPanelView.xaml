@@ -81,6 +81,31 @@
             <MenuItem Header="새 폴더로 등록" Command="{Binding RegisterCurrentFolderCommand}" />
         </ContextMenu>
 
+        <!-- 컬럼 선택 메뉴 (§3.2 · Phase 15 · D79). 컬럼 머리글 우클릭 진입점 — 아래 두
+             GridView 의 ColumnHeaderContainerStyle 세터로 붙는다. x:Shared="False" 라
+             GridView 가 새 인스턴스를 받을 때(조회마다, §8) 이 메뉴도 자기 것을 받는다 —
+             CurrentFolderMenu 와 같은 이유(위 62~65행)다. 한 GridView 안의 헤더 여럿(예:
+             이름·크기·수정)이 같은 인스턴스를 나눠 쓰는 것은 괜찮다 — ContextMenu 는
+             GridView 와 달리 여러 소유자에게 붙어도 충돌하지 않고, DataContext 도 소유
+             헤더(PlacementTarget)의 것을 그대로 받는다(코드 비하인드 없이 Binding 만으로,
+             CurrentFolderMenu 와 같다 — 실측으로 확인했다, D79-c 6-0).
+             `이름` 항목은 넣지 않는다 — 끌 수 없다(D79b-7). `위치`는 검색 뷰에만 있는 열이라
+             NeedsLocationColumn 으로 가른다(DetailsList 의 View 트리거가 같은 판정을 쓴다).
+             체크는 한쪽 방향이다 — 값을 바꾸는 길은 커맨드 하나뿐이고 그것이 Entry(폴더
+             타일) 나 런타임 필드(검색 타일)를 뒤집는다(D79-b·D79-b-fix). -->
+        <ContextMenu x:Key="ColumnMenu" x:Shared="False">
+            <MenuItem Header="크기" IsCheckable="True"
+                      IsChecked="{Binding CurrentShowSize, Mode=OneWay}"
+                      Command="{Binding ToggleShowSizeCommand}" />
+            <MenuItem Header="수정" IsCheckable="True"
+                      IsChecked="{Binding CurrentShowModified, Mode=OneWay}"
+                      Command="{Binding ToggleShowModifiedCommand}" />
+            <MenuItem Header="위치" IsCheckable="True"
+                      IsChecked="{Binding CurrentShowPosition, Mode=OneWay}"
+                      Command="{Binding ToggleShowPositionCommand}"
+                      Visibility="{Binding NeedsLocationColumn, Converter={StaticResource BoolToVisibility}}" />
+        </ContextMenu>
+
         <Style x:Key="FileItemContainer" TargetType="ListViewItem">
             <!-- 행의 히트 영역을 내용 폭까지로 좁힌다 (§4.2-2 · Stage 3C).
 
@@ -205,6 +230,8 @@
                     <Setter Property="HorizontalContentAlignment" Value="Left" />
                     <Setter Property="ToolTip"
                             Value="눌러서 이 열로 정렬 — 같은 열을 다시 누르면 오름/내림이 뒤집힌다" />
+                    <!-- 컬럼 선택 메뉴 (Phase 15 · D79 · C-1) — 위 UserControl.Resources 참고. -->
+                    <Setter Property="ContextMenu" Value="{StaticResource ColumnMenu}" />
                 </Style>
             </GridView.ColumnHeaderContainerStyle>
 
@@ -252,6 +279,8 @@
                     <Setter Property="HorizontalContentAlignment" Value="Left" />
                     <Setter Property="ToolTip"
                             Value="눌러서 이 열로 정렬 — 같은 열을 다시 누르면 오름/내림이 뒤집힌다" />
+                    <!-- 컬럼 선택 메뉴 (Phase 15 · D79 · C-1) — 위 UserControl.Resources 참고. -->
+                    <Setter Property="ContextMenu" Value="{StaticResource ColumnMenu}" />
                 </Style>
             </GridView.ColumnHeaderContainerStyle>
 
@@ -669,8 +698,10 @@
                  항목(ListViewItem) 위에서는 열리면 안 된다 — OnListContextMenuOpening 이
                  RubberBand.Classify(B-0 §A.1 · 고무줄과 같은 판정)로 걸러 그 자리에서는
                  e.Handled = true 로 취소한다. 새 히트테스트를 만들지 않는다(D75-c).
-                 검색 타일·컬럼 머리 위에서도 같은 핸들러가 취소한다(D75-d) — 근거는
-                 코드비하인드의 OnListContextMenuOpening 주석에 있다.
+                 검색 타일 위에서도 같은 핸들러가 취소한다(D75-d) — 근거는 코드비하인드의
+                 OnListContextMenuOpening 주석에 있다. 컬럼 머리 위에서는 취소하지 않는다
+                 (Phase 15 · D79) — 거기는 컬럼 자신의 메뉴(컬럼 선택, 위 GridView 의
+                 ColumnHeaderContainerStyle)가 대신 연다.
 
                  예전에는 "빈 곳(배경) 메뉴를 새로 만들지 않는다 — 고무줄 선택이 그 자리를
                  쓴다"고 여기 적어 두었었다. 그 근거는 틀렸다 — 고무줄은 좌클릭 드래그고 이

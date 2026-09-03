@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Windows;
@@ -9,6 +10,7 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using FolderDeck.App.Interop;
 using FolderDeck.App.ViewModels;
+using FolderDeck.Core.Models;
 using FolderDeck.Core.Operations;
 
 namespace FolderDeck.App.Views;
@@ -162,12 +164,32 @@ public partial class FolderPanelView : UserControl
         {
             old.SelectionCleared -= OnSelectionCleared;
             old.SelectionRestored -= OnSelectionRestored;
+            old.PropertyChanged -= OnPanelPropertyChanged;
         }
 
         if (e.NewValue is FolderPanelViewModel fresh)
         {
             fresh.SelectionCleared += OnSelectionCleared;
             fresh.SelectionRestored += OnSelectionRestored;
+            fresh.PropertyChanged += OnPanelPropertyChanged;
+        }
+    }
+
+    /// <summary>
+    /// 컬럼 표시 토글의 갱신 경로(Phase 15 · D79 · C-5) — 커맨드가
+    /// <c>OnPropertyChanged(nameof(CurrentShowSize))</c> 등을 부르면(D79-b-fix) 여기서 받아
+    /// 컬럼을 다시 고른다. <see cref="OnDataContextChanged"/> 가 이미 뷰모델 교체마다
+    /// 구독·해지를 다루는 자리라 그 옆에 얹는다 — 새 자리를 만들지 않는다.
+    /// </summary>
+    private void OnPanelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(FolderPanelViewModel.CurrentShowSize)
+            or nameof(FolderPanelViewModel.CurrentShowModified)
+            or nameof(FolderPanelViewModel.CurrentShowPosition)
+            && ViewModel is { } panel
+            && DetailsList.View is GridView grid)
+        {
+            ApplyColumnVisibility(grid, panel);
         }
     }
 
@@ -365,15 +387,23 @@ public partial class FolderPanelView : UserControl
     /// <summary>
     /// 「지금 보고 있는 폴더」 메뉴(§4.6 · D75)가 열리기 <b>직전</b>에 자리를 가른다 —
     /// <c>ListArea</c> 에 붙은 <c>ContextMenu</c> 는 항목 위에서도 열리려 하므로(WPF 는 가장
-    /// 가까운 조상의 <c>ContextMenu</c> 를 찾아 연다) 항목·스크롤바·컬럼 머리 위에서는
-    /// 여기서 취소한다. <b>breadcrumb 도 이 핸들러를 그대로 쓴다</b>(D75-d) — 검색 타일
-    /// 가드가 두 자리 모두에 필요하기 때문이다.
+    /// 가까운 조상의 <c>ContextMenu</c> 를 찾아 연다) 항목·스크롤바 위에서는 여기서 취소한다.
+    /// <b>컬럼 머리 위에서는 취소하지 않고 비켜 준다</b>(Phase 15 · D79 · C-2) — 컬럼 자신의
+    /// 메뉴(컬럼 선택, <c>GridView.ColumnHeaderContainerStyle</c>)가 대신 열려야 하기 때문이다.
+    /// <b>breadcrumb 도 이 핸들러를 그대로 쓴다</b>(D75-d) — 검색 타일 가드가 두 자리 모두에
+    /// 필요하기 때문이다.
     /// </summary>
     /// <remarks>
+    /// <b>컬럼 머리 검사가 맨 앞이다</b>(Phase 15 · D79 · C-3) — 검색 타일에서도 컬럼 선택
+    /// 메뉴는 열려야 한다(§3.2, 검색 뷰도 토글된다). <c>IsSearchTile</c> 검사를 앞에 두면 헤더
+    /// 우클릭까지 통째로 죽는다.
+    /// <para>
     /// <b>검색 타일은 <see cref="FolderPanelViewModel.IsSearchTile"/> 을 직접 본다</b>(D75-d) —
-    /// <c>design.md</c> §4.6 이 「검색 타일에서는 이 메뉴를 열지 않는다」고 못박았다.
+    /// <c>design.md</c> §4.6 이 「검색 타일에서는 이 메뉴를 열지 않는다」고 못박았다. 여기서 막는
+    /// 것은 「지금 보고 있는 폴더」 메뉴뿐이다 — 컬럼 메뉴는 위에서 이미 갈렸다.
     /// <c>CurrentPath == null</c> 부작용에는 기대지 않는다(D75-b-3 과 같은 이유). 커맨드
     /// 안쪽의 <c>IsSearchTile</c> 가드(D75-b)는 그대로 둔다 — 이중 방어다.
+    /// </para>
     /// <para>
     /// <b>고무줄과 같은 판정(<see cref="RubberBand.Classify"/>)을 그대로 쓴다</b>(D75-c) — 새
     /// 히트테스트를 만들면 같은 자리가 두 뜻을 갖게 된다. 항목 위는 이미
@@ -384,22 +414,22 @@ public partial class FolderPanelView : UserControl
     /// <b>컬럼 머리는 <c>Classify</c> 로 안 걸린다</b>(D75-d) — <c>GridViewColumnHeader</c> 는
     /// <c>ListView</c> 의 헤더 행 자손이지 <c>ListViewItem</c>·<c>ScrollBar</c>·<c>Thumb</c> 조상을
     /// 갖지 않으므로 <c>Classify</c> 는 <see cref="ListHitKind.Empty"/> 를 돌려준다(FolderPanelView.xaml:161-166
-    /// 의 주석이 그 자손 관계를 이미 적어 두었다). 컬럼 머리는 「지금 보고 있는 폴더」가 아니라
-    /// 목록의 표시 방식을 다루는 자리라 별도로 걸러 낸다 — <c>Classify</c> 자체는 고치지 않는다
+    /// 의 주석이 그 자손 관계를 이미 적어 두었다). 그래서 <c>Classify</c> 하나만으로는 컬럼 머리를
+    /// 가려낼 수 없어 별도 조상 검사를 앞에 둔다 — <c>Classify</c> 자체는 고치지 않는다
     /// (D75-d-3, §4.8 고무줄이 함께 움직이지 않게).
     /// </para>
     /// </remarks>
     private void OnListContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        if (ViewModel is { IsSearchTile: true })
-        {
-            e.Handled = true;
-            return;
-        }
-
         var ancestors = RubberBand.AncestorTypes(e.OriginalSource, this);
 
         if (ancestors.Any(t => typeof(GridViewColumnHeader).IsAssignableFrom(t)))
+        {
+            // 컬럼 머리 자신의 메뉴가 연다 — 취소하지 않는다(Phase 15 · D79 · C-2·C-3).
+            return;
+        }
+
+        if (ViewModel is { IsSearchTile: true })
         {
             e.Handled = true;
             return;
@@ -691,6 +721,65 @@ public partial class FolderPanelView : UserControl
     /// <summary>그때 써 준 값. 같은 값을 다시 쓰지 않는다(재진입 차단).</summary>
     private double _flexWidth = double.NaN;
 
+    // ── 컬럼 표시 토글 (§3.2 · Phase 15 · D79) ────────────────────────────────
+
+    /// <summary>마지막으로 열을 골라 준 <c>GridView</c>. 뷰를 갈아타면 다른 인스턴스가 온다.</summary>
+    private GridView? _columnVisibilityGrid;
+
+    /// <summary>
+    /// <see cref="_columnVisibilityGrid"/> 가 처음 왔을 때의 <b>전체</b> 컬럼(원본 인스턴스,
+    /// XAML 선언 순서). 여기서 고른 것만 <see cref="ApplyColumnVisibility"/> 가
+    /// <c>grid.Columns</c> 에 도로 꽂는다 — 새 <c>GridViewColumn</c> 을 만들지 않아야 다시 켰을
+    /// 때 셀 템플릿·<c>SortKey</c>·<c>IsFlexible</c> 등 XAML 이 붙인 것이 전부 그대로다.
+    /// </summary>
+    private List<GridViewColumn>? _originalColumns;
+
+    /// <summary>
+    /// 보여야 할 열만 남긴다(C-4). <c>Header</c> 글자로 가르지 않는다 — 판정 자체는
+    /// <see cref="ColumnVisibility.ShouldShow"/> 에 뺐다(뷰 밖에서 시험할 수 있게,
+    /// <see cref="ColumnLayout"/> 과 같은 결).
+    /// </summary>
+    /// <remarks>
+    /// <b>두 자리에서 부른다</b>(C-5) — <see cref="OnDetailsScrollChanged"/> 가 (인스턴스 교체를
+    /// 포함해) 스크롤 정보가 바뀔 때마다, 그리고 <see cref="OnPanelPropertyChanged"/> 가 토글
+    /// 통지를 받을 때. 이미 원하는 모양이면 <c>grid.Columns</c> 를 건드리지 않는다(재진입 방지).
+    /// <para>
+    /// <b>부른 뒤 <see cref="_flexColumn"/> 과 <see cref="_flexWidth"/> 를 둘 다 비운다</b>(C-6).
+    /// <c>_flexWidth</c> 만으로는 부족하다 — 실측(격리 스파이크): 열을 지우거나 꽂으면
+    /// <c>ScrollChanged</c> 가 오긴 하지만 <c>ExtentWidthChange</c> 만 바뀌고
+    /// <c>ViewportWidthChange</c> 는 0 이다. <see cref="_flexColumn"/> 을 비우지 않으면
+    /// <see cref="OnDetailsScrollChanged"/> 의 문턱 ①(<c>!swapped &amp;&amp;
+    /// ViewportWidthChange == 0</c>)이 재계산 자체를 막아 「열을 껐는데 이름 열이 안
+    /// 넓어진다」가 재현된다.
+    /// </para>
+    /// </remarks>
+    private void ApplyColumnVisibility(GridView grid, FolderPanelViewModel panel)
+    {
+        if (!ReferenceEquals(grid, _columnVisibilityGrid))
+        {
+            _columnVisibilityGrid = grid;
+            _originalColumns = [.. grid.Columns];
+        }
+
+        var desired = _originalColumns!
+            .Where(c => ColumnVisibility.ShouldShow(c, panel.CurrentShowSize, panel.CurrentShowModified, panel.CurrentShowPosition))
+            .ToList();
+
+        if (grid.Columns.Count == desired.Count && grid.Columns.SequenceEqual(desired))
+        {
+            return;
+        }
+
+        grid.Columns.Clear();
+        foreach (var column in desired)
+        {
+            grid.Columns.Add(column);
+        }
+
+        _flexColumn = null;
+        _flexWidth = double.NaN;
+    }
+
     /// <summary>
     /// 목록의 스크롤 정보가 바뀌었다 — 늘리는 컬럼의 폭을 다시 잡는다.
     /// </summary>
@@ -714,11 +803,23 @@ public partial class FolderPanelView : UserControl
     /// 뷰를 갈아타면(평소 ↔ 재귀 검색) <b>컬럼 인스턴스가 새것</b>이라 뷰포트가 그대로여도 한 번
     /// 다시 쓴다 — 그러지 않으면 검색 뷰가 XAML 출발값(위치 180)으로 남는다.
     /// </para>
+    /// <para>
+    /// <b>컬럼을 고르는 것이 폭을 재는 것보다 먼저다</b>(Phase 15 · D79 · C-5) —
+    /// <see cref="ApplyColumnVisibility"/> 를 맨 앞에서 부른다. 인스턴스가 갓 바뀐 뷰라면
+    /// 여기가 「인스턴스 교체 시점」 재적용 자리이기도 하다. 숨긴 열은 <c>grid.Columns</c> 에서
+    /// 이미 빠진 채로 내려오므로 아래 <c>others</c> 합산에 자연히 낀다(§4.6 · §7.1).
+    /// </para>
     /// </remarks>
     private void OnDetailsScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        if (sender is not ListView { View: GridView grid }
-            || ColumnLayout.FlexColumn(grid) is not { } column)
+        if (sender is not ListView { View: GridView grid } || ViewModel is not { } panel)
+        {
+            return;
+        }
+
+        ApplyColumnVisibility(grid, panel);
+
+        if (ColumnLayout.FlexColumn(grid) is not { } column)
         {
             return;
         }
