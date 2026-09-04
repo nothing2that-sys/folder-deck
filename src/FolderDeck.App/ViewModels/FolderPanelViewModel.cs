@@ -237,6 +237,16 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
     private bool searchShowModified = true;
 
+    /// <summary>
+    /// 검색 타일이 스스로 드는 미리보기 칸 상태(Phase 17 · D86 · §7.1 v9) — <c>Entry</c> 가
+    /// 없어 폴더 타일처럼 <c>FolderEntry.ShowPreview</c> 에 저장할 자리가 없다. 저장하지
+    /// 않는다 — 위 셋과 같은 이유다. <b>초기값이 위 셋과 반대인 것이 요점이다</b> — 미리보기는
+    /// 켜짐이 기본이 아니라 꺼짐이 기본이다(Phase 17 전에는 없던 기능이라서).
+    /// </summary>
+    private bool searchShowPreview;
+
+    private double searchPreviewRatio = FolderEntry.DefaultPreviewRatio;
+
     /// <summary>지금 `크기` 열 표시 여부 — 검색 타일은 자체 상태, 폴더 타일은 <see cref="Entry"/> 것.</summary>
     /// <remarks>
     /// <b>공개다</b>(D79-b-fix F-1) — <see cref="CurrentSortBy"/> 와 달리 이 값 자체를 D79-c 가
@@ -248,6 +258,20 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// <summary>지금 `수정` 열 표시 여부 — 검색 타일은 자체 상태, 폴더 타일은 <see cref="Entry"/> 것.</summary>
     /// <remarks><see cref="CurrentShowSize"/> 와 같은 이유로 공개다.</remarks>
     public bool CurrentShowModified => IsSearchTile ? searchShowModified : Entry?.ShowModified ?? true;
+
+    /// <summary>지금 미리보기 칸 표시 여부 — 검색 타일은 자체 상태, 폴더 타일은 <see cref="Entry"/> 것.</summary>
+    /// <remarks>
+    /// <see cref="CurrentShowSize"/> 와 같은 이유로 공개다. <b>폴백이 <c>?? false</c> 인 것이
+    /// 형제들과 다른 점이다</b> — <c>Entry</c> 가 아직 없는 빈 순환 칸에서는(§2.3) 「꺼짐」이
+    /// 이 칸의 기본값이므로, 형제들의 <c>?? true</c> 를 그대로 따라가면 안 켠 기능이 켜진
+    /// 것처럼 보인다.
+    /// </remarks>
+    public bool CurrentShowPreview => IsSearchTile ? searchShowPreview : Entry?.ShowPreview ?? false;
+
+    /// <summary>지금 미리보기 칸 비율 — 검색 타일은 자체 상태, 폴더 타일은 <see cref="Entry"/> 것.</summary>
+    /// <remarks><see cref="CurrentShowPreview"/> 와 같은 이유로 공개다.</remarks>
+    public double CurrentPreviewRatio =>
+        IsSearchTile ? searchPreviewRatio : Entry?.PreviewRatio ?? FolderEntry.DefaultPreviewRatio;
 
     /// <summary>
     /// 지금 `위치` 열 표시 여부 — <b>검색 타일에만 있는 개념이라 <see cref="Entry"/> 쪽 짝이
@@ -868,6 +892,63 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(CurrentShowModified));
+    }
+
+    /// <summary>
+    /// 타일 하단 미리보기 칸을 끄고 켠다 (Phase 17 · D86 · §3.2 · 헤더 첫 줄 뷰 토글 옆,
+    /// 진입점은 이 회차가 붙인다).
+    /// </summary>
+    /// <remarks><see cref="ToggleShowSize"/> 와 같은 결·같은 이유다. 목록을 다시 읽지 않는다.</remarks>
+    [RelayCommand]
+    public void ToggleShowPreview()
+    {
+        if (IsSearchTile)
+        {
+            searchShowPreview = !searchShowPreview;
+        }
+        else
+        {
+            if (Entry is null)
+            {
+                return;
+            }
+
+            Entry.ShowPreview = !Entry.ShowPreview;
+            SaveFolderEntry?.Invoke();
+        }
+
+        OnPropertyChanged(nameof(CurrentShowPreview));
+    }
+
+    /// <summary>
+    /// 미리보기 스플리터가 끌기를 끝냈을 때 비율을 저장한다(Phase 17 · D86). 커맨드가 아니다 —
+    /// 코드비하인드가 <c>GridSplitter.DragCompleted</c> 에서 계산한 값을 그대로 넘긴다.
+    /// </summary>
+    /// <remarks>
+    /// <b>범위 검사를 여기서 하지 않는다</b> — 폴더 타일 쪽은 <see cref="FolderEntry.PreviewRatio"/>
+    /// 의 setter 가 이미 범위 밖 값을 기본값으로 떨어뜨린다(§7.1 v9 · D91). 여기서 또 검사하면
+    /// 같은 규칙이 두 자리에 살아 하나만 고쳐지는 사고가 난다. <c>searchPreviewRatio</c> 는
+    /// <see cref="FolderEntry.PreviewRatio"/> 처럼 스스로 클램프하는 setter 가 없는 평범한
+    /// 필드라 — 검색 타일 갈래에서만 같은 판정을 그대로 옮겨 쓴다.
+    /// </remarks>
+    public void SetPreviewRatio(double ratio)
+    {
+        if (IsSearchTile)
+        {
+            searchPreviewRatio = ratio is >= 0.0 and <= 1.0 ? ratio : FolderEntry.DefaultPreviewRatio;
+        }
+        else
+        {
+            if (Entry is null)
+            {
+                return;
+            }
+
+            Entry.PreviewRatio = ratio;
+            SaveFolderEntry?.Invoke();
+        }
+
+        OnPropertyChanged(nameof(CurrentPreviewRatio));
     }
 
     /// <summary>

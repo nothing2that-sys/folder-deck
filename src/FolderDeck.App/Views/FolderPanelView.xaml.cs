@@ -173,6 +173,10 @@ public partial class FolderPanelView : UserControl
             fresh.SelectionRestored += OnSelectionRestored;
             fresh.PropertyChanged += OnPanelPropertyChanged;
         }
+
+        // 순환 칸이 다른 폴더로 갈아타도 이 컨트롤 인스턴스는 그대로다 — 그 폴더의
+        // 미리보기 상태로 다시 세워야 한다(Phase 17 · D86 · 회차 2a).
+        ApplyPreviewLayout();
     }
 
     /// <summary>
@@ -191,6 +195,79 @@ public partial class FolderPanelView : UserControl
         {
             ApplyColumnVisibility(grid, panel);
         }
+
+        // 미리보기는 컬럼 표시와 다른 일이다(행 셋을 세우는 것이지 컬럼을 고르는 것이
+        // 아니다) — 위 갈래에 섞지 않는다(Phase 17 · D86 · 회차 2a).
+        if (e.PropertyName is nameof(FolderPanelViewModel.CurrentShowPreview))
+        {
+            ApplyPreviewLayout();
+        }
+    }
+
+    /// <summary>미리보기 칸의 행 하한(Phase 17 · D86 · §3.2). 「정한 값」이다 — 고무줄 여백 32px 과 같은 종류.</summary>
+    private const double PreviewMinListHeight = 96;
+
+    /// <summary>미리보기 칸의 행 하한(Phase 17 · D86 · §3.2). 「정한 값」이다 — 고무줄 여백 32px 과 같은 종류.</summary>
+    private const double PreviewMinPaneHeight = 120;
+
+    /// <summary>
+    /// 미리보기 칸의 행 셋(<c>ListRow</c>·<c>SplitterRow</c>·<c>PreviewRow</c>)을 세운다
+    /// (Phase 17 · D86 · 회차 2a). 회차 2a 는 자리만 만드므로 내용은 갈아 끼우지 않는다 —
+    /// 2b 가 여기(그리고 이 메서드가 불리는 자리 전부)에 폭포 3단 갈아 끼우기를 붙인다.
+    /// </summary>
+    /// <remarks>
+    /// <b>꺼짐이면 이 회차 전과 화면이 같아야 한다</b> — <c>PreviewRow.Height</c> 를 <c>0</c> 으로
+    /// 눌러 <c>ListArea</c> 가 예전처럼 <c>ListRow</c>(별 가중치 <c>*</c>, XAML 출발값)를 전부
+    /// 쓴다. <c>ListRow.Height</c> 는 건드리지 않는다 — 건드릴 이유가 없다.
+    /// </remarks>
+    private void ApplyPreviewLayout()
+    {
+        if (ViewModel is not { } panel)
+        {
+            return;
+        }
+
+        if (panel.CurrentShowPreview)
+        {
+            PreviewSplitter.Visibility = Visibility.Visible;
+            PreviewPane.Visibility = Visibility.Visible;
+
+            var ratio = panel.CurrentPreviewRatio;
+            ListRow.Height = new GridLength(1 - ratio, GridUnitType.Star);
+            PreviewRow.Height = new GridLength(ratio, GridUnitType.Star);
+            ListRow.MinHeight = PreviewMinListHeight;
+            PreviewRow.MinHeight = PreviewMinPaneHeight;
+        }
+        else
+        {
+            PreviewSplitter.Visibility = Visibility.Collapsed;
+            PreviewPane.Visibility = Visibility.Collapsed;
+
+            PreviewRow.Height = new GridLength(0);
+            PreviewRow.MinHeight = 0;
+            ListRow.MinHeight = 0;
+        }
+    }
+
+    /// <summary>
+    /// 스플리터 끌기가 끝나면 비율을 저장한다(Phase 17 · D86). <b>끄는 동안은 저장하지
+    /// 않는다</b> — 워크스페이스가 픽셀마다 써진다. 분모가 0 이면(레이아웃이 아직 안 돈
+    /// 경우) 아무것도 하지 않는다.
+    /// </summary>
+    private void OnPreviewSplitterDragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        if (ViewModel is not { } panel)
+        {
+            return;
+        }
+
+        var total = ListRow.ActualHeight + PreviewRow.ActualHeight;
+        if (total <= 0)
+        {
+            return;
+        }
+
+        panel.SetPreviewRatio(PreviewRow.ActualHeight / total);
     }
 
     /// <summary>

@@ -452,6 +452,14 @@
                                 AutomationProperties.Name="뷰 방식 전환"
                                 ToolTip="{Binding ViewModeTip}" />
 
+                        <!-- 미리보기 칸 토글 (Phase 17 · D86 · §3.2). 진입점이 여기인 이유는
+                             컬럼 머리글 우클릭을 열 토글이 이미 쓰고 있어서다(D79). -->
+                        <Button Style="{StaticResource TertiaryNavButton}" Width="20"
+                                Command="{Binding ToggleShowPreviewCommand}"
+                                Content="▤"
+                                AutomationProperties.Name="미리보기 칸 전환"
+                                ToolTip="미리보기 칸" />
+
                         <!-- 정렬 (부채 17 · Phase 8-C ③). 아이콘은 방향(▴/▾)과 통합(∪)만
                              말하고 기준은 툴팁과 열리는 메뉴가 말한다 — 네 기준에 글리프를
                              하나씩 붙이면 어휘표가 이 앱 쪽으로 비대해진다(familylook §6).
@@ -707,7 +715,31 @@
                  쓴다"고 여기 적어 두었었다. 그 근거는 틀렸다 — 고무줄은 좌클릭 드래그고 이
                  메뉴는 우클릭이라 애초에 자리를 다투지 않는다. design.md §4.6 「지금 보고
                  있는 폴더」 메뉴(D75) 절이 이 뒤집음의 근거를 갖는다. -->
-            <Grid x:Name="ListArea" ContextMenu="{StaticResource CurrentFolderMenu}"
+            <Grid x:Name="ListAndPreview">
+                <!-- ListArea 와 미리보기 칸을 함께 담는 바깥 Grid (Phase 17 · D86 · §3.2).
+
+                     DockPanel 은 Dock 없는 「마지막 자식」에게 남은 자리를 준다 — 그 자리를
+                     ListArea 가 혼자 쓰고 있었다. 미리보기 칸을 형제로 나란히 두면 Dock 을
+                     줘야 하고 그러면 위의 검색 상태 줄과 자리를 다툰다. 그래서 둘을 이 Grid 로
+                     묶고 이 Grid 가 마지막 자식이 된다.
+
+                     행 셋 — 목록(*) · 스플리터(Auto) · 미리보기(*). 저장되는 값은 비율 하나이고
+                     (§7.1 v9 previewRatio) 두 별 가중치가 그것을 나눠 갖는다. 꺼져 있을 때는
+                     코드비하인드가 아래 둘을 Collapsed 로 두고 PreviewRow 를 0 으로 눌러
+                     ListArea 가 예전과 똑같이 전부를 쓴다 — 기본이 꺼짐이므로 이 회차 전과
+                     화면이 같아야 한다.
+
+                     MinHeight 96/120 은 「정한 값」이다(고무줄 여백 32px 과 같은 종류).
+                     목록 한 줄이 약 23px 이고 상세 뷰는 컬럼 머리글이 위를 먹으므로 96px 이
+                     대략 「머리글 + 세 줄」이다. 미리보기는 38px 에서 xlsx 가 시트 탭 줄만
+                     남았다(D85 실측). 비율만으로는 목록이 한 줄도 안 남는 자리를 못 막는다. -->
+                <Grid.RowDefinitions>
+                    <RowDefinition x:Name="ListRow" Height="*" />
+                    <RowDefinition x:Name="SplitterRow" Height="Auto" />
+                    <RowDefinition x:Name="PreviewRow" Height="0" />
+                </Grid.RowDefinitions>
+
+            <Grid x:Name="ListArea" Grid.Row="0" ContextMenu="{StaticResource CurrentFolderMenu}"
                   ContextMenuOpening="OnListContextMenuOpening">
                 <!-- "검색 안 함"(평소 빈 폴더)과 구분되는 "결과 없음" -->
                 <TextBlock Text="결과 없음" Foreground="{StaticResource Brush.TextSecondary}"
@@ -794,6 +826,27 @@
                                Stroke="{StaticResource Brush.Accent}" StrokeThickness="1"
                                Fill="{StaticResource Brush.AccentSurface}" />
                 </Canvas>
+            </Grid>
+
+                <!-- 목록 ↔ 미리보기 경계 (Phase 17 · D86). RowSplitter 스타일은 이미 있는 것을
+                     그대로 쓴다 — 새 모양을 만들지 않는다. 끌기가 끝날 때만 비율을 저장한다
+                     (끄는 동안 저장하면 워크스페이스가 픽셀마다 써진다). -->
+                <GridSplitter x:Name="PreviewSplitter" Grid.Row="1" Height="6"
+                              Style="{StaticResource RowSplitter}"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"
+                              Visibility="Collapsed"
+                              DragCompleted="OnPreviewSplitterDragCompleted" />
+
+                <!-- 미리보기 칸 — 회차 2a 는 자리만 만든다. 내용(폭포 3단·MOTW)은 2b 다.
+                     그래서 지금은 ③ 단 글귀만 늘 보인다. -->
+                <Border x:Name="PreviewPane" Grid.Row="2" Visibility="Collapsed"
+                        Background="{StaticResource Brush.Surface}"
+                        BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0">
+                    <TextBlock Text="미리 볼 수 없습니다" FontSize="11"
+                               Foreground="{StaticResource Brush.TextSecondary}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
             </Grid>
         </DockPanel>
 
