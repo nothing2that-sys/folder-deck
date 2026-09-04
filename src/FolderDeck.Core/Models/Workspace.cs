@@ -34,6 +34,12 @@ public sealed class Workspace
     /// 8 — <c>folders[].showSize</c>·<c>folders[].showModified</c> 추가(Phase 15 · D79). 6 과
     /// 같은 이유로 올린다: <b>필드 추가뿐</b>이고 둘 다 없으면 기본값(둘 다 보인다)이 되는데
     /// 그것이 Phase 15 전의 실제 동작이라 <b>구파일에 마이그레이션이 필요 없다.</b>
+    /// 9 — <c>folders[].showPreview</c>·<c>folders[].previewRatio</c> 추가(Phase 17 · D86).
+    /// 6·8 과 같은 이유로 올린다: <b>필드 추가뿐</b>이라 구파일에 마이그레이션이 필요 없다.
+    /// 다만 <b>초기화자 방향이 반대다</b> — 6·8 은 기존 동작이 「켜짐」이라 <c>= true</c> 였고,
+    /// 미리보기 칸은 Phase 17 전에 <b>없던 것</b>이라 <c>= false</c> 여야 구파일 동작이 그대로다.
+    /// <c>previewRatio</c> 는 이 저장소의 첫 <b>연속 범위 클램프</b>다 — 범위(0.0 이상 1.0
+    /// 이하) 밖의 값은 가장 가까운 끝값으로 자르지 않고 기본값 0.35 로 떨어진다.
     /// </para>
     /// </summary>
     public const int CurrentSchemaVersion = 9;
