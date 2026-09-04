@@ -53,6 +53,37 @@ public sealed class FolderEntry
     /// <remarks><see cref="ShowSize"/> 와 같은 이유·같은 기본값이다.</remarks>
     public bool ShowModified { get; set; } = true;
 
+    /// <summary>타일 하단 미리보기 칸을 보일지 (schemaVersion 9 · Phase 17 · D86).</summary>
+    /// <remarks>
+    /// <b><see cref="ShowSize"/>·<see cref="FoldersFirst"/> 와 초기화자 방향이 반대인 것이
+    /// 핵심이다.</b> 저 둘은 기존 동작이 「켜짐」이라 <c>= true</c> 여야 했고, 미리보기 칸은
+    /// Phase 17 전에는 <b>없던 것</b>이라 <c>= false</c> 여야 구파일의 동작이 그대로다.
+    /// <c>bool</c> 기본값이 마침 <c>false</c> 라 초기화자를 생략해도 동작은 같지만, 옆의 두
+    /// 필드가 <c>= true</c> 인 자리에서 초기화자 없는 것만 뜻이 안 보이므로 그래도 명시한다.
+    /// </remarks>
+    public bool ShowPreview { get; set; } = false;
+
+    /// <summary>범위 밖 <see cref="PreviewRatio"/> 값이 떨어지는 기본값 (schemaVersion 9).</summary>
+    public const double DefaultPreviewRatio = 0.35;
+
+    private double _previewRatio = DefaultPreviewRatio;
+
+    /// <summary>목록+미리보기 높이 중 미리보기 몫 (schemaVersion 9 · Phase 17 · D86).</summary>
+    /// <remarks>
+    /// <b>초기화자가 없으면 슬롯 없는 구파일이 <c>0.0</c> 으로 읽혀 켠 순간 칸이 0 높이로
+    /// 뜬다.</b> 범위(<c>0.0</c> 이상 <c>1.0</c> 이하, 양 끝 포함) 밖의 값은 가장 가까운
+    /// 끝값으로 자르지 않고 <see cref="DefaultPreviewRatio"/> 로 떨어뜨린다 — <c>AppSettings</c>
+    /// 의 <c>TileGap</c>·<c>EverythingMaxResults</c> 와 같은 결이다: 자료형이 달라도 저장소
+    /// 안에서 같은 뜻의 장치가 두 모양이 되는 것이 더 나쁘다. <c>NaN</c> 도 범위 비교가 전부
+    /// 거짓이 되어 저절로 여기로 떨어진다 — 그러려고 <c>value is &gt;= 0.0 and &lt;= 1.0</c>
+    /// 형태로 쓴 것이니 다른 형태로 바꾸지 않는다.
+    /// </remarks>
+    public double PreviewRatio
+    {
+        get => _previewRatio;
+        set => _previewRatio = value is >= 0.0 and <= 1.0 ? value : DefaultPreviewRatio;
+    }
+
     /// <summary>상시(고정) 칸 대상인지 (§2.3).</summary>
     public bool Pinned { get; set; }
 

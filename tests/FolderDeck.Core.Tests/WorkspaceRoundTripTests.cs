@@ -178,6 +178,33 @@ public sealed class WorkspaceRoundTripTests
         Assert.False(reloaded.Folders[1].ShowModified);
     }
 
+    /// <summary>
+    /// `showPreview`·`previewRatio` 가 섞인 값(기본값이 아닌 값)으로 저장 → 로드해도 그대로다
+    /// (§7.1 v9 · Phase 17 · D86).
+    /// </summary>
+    [Fact]
+    public void ShowPreviewAndPreviewRatioSurviveARoundTrip()
+    {
+        using var temp = new TempStore();
+        var workspace = new Workspace
+        {
+            Title = "미리보기 왕복",
+            Folders =
+            [
+                new FolderEntry { Path = @"D:\some\code", ShowPreview = true, PreviewRatio = 0.6 },
+                new FolderEntry { Path = @"D:\some\logs", ShowPreview = false, PreviewRatio = 0.2 },
+            ],
+        };
+
+        temp.Store.SaveWorkspace(workspace);
+        var reloaded = temp.Store.LoadWorkspace(workspace.Id).ValueOrThrow();
+
+        Assert.True(reloaded.Folders[0].ShowPreview);
+        Assert.Equal(0.6, reloaded.Folders[0].PreviewRatio);
+        Assert.False(reloaded.Folders[1].ShowPreview);
+        Assert.Equal(0.2, reloaded.Folders[1].PreviewRatio);
+    }
+
     /// <summary>검색 타일이 든 워크스페이스가 저장 → 로드를 무손실로 왕복한다(§7.1 v7 · D69-c).</summary>
     [Fact]
     public void ASearchTileSurvivesARoundTrip()

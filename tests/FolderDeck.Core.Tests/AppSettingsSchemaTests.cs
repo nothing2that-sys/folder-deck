@@ -60,7 +60,7 @@ public sealed class AppSettingsSchemaTests : IDisposable
     /// </summary>
     [Fact]
     public void TheWorkspaceSchemaMovesForItsOwnReasons() =>
-        Assert.Equal(8, Workspace.CurrentSchemaVersion);
+        Assert.Equal(9, Workspace.CurrentSchemaVersion);
 
     // ── 왕복 ─────────────────────────────────────────────────────────────────
 

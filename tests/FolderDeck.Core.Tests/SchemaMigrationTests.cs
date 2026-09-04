@@ -167,10 +167,44 @@ public sealed class SchemaMigrationTests : IDisposable
         return id;
     }
 
-    [Fact]
-    public void CurrentSchemaVersionIsEight()
+    /// <summary>Phase 15 가 남긴 것과 같은 모양의 v8 파일 — 미리보기 슬롯 둘이 아예 없다.</summary>
+    private Guid WriteV8File()
     {
-        Assert.Equal(8, Workspace.CurrentSchemaVersion);
+        var id = Guid.NewGuid();
+        var json = $$"""
+        {
+          "schemaVersion": 8,
+          "id": "{{id}}",
+          "title": "v8 워크스페이스",
+          "lastUsed": "2026-07-08T09:10:11+09:00",
+          "folders": [
+            {
+              "id": "{{Guid.NewGuid()}}",
+              "path": "D:\\work\\src",
+              "displayName": "src",
+              "viewMode": "details",
+              "sortBy": "modified",
+              "sortDesc": true,
+              "foldersFirst": false,
+              "showSize": false,
+              "showModified": true,
+              "pinned": true
+            }
+          ],
+          "leftLayout": { "foldersCollapsed": true, "lowerCollapsed": false, "leftPanelCollapsed": true },
+          "grid": { "cols": 4, "rows": 4 },
+          "window": { "x": 10, "y": 20, "width": 800, "height": 600, "maximized": false }
+        }
+        """;
+
+        File.WriteAllText(_paths.WorkspaceFile(id), json);
+        return id;
+    }
+
+    [Fact]
+    public void CurrentSchemaVersionIsNine()
+    {
+        Assert.Equal(9, Workspace.CurrentSchemaVersion);
     }
 
     [Fact]
@@ -791,14 +825,14 @@ public sealed class SchemaMigrationTests : IDisposable
     }
 
     [Fact]
-    public void SavingStampsWorkspaceSchemaVersionEight()
+    public void SavingStampsWorkspaceSchemaVersionNine()
     {
         var workspace = new Workspace { Title = "버전 찍힘" };
 
         Assert.Null(_store.SaveWorkspace(workspace));
 
         var json = File.ReadAllText(_paths.WorkspaceFile(workspace.Id));
-        Assert.Contains("\"schemaVersion\": 8", json);
+        Assert.Contains("\"schemaVersion\": 9", json);
     }
 
     // ── schemaVersion 8 (Phase 15 · D79) ─────────────────────────────────────
@@ -873,5 +907,113 @@ public sealed class SchemaMigrationTests : IDisposable
         var json = File.ReadAllText(_paths.WorkspaceFile(id));
         Assert.Contains("\"showSize\": true", json);
         Assert.Contains("\"showModified\": true", json);
+    }
+
+    // ── schemaVersion 9 (Phase 17 · D86) ─────────────────────────────────────
+    //
+    // 두 슬롯이 늘었다: folders[].showPreview · folders[].previewRatio.
+    // 둘 다 필드 추가뿐이라 구파일을 거부하지 않는다 — 없으면 기본값으로 읽히고
+    // 그 기본값이 Phase 17 전의 실제 동작(미리보기 칸 없음)이라 마이그레이션 코드가 없다.
+
+    /// <summary>
+    /// <b>「미리보기」가 없으면 꺼진 것으로 읽힌다.</b> <c>showSize</c>·<c>foldersFirst</c> 와
+    /// 방향이 반대다 — 저 둘은 기존 동작이 켜짐이라 <c>= true</c> 였지만, 미리보기 칸은 Phase 17
+    /// 전에 없던 기능이라 <c>= false</c> 여야 구파일 동작이 그대로다.
+    /// </summary>
+    [Fact]
+    public void AMissingShowPreviewReadsAsOff()
+    {
+        var id = WriteV8File();
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        var folder = Assert.Single(workspace.Folders);
+        Assert.False(folder.ShowPreview);
+    }
+
+    /// <summary>슬롯이 없는 구파일은 미리보기 몫이 기본값(0.35)으로 읽힌다.</summary>
+    [Fact]
+    public void AMissingPreviewRatioReadsAsTheDefault()
+    {
+        var id = WriteV8File();
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        var folder = Assert.Single(workspace.Folders);
+        Assert.Equal(FolderEntry.DefaultPreviewRatio, folder.PreviewRatio);
+    }
+
+    /// <summary>v1 파일도 마찬가지다 — 슬롯이 없던 시절이 더 길다.</summary>
+    [Fact]
+    public void AV1FileAlsoReadsTheV9SlotsAsDefaults()
+    {
+        var id = WriteV1File();
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        var folder = Assert.Single(workspace.Folders);
+        Assert.False(folder.ShowPreview);
+        Assert.Equal(FolderEntry.DefaultPreviewRatio, folder.PreviewRatio);
+    }
+
+    /// <summary>저장하면 지금 판(9)으로 승격되고 두 슬롯이 파일에 적힌다.</summary>
+    [Fact]
+    public void SavingAV8FilePromotesItToV9AndWritesTheNewSlots()
+    {
+        var id = WriteV8File();
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        workspace.Folders[0].ShowPreview = true;
+        Assert.Null(_store.SaveWorkspace(workspace));
+
+        var json = File.ReadAllText(_paths.WorkspaceFile(id));
+        Assert.Contains("\"schemaVersion\": 9", json);
+        Assert.Contains("\"showPreview\": true", json);
+        Assert.Contains("\"previewRatio\": 0.35", json);
+
+        var reloaded = _store.LoadWorkspace(id).ValueOrThrow();
+        Assert.Equal(9, reloaded.SchemaVersion);
+        Assert.True(reloaded.Folders[0].ShowPreview);
+        Assert.Equal(FolderEntry.DefaultPreviewRatio, reloaded.Folders[0].PreviewRatio);
+
+        // 옆 슬롯(v8 의 showSize)은 건드리지 않았다.
+        Assert.False(reloaded.Folders[0].ShowSize);
+    }
+
+    /// <summary>기본값 그대로여도 파일에는 적힌다 — 형제 슬롯(showSize 등)과 같은 규칙이다.</summary>
+    [Fact]
+    public void TheNewV9SlotsAreWrittenEvenAtTheirDefaults()
+    {
+        var id = WriteV8File();
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        Assert.Null(_store.SaveWorkspace(workspace));
+
+        var json = File.ReadAllText(_paths.WorkspaceFile(id));
+        Assert.Contains("\"showPreview\": false", json);
+        Assert.Contains("\"previewRatio\": 0.35", json);
+    }
+
+    /// <summary>손으로 고친 파일에 범위 밖 값이 들어 있으면 기본값으로 떨어진다(§7.1 v9).</summary>
+    [Fact]
+    public void APreviewRatioOutsideTheRangeFallsBackToTheDefault()
+    {
+        var id = Guid.NewGuid();
+        File.WriteAllText(_paths.WorkspaceFile(id), $$"""
+        {
+          "schemaVersion": 9,
+          "id": "{{id}}",
+          "title": "범위 밖 previewRatio",
+          "folders": [
+            { "id": "{{Guid.NewGuid()}}", "path": "D:\\work\\a", "previewRatio": 1.5 },
+            { "id": "{{Guid.NewGuid()}}", "path": "D:\\work\\b", "previewRatio": -0.2 }
+          ]
+        }
+        """);
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+
+        Assert.Equal(FolderEntry.DefaultPreviewRatio, workspace.Folders[0].PreviewRatio);
+        Assert.Equal(FolderEntry.DefaultPreviewRatio, workspace.Folders[1].PreviewRatio);
     }
 }

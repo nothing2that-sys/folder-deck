@@ -36,7 +36,7 @@ public sealed class Workspace
     /// 그것이 Phase 15 전의 실제 동작이라 <b>구파일에 마이그레이션이 필요 없다.</b>
     /// </para>
     /// </summary>
-    public const int CurrentSchemaVersion = 8;
+    public const int CurrentSchemaVersion = 9;
 
     /// <summary>
     /// 스키마 버전은 저장소 소유다. 저장할 때 <see cref="CurrentSchemaVersion"/> 이 찍히고,
