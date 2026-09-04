@@ -143,6 +143,8 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ModifiedHeaderText))]
     [NotifyPropertyChangedFor(nameof(IsDetailsView))]
     [NotifyPropertyChangedFor(nameof(IsListView))]
+    [NotifyPropertyChangedFor(nameof(CurrentShowPreview))]
+    [NotifyPropertyChangedFor(nameof(CurrentPreviewRatio))]
     private FolderEntry? entry;
 
     /// <summary>지금 보고 있는 경로. <b>런타임 전용 — JSON 에 저장하지 않는다</b>(§4.6).</summary>

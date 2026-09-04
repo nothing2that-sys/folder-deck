@@ -274,4 +274,38 @@ public sealed class PreviewPaneTests
         Assert.Null(panel.Entry);
         Assert.Equal(0, saves);
     }
+
+    /// <summary>
+    /// 순환 칸이 폴더를 갈아탈 때 실제로 벌어지는 일 — <c>DataContext</c> 는 안 바뀌고
+    /// <c>Entry</c> 만 갈린다(D93-b). 값이 맞는지가 아니라 <c>PropertyChanged</c> 가 그
+    /// 이름으로 나가는지를 문다 — <see cref="ColumnVisibilityTests.TogglingShowPositionDuringARecursiveSearchNotifiesCurrentShowPosition"/>
+    /// 과 같은 결이다. 통지가 안 나가면 화면(코드비하인드의 <c>ApplyPreviewLayout</c>)이
+    /// 다시 서지 않는다.
+    /// </summary>
+    [Fact]
+    public void AssigningTheEntryNotifiesCurrentShowPreview()
+    {
+        var panel = BareFolderPanel();
+
+        var seen = new List<string?>();
+        panel.PropertyChanged += (_, e) => seen.Add(e.PropertyName);
+
+        panel.Entry = new FolderEntry { Path = @"D:\x", ShowPreview = true, PreviewRatio = 0.6 };
+
+        Assert.Contains(nameof(FolderPanelViewModel.CurrentShowPreview), seen);
+    }
+
+    /// <summary><see cref="AssigningTheEntryNotifiesCurrentShowPreview"/> 와 같은 결·같은 이유다.</summary>
+    [Fact]
+    public void AssigningTheEntryNotifiesCurrentPreviewRatio()
+    {
+        var panel = BareFolderPanel();
+
+        var seen = new List<string?>();
+        panel.PropertyChanged += (_, e) => seen.Add(e.PropertyName);
+
+        panel.Entry = new FolderEntry { Path = @"D:\x", ShowPreview = true, PreviewRatio = 0.6 };
+
+        Assert.Contains(nameof(FolderPanelViewModel.CurrentPreviewRatio), seen);
+    }
 }
