@@ -838,14 +838,26 @@
                               Visibility="Collapsed"
                               DragCompleted="OnPreviewSplitterDragCompleted" />
 
-                <!-- 미리보기 칸 — 회차 2a 는 자리만 만든다. 내용(폭포 3단·MOTW)은 2b 다.
-                     그래서 지금은 ③ 단 글귀만 늘 보인다. -->
+                <!-- 미리보기 칸 — 회차 2b-1 이 ② 단(셸 썸네일)과 ③ 단(글귀)을 넣는다.
+                     ① 단(IPreviewHandler 호스팅)과 MOTW 판정은 2b-2 다.
+
+                     둘을 겹쳐 두고 코드비하인드가 하나만 보이게 한다 — 새 컨버터를 만들지
+                     않는다. 이 칸은 늘 한 파일만 그리므로 상태가 둘뿐이고, 컨버터를 만들면
+                     같은 판정이 XAML 과 코드비하인드 두 자리에 산다.
+
+                     StretchDirection="DownOnly" — 셸이 준 픽셀보다 크게 늘리지 않는다.
+                     확대하면 뭉개져서 「미리 볼 수 있다」가 거짓말이 된다. -->
                 <Border x:Name="PreviewPane" Grid.Row="2" Visibility="Collapsed"
                         Background="{StaticResource Brush.Surface}"
                         BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0">
-                    <TextBlock Text="미리 볼 수 없습니다" FontSize="11"
-                               Foreground="{StaticResource Brush.TextSecondary}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <Grid>
+                        <Image x:Name="PreviewImage" Visibility="Collapsed" Margin="8"
+                               Stretch="Uniform" StretchDirection="DownOnly"
+                               RenderOptions.BitmapScalingMode="HighQuality" />
+                        <TextBlock x:Name="PreviewFallbackText" Text="미리 볼 수 없습니다" FontSize="11"
+                                   Foreground="{StaticResource Brush.TextSecondary}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
                 </Border>
             </Grid>
         </DockPanel>

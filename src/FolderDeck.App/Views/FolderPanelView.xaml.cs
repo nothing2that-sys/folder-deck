@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using FolderDeck.App.Interop;
+using FolderDeck.App.Services;
 using FolderDeck.App.ViewModels;
 using FolderDeck.Core.Models;
 using FolderDeck.Core.Operations;
@@ -41,6 +42,18 @@ public partial class FolderPanelView : UserControl
     private FileItemViewModel? _pendingSingleSelect;
 
     private ListView? _pendingSingleSelectList;
+
+    /// <summary>
+    /// 미리보기 칸의 ② 단(셸 썸네일) 취득 계층(Phase 17 · D86 · D95). <b>패널마다 하나다</b>
+    /// (D95 §2 결정 5) — 앱 전체가 한 칸을 나눠 쓰면 타일 둘이 서로 밀어낸다.
+    /// </summary>
+    private readonly ShellThumbnailService _previewThumbnailService = new();
+
+    /// <summary>
+    /// 미리보기 취득 세대 번호(D95 §2 결정 8). 취득이 비동기라 빠르게 갈아타면 옛 결과가
+    /// 나중에 도착한다 — 돌아왔을 때 이 값이 그대로일 때만 그린다.
+    /// </summary>
+    private int _previewGeneration;
 
     public FolderPanelView()
     {
@@ -177,6 +190,7 @@ public partial class FolderPanelView : UserControl
         // 순환 칸이 다른 폴더로 갈아타도 이 컨트롤 인스턴스는 그대로다 — 그 폴더의
         // 미리보기 상태로 다시 세워야 한다(Phase 17 · D86 · 회차 2a).
         ApplyPreviewLayout();
+        ApplyPreviewContent();
     }
 
     /// <summary>
@@ -201,6 +215,14 @@ public partial class FolderPanelView : UserControl
         if (e.PropertyName is nameof(FolderPanelViewModel.CurrentShowPreview))
         {
             ApplyPreviewLayout();
+            ApplyPreviewContent();
+        }
+
+        // 대상이 바뀐 것은 칸을 켜고 끄는 것과 다른 일이다(행 셋이 아니라 내용만 다시
+        // 그린다) — 위 갈래들에 섞지 않는다(Phase 17 · D86 · D95 §5 R6).
+        if (e.PropertyName is nameof(FolderPanelViewModel.PreviewTarget))
+        {
+            ApplyPreviewContent();
         }
     }
 
@@ -247,6 +269,60 @@ public partial class FolderPanelView : UserControl
             PreviewRow.MinHeight = 0;
             ListRow.MinHeight = 0;
         }
+    }
+
+    /// <summary>
+    /// 미리보기 칸의 <b>내용</b>(② 단 · ③ 단)을 다시 그린다(Phase 17 · D86 · D95 §5 R6).
+    /// <see cref="ApplyPreviewLayout"/> 은 행만 세운다 — 내용은 여기가 맡는다.
+    /// </summary>
+    /// <remarks>
+    /// 늦게 온 취득 결과는 <see cref="_previewGeneration"/> 으로 버린다(D95 §2 결정 8) — 취득이
+    /// 비동기라 빠르게 갈아타면 옛 결과가 나중에 도착한다.
+    /// <para>
+    /// 요청 픽셀 크기가 아직 0 이면(레이아웃이 안 돌았다) <b>아무것도 바꾸지 않고</b> 돌아간다 —
+    /// ③ 단 글귀를 그대로 두고, 다음에 이 메서드가 다시 불릴 때(레이아웃이 돈 뒤) 그린다.
+    /// </para>
+    /// </remarks>
+    private async void ApplyPreviewContent()
+    {
+        if (ViewModel is not { } panel)
+        {
+            return;
+        }
+
+        if (panel.PreviewTarget is not { } target)
+        {
+            PreviewImage.Visibility = Visibility.Collapsed;
+            PreviewFallbackText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        var width = PreviewPane.ActualWidth;
+        var height = PreviewPane.ActualHeight;
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        var generation = ++_previewGeneration;
+        var image = await _previewThumbnailService.GetThumbnailAsync(
+            target.FullPath, (int)width, (int)height).ConfigureAwait(true);
+
+        if (generation != _previewGeneration)
+        {
+            return;
+        }
+
+        if (image is null)
+        {
+            PreviewImage.Visibility = Visibility.Collapsed;
+            PreviewFallbackText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        PreviewImage.Source = image;
+        PreviewImage.Visibility = Visibility.Visible;
+        PreviewFallbackText.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>

@@ -38,6 +38,9 @@ public sealed class PreviewPaneTests
         reportError: null,
         reportRejection: null);
 
+    private static void Select(FolderPanelViewModel panel, params string[] names) =>
+        panel.SelectedItems = [.. panel.Items.Where(i => names.Contains(i.Name))];
+
     [Fact]
     public async Task TurningOnShowPreviewFlipsTheFolderEntryAndSavesOnce()
     {
@@ -307,5 +310,86 @@ public sealed class PreviewPaneTests
         panel.Entry = new FolderEntry { Path = @"D:\x", ShowPreview = true, PreviewRatio = 0.6 };
 
         Assert.Contains(nameof(FolderPanelViewModel.CurrentPreviewRatio), seen);
+    }
+
+    // ── PreviewTarget (Phase 17 · D86 · 회차 2b-1 · D95-보정1) ─────────────────
+
+    /// <summary>고른 파일 하나가 미리보기 대상이다(D95 §2 결정 6).</summary>
+    [Fact]
+    public async Task ASingleSelectedFileIsThePreviewTarget()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var code = f.ViewModel.Panels[0];
+        var file = code.Items.First(i => !i.IsDirectory);
+        Select(code, file.Name);
+
+        Assert.Same(file, code.PreviewTarget);
+    }
+
+    /// <summary>여럿을 고르면 대상이 없다(D95 §2 결정 6).</summary>
+    [Fact]
+    public async Task SelectingTwoFilesLeavesNoPreviewTarget()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var output = f.ViewModel.Panels[1];
+        var files = output.Items.Where(i => !i.IsDirectory).Select(i => i.Name).ToArray();
+        Select(output, files);
+
+        Assert.Equal(2, output.SelectedItems.Count);
+        Assert.Null(output.PreviewTarget);
+    }
+
+    /// <summary>아무것도 안 고르면 대상이 없다.</summary>
+    [Fact]
+    public async Task SelectingNothingLeavesNoPreviewTarget()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var code = f.ViewModel.Panels[0];
+        Select(code);
+
+        Assert.Empty(code.SelectedItems);
+        Assert.Null(code.PreviewTarget);
+    }
+
+    /// <summary>폴더는 대상이 아니다(D95 §2 결정 7 — 새 결정).</summary>
+    [Fact]
+    public async Task ASingleSelectedFolderIsNotAPreviewTarget()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var code = f.ViewModel.Panels[0];
+        var folder = code.Items.First(i => i.IsDirectory);
+        Select(code, folder.Name);
+
+        Assert.Null(code.PreviewTarget);
+    }
+
+    /// <summary>
+    /// 값만 보지 않는다 — <c>SelectedItems</c> 를 대입했을 때 <c>PropertyChanged</c> 로
+    /// <c>PreviewTarget</c> 이 실제로 통지되는지를 문다(회차 2a 가 값만 물어 순환 칸 결함을
+    /// 놓친 것과 같은 사고를 막는다).
+    /// </summary>
+    [Fact]
+    public async Task AssigningSelectedItemsNotifiesPreviewTarget()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var code = f.ViewModel.Panels[0];
+        var file = code.Items.First(i => !i.IsDirectory);
+
+        var seen = new List<string?>();
+        code.PropertyChanged += (_, e) => seen.Add(e.PropertyName);
+
+        Select(code, file.Name);
+
+        Assert.Contains(nameof(FolderPanelViewModel.PreviewTarget), seen);
     }
 }

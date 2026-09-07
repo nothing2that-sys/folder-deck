@@ -351,6 +351,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasSelection))]
     [NotifyPropertyChangedFor(nameof(SelectionText))]
     [NotifyPropertyChangedFor(nameof(SelectionSuffix))]
+    [NotifyPropertyChangedFor(nameof(PreviewTarget))]
     private IReadOnlyList<FileItemViewModel> selectedItems = [];
 
     public bool HasSelection => SelectedItems.Count > 0;
@@ -370,6 +371,14 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// </para>
     /// </remarks>
     public string SelectionSuffix => HasSelection ? $" · {SelectionText}" : string.Empty;
+
+    /// <summary>
+    /// 미리보기 칸에 그릴 대상(Phase 17 · D86 · D95 §2 결정 6). 고른 것이 <b>파일 하나</b>일
+    /// 때만 값이 있다 — 여럿이면 아무것도 안 보인다(§3.2), 폴더는 대상이 아니다(D95 §2 결정 7,
+    /// 셸 썸네일이 나오긴 하나 「미리보기」로 읽히지 않는다는 새 결정이다).
+    /// </summary>
+    public FileItemViewModel? PreviewTarget =>
+        SelectedItems.Count == 1 && !SelectedItems[0].IsDirectory ? SelectedItems[0] : null;
 
     /// <summary>선택을 푼다. 뷰가 목록에서 실제로 풀도록 이벤트로도 알린다.</summary>
     public void ClearSelection()
