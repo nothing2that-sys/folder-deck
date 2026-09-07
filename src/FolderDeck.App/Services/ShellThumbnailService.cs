@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
@@ -78,8 +79,26 @@ public sealed class ShellThumbnailService
     /// </summary>
     public Task<BitmapSource?> GetThumbnailAsync(string path, int pixelWidth, int pixelHeight)
     {
-        var info = new FileInfo(path);
-        var stamp = ComputeStamp(path, info.Length, info.LastWriteTimeUtc);
+        string stamp;
+
+        // 호출자가 async void 라 여기서 던지면 앱이 내려간다. ③ 단으로 떨어뜨리는 것이
+        // 정상 경로다(파일이 사라졌거나 NAS 가 끊긴 경우를 포함).
+        try
+        {
+            var info = new FileInfo(path);
+
+            if (!info.Exists)
+            {
+                return Task.FromResult<BitmapSource?>(null);
+            }
+
+            stamp = ComputeStamp(path, info.Length, info.LastWriteTimeUtc);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or ArgumentException or NotSupportedException)
+        {
+            return Task.FromResult<BitmapSource?>(null);
+        }
 
         if (TryGetCached(stamp, out var cached))
         {
@@ -108,36 +127,52 @@ public sealed class ShellThumbnailService
         var size = new SIZE { cx = pixelWidth, cy = pixelHeight };
         const int flags = ShellItemNative.SIIGBF_BIGGERSIZEOK | ShellItemNative.SIIGBF_THUMBNAILONLY;
 
-        int hr;
-        var hbitmap = IntPtr.Zero;
+        object? item = null;
 
-        using (FpuGuard.Enter("IShellItemImageFactory"))
+        try
         {
-            hr = ShellItemNative.SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out var item);
+            int hr;
+            var hbitmap = IntPtr.Zero;
 
-            if (hr != 0 || item is not IShellItemImageFactory factory)
+            using (FpuGuard.Enter("IShellItemImageFactory"))
+            {
+                hr = ShellItemNative.SHCreateItemFromParsingName(path, IntPtr.Zero, ref iid, out item);
+
+                if (hr != 0 || item is not IShellItemImageFactory factory)
+                {
+                    return null;
+                }
+
+                hr = factory.GetImage(size, flags, out hbitmap);
+            }
+
+            if (hr != 0 || hbitmap == IntPtr.Zero)
             {
                 return null;
             }
 
-            hr = factory.GetImage(size, flags, out hbitmap);
+            try
+            {
+                var bitmap = Imaging.CreateBitmapSourceFromHBitmap(
+                    hbitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                bitmap.Freeze();
+                return bitmap;
+            }
+            finally
+            {
+                ShellItemNative.DeleteObject(hbitmap);
+            }
         }
-
-        if (hr != 0 || hbitmap == IntPtr.Zero)
+        catch (Exception ex) when (ex is COMException or IOException or UnauthorizedAccessException)
         {
             return null;
         }
-
-        try
-        {
-            var bitmap = Imaging.CreateBitmapSourceFromHBitmap(
-                hbitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-            bitmap.Freeze();
-            return bitmap;
-        }
         finally
         {
-            ShellItemNative.DeleteObject(hbitmap);
+            if (item is not null)
+            {
+                Marshal.ReleaseComObject(item);
+            }
         }
     }
 }

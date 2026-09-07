@@ -845,14 +845,17 @@
                      않는다. 이 칸은 늘 한 파일만 그리므로 상태가 둘뿐이고, 컨버터를 만들면
                      같은 판정이 XAML 과 코드비하인드 두 자리에 산다.
 
-                     StretchDirection="DownOnly" — 셸이 준 픽셀보다 크게 늘리지 않는다.
-                     확대하면 뭉개져서 「미리 볼 수 있다」가 거짓말이 된다. -->
+                     StretchDirection 을 걸지 않는다 — 확대를 허용한다(D95-b). 손 확인에서
+                     dwg 가 그렇게 나왔다: AutoCAD 가 도면에 심어 둔 미리보기가 작은 고정
+                     크기라, 늘리지 않으면 큰 칸에서도 우표만 하게 남는다. 이 칸의 쓰임은
+                     「이게 그 도면 맞나」를 가리는 것이고, 그 판단에는 뭉개져도 큰 쪽이 낫다.
+                     회차 2b-1 은 반대로 적어 두었었다 — 손 확인이 그 근거를 뒤집었다. -->
                 <Border x:Name="PreviewPane" Grid.Row="2" Visibility="Collapsed"
                         Background="{StaticResource Brush.Surface}"
                         BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0">
                     <Grid>
                         <Image x:Name="PreviewImage" Visibility="Collapsed" Margin="8"
-                               Stretch="Uniform" StretchDirection="DownOnly"
+                               Stretch="Uniform"
                                RenderOptions.BitmapScalingMode="HighQuality" />
                         <TextBlock x:Name="PreviewFallbackText" Text="미리 볼 수 없습니다" FontSize="11"
                                    Foreground="{StaticResource Brush.TextSecondary}"

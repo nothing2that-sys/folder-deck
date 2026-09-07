@@ -65,4 +65,15 @@ public sealed class ShellThumbnailTests
 
         Assert.False(service.TryGetCached(stamp, out _));
     }
+
+    [Fact]
+    public async Task AMissingFileYieldsNoThumbnail()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var service = new ShellThumbnailService();
+
+        var result = await service.GetThumbnailAsync(path, 64, 64);
+
+        Assert.Null(result);
+    }
 }
