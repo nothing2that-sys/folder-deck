@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:FolderDeck.App.ViewModels"
              xmlns:v="clr-namespace:FolderDeck.App.Views"
+             xmlns:interop="clr-namespace:FolderDeck.App.Interop"
              xmlns:models="clr-namespace:FolderDeck.Core.Models;assembly=FolderDeck.Core"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -839,7 +840,6 @@
                               DragCompleted="OnPreviewSplitterDragCompleted" />
 
                 <!-- 미리보기 칸 — 회차 2b-1 이 ② 단(셸 썸네일)과 ③ 단(글귀)을 넣는다.
-                     ① 단(IPreviewHandler 호스팅)과 MOTW 판정은 2b-2 다.
 
                      둘을 겹쳐 두고 코드비하인드가 하나만 보이게 한다 — 새 컨버터를 만들지
                      않는다. 이 칸은 늘 한 파일만 그리므로 상태가 둘뿐이고, 컨버터를 만들면
@@ -854,6 +854,11 @@
                         Background="{StaticResource Brush.Surface}"
                         BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0">
                     <Grid>
+                        <!-- ① 단 — IPreviewHandler 를 얹는 네이티브 창(Phase 17 · D103).
+                             네이티브 창은 WPF 가 그린 것 위에 덮어 그린다. 그래서 ② 단·③ 단으로
+                             내려앉을 때는 반드시 Collapsed 로 돌려야 한다 — 안 그러면 밑의
+                             그림이 안 보인다. -->
+                        <interop:PreviewHandlerHost x:Name="PreviewHost" Visibility="Collapsed" />
                         <Image x:Name="PreviewImage" Visibility="Collapsed" Margin="8"
                                Stretch="Uniform"
                                RenderOptions.BitmapScalingMode="HighQuality" />

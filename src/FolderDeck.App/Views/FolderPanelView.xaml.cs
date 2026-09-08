@@ -265,19 +265,54 @@ public partial class FolderPanelView : UserControl
             PreviewSplitter.Visibility = Visibility.Collapsed;
             PreviewPane.Visibility = Visibility.Collapsed;
 
+            // 칸을 끄면 핸들러가 파일을 붙잡고 있으면 안 된다(Phase 17 · D103).
+            PreviewHost.UnloadPreview();
+
             PreviewRow.Height = new GridLength(0);
             PreviewRow.MinHeight = 0;
             ListRow.MinHeight = 0;
         }
     }
 
+    /// <summary>미리보기 칸의 세 자식 중 <see cref="PreviewHost"/> 만 보인다.</summary>
+    private void ShowPreviewHost()
+    {
+        PreviewHost.Visibility = Visibility.Visible;
+        PreviewImage.Visibility = Visibility.Collapsed;
+        PreviewFallbackText.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>미리보기 칸의 세 자식 중 <see cref="PreviewImage"/> 만 보인다.</summary>
+    private void ShowPreviewImage(System.Windows.Media.Imaging.BitmapSource image)
+    {
+        PreviewImage.Source = image;
+        PreviewHost.Visibility = Visibility.Collapsed;
+        PreviewImage.Visibility = Visibility.Visible;
+        PreviewFallbackText.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>미리보기 칸의 세 자식 중 <see cref="PreviewFallbackText"/> 만 보인다.</summary>
+    private void ShowPreviewText(string text)
+    {
+        PreviewFallbackText.Text = text;
+        PreviewHost.Visibility = Visibility.Collapsed;
+        PreviewImage.Visibility = Visibility.Collapsed;
+        PreviewFallbackText.Visibility = Visibility.Visible;
+    }
+
     /// <summary>
-    /// 미리보기 칸의 <b>내용</b>(② 단 · ③ 단)을 다시 그린다(Phase 17 · D86 · D95 §5 R6).
-    /// <see cref="ApplyPreviewLayout"/> 은 행만 세운다 — 내용은 여기가 맡는다.
+    /// 미리보기 칸의 <b>내용</b>(① 단 · ② 단 · ③ 단)을 다시 그린다(Phase 17 · D86 · D95 §5 R6 ·
+    /// D103). <see cref="ApplyPreviewLayout"/> 은 행만 세운다 — 내용은 여기가 맡는다.
     /// </summary>
     /// <remarks>
-    /// 늦게 온 취득 결과는 <see cref="_previewGeneration"/> 으로 버린다(D95 §2 결정 8) — 취득이
-    /// 비동기라 빠르게 갈아타면 옛 결과가 나중에 도착한다.
+    /// 폭포다 — ① 단(<see cref="PreviewHost"/>)이 뜨면 거기서 끝낸다. MOTW 로 건너뛰었거나
+    /// 핸들러가 없거나 실패했으면 ② 단(셸 썸네일)으로 내려간다. 그림도 없으면 ③ 단(글귀)로
+    /// 내려앉는다 — 어느 겹에서 떨어졌는지를 글귀 괄호 안에 남긴다.
+    /// <para>
+    /// 늦게 온 ② 단 취득 결과는 <see cref="_previewGeneration"/> 으로 버린다(D95 §2 결정 8) —
+    /// 취득이 비동기라 빠르게 갈아타면 옛 결과가 나중에 도착한다. ① 단은 동기라 이 장치가
+    /// 필요 없다.
+    /// </para>
     /// <para>
     /// 요청 픽셀 크기가 아직 0 이면(레이아웃이 안 돌았다) <b>아무것도 바꾸지 않고</b> 돌아간다 —
     /// ③ 단 글귀를 그대로 두고, 다음에 이 메서드가 다시 불릴 때(레이아웃이 돈 뒤) 그린다.
@@ -292,8 +327,8 @@ public partial class FolderPanelView : UserControl
 
         if (panel.PreviewTarget is not { } target)
         {
-            PreviewImage.Visibility = Visibility.Collapsed;
-            PreviewFallbackText.Visibility = Visibility.Visible;
+            PreviewHost.UnloadPreview();
+            ShowPreviewText("미리 볼 수 없습니다");
             return;
         }
 
@@ -304,7 +339,25 @@ public partial class FolderPanelView : UserControl
             return;
         }
 
+        // 앞 파일의 핸들러가 아직 살아 있을 수 있다 — 새로 고르기 전에 반드시 내린다.
+        PreviewHost.UnloadPreview();
+        PreviewHost.Visibility = Visibility.Collapsed;
+
         var generation = ++_previewGeneration;
+
+        var motwBlocked = MotwGuard.ShouldSkipPreviewHandler(target.FullPath);
+        PreviewHandlerOutcome? handlerOutcome = null;
+
+        if (!motwBlocked)
+        {
+            handlerOutcome = PreviewHost.LoadPreview(target.FullPath, (int)width, (int)height);
+            if (handlerOutcome == PreviewHandlerOutcome.Shown)
+            {
+                ShowPreviewHost();
+                return;
+            }
+        }
+
         var image = await _previewThumbnailService.GetThumbnailAsync(
             target.FullPath, (int)width, (int)height).ConfigureAwait(true);
 
@@ -313,16 +366,22 @@ public partial class FolderPanelView : UserControl
             return;
         }
 
-        if (image is null)
+        if (image is not null)
         {
-            PreviewImage.Visibility = Visibility.Collapsed;
-            PreviewFallbackText.Visibility = Visibility.Visible;
+            ShowPreviewImage(image);
             return;
         }
 
-        PreviewImage.Source = image;
-        PreviewImage.Visibility = Visibility.Visible;
-        PreviewFallbackText.Visibility = Visibility.Collapsed;
+        var text = motwBlocked
+            ? "미리 볼 수 없습니다 (차단된 파일 — 속성에서 「차단 해제」하면 보입니다)"
+            : handlerOutcome switch
+            {
+                PreviewHandlerOutcome.NoHandler => "미리 볼 수 없습니다 (미리보기 형식이 아닙니다)",
+                PreviewHandlerOutcome.Failed => "미리 볼 수 없습니다 (미리보기를 여는 데 실패했습니다)",
+                _ => "미리 볼 수 없습니다",
+            };
+
+        ShowPreviewText(text);
     }
 
     /// <summary>
