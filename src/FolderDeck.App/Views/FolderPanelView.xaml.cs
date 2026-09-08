@@ -58,10 +58,6 @@ public partial class FolderPanelView : UserControl
     public FolderPanelView()
     {
         InitializeComponent();
-
-        // 해지하지 않는다 — 컨트롤 자신의 이벤트라 구독원이 이 인스턴스보다 오래 살
-        // 일이 없다(Phase 17 · D106).
-        IsHitTestVisibleChanged += (_, _) => UpdatePreviewHostOverlap();
     }
 
     private FolderPanelViewModel? ViewModel => DataContext as FolderPanelViewModel;
@@ -228,13 +224,6 @@ public partial class FolderPanelView : UserControl
         {
             ApplyPreviewContent();
         }
-
-        // 드롭 과녁 글귀가 겹치는 것도 위 갈래들과 다른 일이다(행 셋도, 내용 자체도
-        // 안 바뀐다 — ① 단 창의 겹침만 다시 잰다) — 섞지 않는다(Phase 17 · D105).
-        if (e.PropertyName is nameof(FolderPanelViewModel.IsDropTarget))
-        {
-            UpdatePreviewHostOverlap();
-        }
     }
 
     /// <summary>미리보기 칸의 행 하한(Phase 17 · D86 · §3.2). 「정한 값」이다 — 고무줄 여백 32px 과 같은 종류.</summary>
@@ -285,36 +274,17 @@ public partial class FolderPanelView : UserControl
         }
     }
 
-    /// <summary>
-    /// 미리보기 칸에서 지금 보이기로 정해진 층(Phase 17 · D105). <see cref="ShowPreviewHost"/> ·
-    /// <see cref="ShowPreviewImage"/> · <see cref="ShowPreviewText"/> 셋만 이 필드를 세운다 —
-    /// <see cref="UpdatePreviewHostOverlap"/> 이 「지금 ① 단이 정해진 층인가」를 판단하는 데 쓴다.
-    /// </summary>
-    private enum PreviewLayer { Host, Image, Text }
-
-    /// <summary>
-    /// XAML 의 초기값과 맞춘다 — <c>PreviewHost</c>·<c>PreviewImage</c> 는 <c>Collapsed</c>,
-    /// <c>PreviewFallbackText</c> 만 기본으로 보인다(FolderPanelView.xaml).
-    /// </summary>
-    private PreviewLayer _previewLayer = PreviewLayer.Text;
-
     /// <summary>미리보기 칸의 세 자식 중 <see cref="PreviewHost"/> 만 보인다.</summary>
     private void ShowPreviewHost()
     {
-        _previewLayer = PreviewLayer.Host;
-
-        // 겹침 갱신(UpdatePreviewHostOverlap)이 마지막이어야 한다(Phase 17 · D105-b) —
-        // 겹쳐 있으면 그 갱신이 PreviewFallbackText 에 이유 글귀를 세우는데, 이 뒤에
-        // 무조건 Collapsed 로 돌리는 줄이 오면 그 글귀를 도로 지워 버린다.
+        PreviewHost.Visibility = Visibility.Visible;
         PreviewImage.Visibility = Visibility.Collapsed;
         PreviewFallbackText.Visibility = Visibility.Collapsed;
-        UpdatePreviewHostOverlap();
     }
 
     /// <summary>미리보기 칸의 세 자식 중 <see cref="PreviewImage"/> 만 보인다.</summary>
     private void ShowPreviewImage(System.Windows.Media.Imaging.BitmapSource image)
     {
-        _previewLayer = PreviewLayer.Image;
         PreviewImage.Source = image;
         PreviewHost.Visibility = Visibility.Collapsed;
         PreviewImage.Visibility = Visibility.Visible;
@@ -324,65 +294,10 @@ public partial class FolderPanelView : UserControl
     /// <summary>미리보기 칸의 세 자식 중 <see cref="PreviewFallbackText"/> 만 보인다.</summary>
     private void ShowPreviewText(string text)
     {
-        _previewLayer = PreviewLayer.Text;
         PreviewFallbackText.Text = text;
         PreviewHost.Visibility = Visibility.Collapsed;
         PreviewImage.Visibility = Visibility.Collapsed;
         PreviewFallbackText.Visibility = Visibility.Visible;
-    }
-
-    /// <summary>
-    /// 드롭 과녁 글귀·배치 편집 손잡이가 이 컨트롤을 덮을 때 ① 단 네이티브 창을 감추고
-    /// 감춘 이유를 보인다(Phase 17 · D105-b · design.md §3.2). <see cref="_previewLayer"/>
-    /// 이 <see cref="PreviewLayer.Host"/> 가 아니면(이미 <c>Collapsed</c> 다) 아무것도 하지
-    /// 않는다. <c>PreviewImage</c> 는 건드리지 않는다 — <c>Host</c> 층인 동안은 이미
-    /// <c>Collapsed</c> 다.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="PreviewHandlerHost.UnloadPreview"/> 는 부르지 않는다 — <c>IsDropTarget</c>
-    /// 은 마우스가 드나들 때마다 켜졌다 꺼지므로, 그때마다 COM 객체를 만들고 버리면 안 된다
-    /// (D105 §3 결정 4). <c>Visibility</c> 만으로 네이티브 창이 실제로 감춰지는 것은 D105
-    /// 손 확인으로 실측됐다.
-    /// <para>
-    /// 이유가 있으면 흰 빈 칸 대신 <c>PreviewFallbackText</c> 에 그 글귀를 보인다(D105
-    /// 손 확인이 드러낸 빈 칸 문제, 결정 3·4). 이유별로 다른 글귀를 쓰는 것 자체가 진단
-    /// 장치다 — 배치 편집 글귀가 뜨면 「배치 편집 중」 판단이 도착한 것이다.
-    /// </para>
-    /// <para>
-    /// 「배치 편집 중」은 <see cref="UIElement.IsHitTestVisible"/> 의 반대로 읽는다(Phase 17
-    /// · D106) — <c>IsHitTestVisible</c> 은 <c>TileGridView.xaml</c> 이
-    /// <c>TileViewModel.IsViewMode</c>(= <c>!IsEditing</c>)로 채우므로, 지금은 「입력을 못
-    /// 받는다」와 「배치 편집 중이다」가 같은 뜻이다. <b>그 값을 끄는 자리가 그 바인딩
-    /// 하나뿐이라서</b> 성립하는 등식이다 — 나중에 다른 이유로 <c>IsHitTestVisible</c> 을
-    /// 끄는 자리가 생기면 미리보기가 엉뚱하게 접힌다. (D105 는 별도 전용
-    /// <c>DependencyProperty</c> 를 새로 두어 같은 값을 받으려 했으나 값이 도착하지 않았고
-    /// 원인은 못 밝혔다 — 그래서 이미 도착하고 있는 이 값을 대신 쓴다.)
-    /// </para>
-    /// </remarks>
-    private void UpdatePreviewHostOverlap()
-    {
-        if (_previewLayer != PreviewLayer.Host)
-        {
-            return;
-        }
-
-        string? reason = !IsHitTestVisible
-            ? "배치 편집 중에는 미리보기를 접습니다"
-            : (ViewModel?.IsDropTarget ?? false)
-                ? "끌어 놓는 동안에는 미리보기를 접습니다"
-                : null;
-
-        if (reason is not null)
-        {
-            PreviewHost.Visibility = Visibility.Collapsed;
-            PreviewFallbackText.Text = reason;
-            PreviewFallbackText.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            PreviewFallbackText.Visibility = Visibility.Collapsed;
-            PreviewHost.Visibility = Visibility.Visible;
-        }
     }
 
     /// <summary>
