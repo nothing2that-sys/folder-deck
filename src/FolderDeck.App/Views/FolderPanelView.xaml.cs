@@ -325,9 +325,13 @@ public partial class FolderPanelView : UserControl
     private void ShowPreviewHost()
     {
         _previewLayer = PreviewLayer.Host;
-        UpdatePreviewHostOverlap();
+
+        // 겹침 갱신(UpdatePreviewHostOverlap)이 마지막이어야 한다(Phase 17 · D105-b) —
+        // 겹쳐 있으면 그 갱신이 PreviewFallbackText 에 이유 글귀를 세우는데, 이 뒤에
+        // 무조건 Collapsed 로 돌리는 줄이 오면 그 글귀를 도로 지워 버린다.
         PreviewImage.Visibility = Visibility.Collapsed;
         PreviewFallbackText.Visibility = Visibility.Collapsed;
+        UpdatePreviewHostOverlap();
     }
 
     /// <summary>미리보기 칸의 세 자식 중 <see cref="PreviewImage"/> 만 보인다.</summary>
@@ -351,14 +355,23 @@ public partial class FolderPanelView : UserControl
     }
 
     /// <summary>
-    /// 드롭 과녁 글귀·배치 편집 손잡이가 이 컨트롤을 덮을 때 ① 단 네이티브 창을 감춘다
-    /// (Phase 17 · D105 · design.md §3.2). <see cref="_previewLayer"/> 이 <see
-    /// cref="PreviewLayer.Host"/> 가 아니면(이미 <c>Collapsed</c> 다) 아무것도 하지 않는다.
+    /// 드롭 과녁 글귀·배치 편집 손잡이가 이 컨트롤을 덮을 때 ① 단 네이티브 창을 감추고
+    /// 감춘 이유를 보인다(Phase 17 · D105-b · design.md §3.2). <see cref="_previewLayer"/>
+    /// 이 <see cref="PreviewLayer.Host"/> 가 아니면(이미 <c>Collapsed</c> 다) 아무것도 하지
+    /// 않는다. <c>PreviewImage</c> 는 건드리지 않는다 — <c>Host</c> 층인 동안은 이미
+    /// <c>Collapsed</c> 다.
+    /// </summary>
+    /// <remarks>
     /// <see cref="PreviewHandlerHost.UnloadPreview"/> 는 부르지 않는다 — <c>IsDropTarget</c>
     /// 은 마우스가 드나들 때마다 켜졌다 꺼지므로, 그때마다 COM 객체를 만들고 버리면 안 된다
-    /// (D105 §3 결정 4). <c>Visibility</c> 만으로 네이티브 창이 실제로 감춰지는지는 손 확인이
-    /// 잰다(D104 5-4 — 코드로는 가를 수 없었다).
-    /// </summary>
+    /// (D105 §3 결정 4). <c>Visibility</c> 만으로 네이티브 창이 실제로 감춰지는 것은 D105
+    /// 손 확인으로 실측됐다.
+    /// <para>
+    /// 이유가 있으면 흰 빈 칸 대신 <c>PreviewFallbackText</c> 에 그 글귀를 보인다(D105
+    /// 손 확인이 드러낸 빈 칸 문제, 결정 3·4). 이유별로 다른 글귀를 쓰는 것 자체가 진단
+    /// 장치다 — 배치 편집 글귀가 뜨면 <see cref="IsLayoutEditing"/> 이 도착한 것이다.
+    /// </para>
+    /// </remarks>
     private void UpdatePreviewHostOverlap()
     {
         if (_previewLayer != PreviewLayer.Host)
@@ -366,8 +379,23 @@ public partial class FolderPanelView : UserControl
             return;
         }
 
-        var overlapping = IsLayoutEditing || (ViewModel?.IsDropTarget ?? false);
-        PreviewHost.Visibility = overlapping ? Visibility.Collapsed : Visibility.Visible;
+        string? reason = IsLayoutEditing
+            ? "배치 편집 중에는 미리보기를 접습니다"
+            : (ViewModel?.IsDropTarget ?? false)
+                ? "끌어 놓는 동안에는 미리보기를 접습니다"
+                : null;
+
+        if (reason is not null)
+        {
+            PreviewHost.Visibility = Visibility.Collapsed;
+            PreviewFallbackText.Text = reason;
+            PreviewFallbackText.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            PreviewFallbackText.Visibility = Visibility.Collapsed;
+            PreviewHost.Visibility = Visibility.Visible;
+        }
     }
 
     /// <summary>
