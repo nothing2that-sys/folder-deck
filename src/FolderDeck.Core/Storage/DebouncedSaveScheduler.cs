@@ -51,7 +51,19 @@ public sealed class DebouncedSaveScheduler : IDisposable
             if (_pending.TryGetValue(key, out var existing))
             {
                 existing.Write = write;
-                existing.Timer.Change(Delay, Timeout.InfiniteTimeSpan);
+
+                // 진행 중이면 타이머를 다시 걸지 않는다 (D101). 돌고 있는 Run 이 끝날 때
+                // 이 새 내용을 이어서 쓴다. 타이머를 걸면 같은 키에 쓰기가 둘 살게 되고
+                // 그것이 D100 이 무는 결함이다.
+                if (existing.Running)
+                {
+                    existing.Dirty = true;
+                }
+                else
+                {
+                    existing.Timer.Change(Delay, Timeout.InfiniteTimeSpan);
+                }
+
                 return;
             }
 
@@ -63,28 +75,28 @@ public sealed class DebouncedSaveScheduler : IDisposable
 
     /// <summary>밀린 쓰기를 지금 모두 수행한다(동기). 종료 직전에 호출.</summary>
     /// <remarks>
-    /// 자기가 꺼낸 것만 돌고 끝내면 안 된다 (D27). 타이머가 이미 발화해 <see cref="Fire"/> 가
-    /// 항목을 빼 간 뒤라면 사전이 비어 있어 돌 것이 없고, 그 쓰기는 아직 진행 중이다.
-    /// 그 상태로 돌아가면 <b>호출자가 원자적 교체 전 파일을 읽는다</b> — 쓰기가 사라지는 것은
-    /// 아니지만 이 메서드가 약속한 동기성이 깨진다. 그래서 <see cref="_running"/> 이 0 이
-    /// 될 때까지 기다린다.
+    /// 진행 중인 항목은 사전에서 안 빠진다(D101) — 이미 <c>Running</c> 이 세워져
+    /// <see cref="Fire"/>·이전 <see cref="Flush"/> 호출이 claim 해 둔 것이다. 그래서
+    /// 여기서는 <b>진행 중이 아닌 것만</b> 집어 새로 claim 하고, 진행 중인 것은 그냥
+    /// <see cref="_idle"/> 로 기다린다 — <see cref="Run"/> 의 고리가 <see
+    /// cref="Pending.Dirty"/> 를 다 갚은 뒤에야 <see cref="_running"/> 을 줄이므로,
+    /// 이 대기는 진행 중에 이어서 쓴 것까지 포함해 기다리는 셈이 된다.
     /// </remarks>
     public void Flush()
     {
-        List<Pending> due;
+        List<KeyValuePair<string, Pending>> due;
         lock (_gate)
         {
-            due = [.. _pending.Values];
-            foreach (var pending in due)
+            due = [.. _pending.Where(p => !p.Value.Running)];
+            foreach (var (_, pending) in due)
             {
                 pending.Timer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+                pending.Running = true;
+                pending.Dirty = false;
             }
 
-            _pending.Clear();
-
-            // claim(_running 증가)은 사전을 비운 그 잠금 안에서 한다. 잠금 밖으로 내면
-            // Fire() 의 Remove 와 증가 사이에 이 메서드가 끼어들어 빈 사전 + _running == 0 을
-            // 보고 그냥 돌아가는 창이 다시 생긴다 — 지금 고치는 그 결함과 똑같은 창이다.
+            // claim(_running 증가)은 집은 그 잠금 안에서 한다 (D27). 잠금 밖으로 내면
+            // Fire() 의 claim 과 이 메서드 사이에 창이 다시 생긴다.
             _running += due.Count;
             if (_running > 0)
             {
@@ -92,9 +104,9 @@ public sealed class DebouncedSaveScheduler : IDisposable
             }
         }
 
-        foreach (var pending in due)
+        foreach (var (key, pending) in due)
         {
-            Run(pending);
+            Run(key, pending);
         }
 
         // 잠금 밖에서 기다린다. 물고 기다리면 Run() 의 감소가 들어올 수 없어 굳는다.
@@ -156,47 +168,71 @@ public sealed class DebouncedSaveScheduler : IDisposable
         Pending? pending;
         lock (_gate)
         {
-            if (!_pending.Remove(key, out pending))
+            // 키를 빼지 않는다 (D101). 빼면 뒤에 온 Schedule 이 갈아 끼울 대상을 못 찾아
+            // 둘째 쓰기를 만든다 — D100 이 무는 그 결함이다. 항목을 빼는 것은 Run 의
+            // 완료 경로 하나뿐이다.
+            if (!_pending.TryGetValue(key, out pending) || pending.Running)
             {
                 return;
             }
 
-            // Remove 가 성공한 이 잠금 안에서 claim 한다 (D27). 잠금을 놓고 증가하면
-            // 그 틈에 들어온 Flush() 가 빈 사전 + _running == 0 을 보고 지나간다.
+            // Running 을 세운 이 잠금 안에서 claim 한다 (D27). 잠금을 놓고 증가하면
+            // 그 틈에 들어온 Flush() 가 _running == 0 을 보고 지나간다.
+            pending.Running = true;
+            pending.Dirty = false;
             _running++;
             _idle.Reset();
         }
 
-        Run(pending);
+        Run(key, pending);
     }
 
-    private void Run(Pending pending)
+    private void Run(string key, Pending pending)
     {
-        StorageFailure? failure;
-        try
+        while (true)
         {
-            failure = pending.Write();
-        }
-        catch (Exception ex)
-        {
-            failure = new StorageFailure(StorageFailureKind.IoError, "?", ex.Message, ex);
-        }
-        finally
-        {
-            pending.Timer.Dispose();
+            Func<StorageFailure?> write;
+            lock (_gate)
+            {
+                write = pending.Write;
+                pending.Dirty = false;
+            }
+
+            StorageFailure? failure;
+            try
+            {
+                failure = write();
+            }
+            catch (Exception ex)
+            {
+                failure = new StorageFailure(StorageFailureKind.IoError, "?", ex.Message, ex);
+            }
+
+            if (failure is not null)
+            {
+                Failed?.Invoke(this, failure);
+            }
 
             lock (_gate)
             {
+                // 돌던 중 새 내용이 들어왔다 — 이어서 쓴다 (D101). 여기서 놓아 버리면
+                // 진행 중에 들어온 내용이 사라진다.
+                if (pending.Dirty)
+                {
+                    continue;
+                }
+
+                // 항목을 빼는 유일한 자리다 (D101 결정 4).
+                _pending.Remove(key);
+                pending.Running = false;
+                pending.Timer.Dispose();
                 if (--_running == 0)
                 {
                     _idle.Set();
                 }
-            }
-        }
 
-        if (failure is not null)
-        {
-            Failed?.Invoke(this, failure);
+                return;
+            }
         }
     }
 
@@ -205,5 +241,11 @@ public sealed class DebouncedSaveScheduler : IDisposable
         public required Func<StorageFailure?> Write { get; set; }
 
         public Timer Timer { get; set; } = null!;
+
+        /// <summary>이 항목의 쓰기가 지금 <see cref="Run"/> 안에 들어와 있다 (D101).</summary>
+        public bool Running { get; set; }
+
+        /// <summary>진행 중에 새 내용이 들어왔다 — <see cref="Run"/> 이 이어서 한 번 더 쓴다 (D101).</summary>
+        public bool Dirty { get; set; }
     }
 }

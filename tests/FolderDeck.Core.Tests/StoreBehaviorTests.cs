@@ -347,6 +347,238 @@ public sealed class StoreBehaviorTests
     }
 
     /// <summary>
+    /// 진행 중인 쓰기가 있는 키에 다시 <c>Schedule</c> 하면, 그 새 쓰기는 <b>진행 중인
+    /// 쓰기가 반환한 뒤에야</b> 시작해야 한다 (D101). 고침 전에는 재예약이 자기 타이머를
+    /// 단 새 <c>Pending</c> 이 되어 <b>나란히</b> 돌았고, 그래서 같은 파일을 향한 쓰기가
+    /// 둘 살면서 어느 쪽이 마지막에 착지할지가 정해지지 않았다.
+    /// </summary>
+    /// <remarks>
+    /// 교착이 없다 — A 는 스스로 500ms 뒤 풀리므로 <c>Flush()</c> 를 시험 스레드에서
+    /// 불러도 안전하다. 고침 전 코드에서는 B 의 타이머(1ms)가 A 의 기다림 안에서
+    /// 반드시 발화하므로 <b>결정적으로 빨갛고</b>, 고침 뒤에는 B 가 <c>Dirty</c> 로
+    /// 접혀 A 가 반환해야 돌므로 A 의 기다림이 <b>반드시</b> 시간 초과해 초록이다.
+    /// </remarks>
+    [Fact]
+    public void ARescheduleWhileRunningDoesNotStartASecondWriteConcurrently()
+    {
+        using var aStarted = new ManualResetEventSlim(false);
+        using var bStarted = new ManualResetEventSlim(false);
+        using var scheduler = new DebouncedSaveScheduler(TimeSpan.FromMilliseconds(1));
+
+        var gate = new Lock();
+
+        // A 가 한 번도 안 돌면 참으로 남아 시험이 실패한다 — 안전한 쪽이 기본값이다.
+        var bStartedWhileARan = true;
+
+        scheduler.Schedule("key", () =>
+        {
+            aStarted.Set();
+            var observed = bStarted.Wait(TimeSpan.FromMilliseconds(500));
+            lock (gate)
+            {
+                bStartedWhileARan = observed;
+            }
+
+            return null;
+        });
+
+        Assert.True(
+            aStarted.Wait(TimeSpan.FromSeconds(5)),
+            "A 가 시작했다는 신호를 못 받았다 — 타이머가 발화하지 않았다.");
+
+        scheduler.Schedule("key", () =>
+        {
+            bStarted.Set();
+            return null;
+        });
+
+        scheduler.Flush();
+
+        bool observedDuringA;
+        lock (gate)
+        {
+            observedDuringA = bStartedWhileARan;
+        }
+
+        Assert.False(
+            observedDuringA,
+            "진행 중인 쓰기가 반환하기 전에 같은 키의 둘째 쓰기가 시작됐다.");
+    }
+
+    // ── 저장 순서 경합 고침 (D101) — 진행 중 재예약이 둘째 쓰기를 만들지 않는다 ─────
+
+    /// <summary>
+    /// A 가 진행 중일 때 같은 키로 재예약(B)하면 <c>Schedule</c> 은 새 쓰기를 만들지
+    /// 않고 진행 중인 항목의 <c>Write</c> 를 갈아 끼우며 <c>Dirty</c> 만 세운다(D101 §3
+    /// 결정 2). <c>Run</c> 이 A 를 마친 뒤 <c>Dirty</c> 를 보고 이어서 B 를 쓰므로,
+    /// 전체 쓰기는 정확히 <b>둘</b>(A · B) 이고 마지막이 B 다 — D100 이 문 「먼저
+    /// 예약된 게 나중에 착지한다」가 아예 일어날 자리가 없어진다(둘째 쓰기 자체가
+    /// 없으므로 다툴 순서가 없다).
+    /// </summary>
+    [Fact]
+    public async Task ARescheduleWhileRunningDoesNotAddASecondWrite()
+    {
+        using var aStarted = new ManualResetEventSlim(false);
+        using var aMayLand = new ManualResetEventSlim(false);
+        using var scheduler = new DebouncedSaveScheduler(TimeSpan.FromMilliseconds(1));
+
+        var landings = new List<string>();
+        var gate = new Lock();
+
+        scheduler.Schedule("key", () =>
+        {
+            aStarted.Set();
+            Assert.True(aMayLand.Wait(TimeSpan.FromSeconds(5)), "A 를 놓아주는 신호를 못 받았다.");
+            lock (gate)
+            {
+                landings.Add("A");
+            }
+
+            return null;
+        });
+
+        Assert.True(aStarted.Wait(TimeSpan.FromSeconds(5)), "A 가 시작했다는 신호를 못 받았다.");
+
+        // A 가 진행 중일 때 재예약한다 — 새 Pending 이 아니라 Dirty 여야 한다(D101).
+        scheduler.Schedule("key", () =>
+        {
+            lock (gate)
+            {
+                landings.Add("B");
+            }
+
+            return null;
+        });
+
+        var flush = Task.Run(() => scheduler.Flush());
+
+        aMayLand.Set();
+
+        Assert.True(await Task.WhenAny(flush, Task.Delay(TimeSpan.FromSeconds(5))) == flush,
+            "Flush() 가 5초 안에 반환하지 않았다.");
+        await flush;
+
+        string[] snapshot;
+        lock (gate)
+        {
+            snapshot = [.. landings];
+        }
+
+        Assert.Equal(["A", "B"], snapshot);
+    }
+
+    /// <summary>
+    /// <c>Flush()</c> 가 반환한 시점에는 진행 중 재예약(B)도 이미 착지해 있다(D101) —
+    /// <c>Run</c> 의 고리가 <c>Dirty</c> 를 다 갚은 뒤에야 <c>_running</c> 을 줄이고
+    /// <c>_idle</c> 을 세우므로, <c>Flush()</c> 의 <c>_idle.Wait()</c> 는 이어서 쓴
+    /// 것까지 포함해 기다린다.
+    /// </summary>
+    /// <remarks>
+    /// 이 시험 안에서 <c>bLanded</c> 를 <b>미리 기다리지 않는다</b> — 그러면 검사가
+    /// 무의미해진다. <c>Flush()</c> 가 반환했다는 사실 그 자체가 착지를 보장하는지를
+    /// 문다.
+    /// </remarks>
+    [Fact]
+    public async Task FlushWaitsForTheWriteThatArrivedWhileRunning()
+    {
+        using var aStarted = new ManualResetEventSlim(false);
+        using var aMayLand = new ManualResetEventSlim(false);
+        using var bLanded = new ManualResetEventSlim(false);
+        using var scheduler = new DebouncedSaveScheduler(TimeSpan.FromMilliseconds(1));
+
+        scheduler.Schedule("key", () =>
+        {
+            aStarted.Set();
+            Assert.True(aMayLand.Wait(TimeSpan.FromSeconds(5)), "A 를 놓아주는 신호를 못 받았다.");
+            return null;
+        });
+
+        Assert.True(aStarted.Wait(TimeSpan.FromSeconds(5)), "A 가 시작했다는 신호를 못 받았다.");
+
+        scheduler.Schedule("key", () =>
+        {
+            bLanded.Set();
+            return null;
+        });
+
+        var flush = Task.Run(() => scheduler.Flush());
+
+        aMayLand.Set();
+
+        Assert.True(await Task.WhenAny(flush, Task.Delay(TimeSpan.FromSeconds(5))) == flush,
+            "Flush() 가 5초 안에 반환하지 않았다.");
+        await flush;
+
+        Assert.True(bLanded.IsSet, "Flush() 가 반환했는데 재예약된 쓰기(B)가 착지하지 않았다.");
+    }
+
+    /// <summary>
+    /// A 진행 중에 B 를 예약한 뒤 다시 C 를 예약하면, <c>Schedule</c> 이 매번
+    /// <c>existing.Write</c> 를 갈아 끼우므로 A 를 마친 뒤 이어서 쓰는 것은 <b>마지막
+    /// (C)</b> 뿐이다 — B 는 갈아 끼워진 채 한 번도 불리지 않는다(D101).
+    /// </summary>
+    [Fact]
+    public async Task SeveralReschedulesWhileRunningCollapseToOne()
+    {
+        using var aStarted = new ManualResetEventSlim(false);
+        using var aMayLand = new ManualResetEventSlim(false);
+        using var scheduler = new DebouncedSaveScheduler(TimeSpan.FromMilliseconds(1));
+
+        var landings = new List<string>();
+        var gate = new Lock();
+
+        scheduler.Schedule("key", () =>
+        {
+            aStarted.Set();
+            Assert.True(aMayLand.Wait(TimeSpan.FromSeconds(5)), "A 를 놓아주는 신호를 못 받았다.");
+            lock (gate)
+            {
+                landings.Add("A");
+            }
+
+            return null;
+        });
+
+        Assert.True(aStarted.Wait(TimeSpan.FromSeconds(5)), "A 가 시작했다는 신호를 못 받았다.");
+
+        scheduler.Schedule("key", () =>
+        {
+            lock (gate)
+            {
+                landings.Add("B");
+            }
+
+            return null;
+        });
+
+        scheduler.Schedule("key", () =>
+        {
+            lock (gate)
+            {
+                landings.Add("C");
+            }
+
+            return null;
+        });
+
+        var flush = Task.Run(() => scheduler.Flush());
+
+        aMayLand.Set();
+
+        Assert.True(await Task.WhenAny(flush, Task.Delay(TimeSpan.FromSeconds(5))) == flush,
+            "Flush() 가 5초 안에 반환하지 않았다.");
+        await flush;
+
+        string[] snapshot;
+        lock (gate)
+        {
+            snapshot = [.. landings];
+        }
+
+        Assert.Equal(["A", "C"], snapshot);
+    }
+
+    /// <summary>
     /// <c>Dispose()</c> 는 멱등하다 (D29). <c>_disposed</c> 를 맨 앞에서 세우므로 두 번째는
     /// 바로 돌아간다 — 처분한 <c>_idle</c> 을 다시 기다리지 않는다.
     /// </summary>
