@@ -25,6 +25,33 @@ public partial class FolderPanelView : UserControl
     /// <summary>그리드 → 폴더 행/대상함 드래그에 쓰는 앱 내부 포맷 (§4.2-2).</summary>
     public const string FileDragFormat = "FolderDeck.FileDrag";
 
+    /// <summary>
+    /// 배치 편집 손잡이가 이 컨트롤 전체를 덮는가(Phase 17 · D105). 손잡이는
+    /// <c>TileGridView</c> 가 이 컨트롤 위에 겹쳐 그리는 별도 층이라 이 컨트롤 자신은
+    /// 그것이 떠 있는지 알 방법이 없다 — 부모가 <c>TileViewModel.IsEditing</c> 을 여기로
+    /// 흘려 넣어야 한다(D104 5-1 이 실측한 통로, <see cref="Views.TileGridView"/> XAML).
+    /// 손잡이가 뜬 동안은 ① 단 네이티브 창(<see cref="PreviewHost"/>)을 감춰야 한다 —
+    /// 네이티브 창은 WPF 가 그린 것 위에 덮어 그리기 때문이다.
+    /// </summary>
+    public static readonly DependencyProperty IsLayoutEditingProperty =
+        DependencyProperty.Register(
+            nameof(IsLayoutEditing), typeof(bool), typeof(FolderPanelView),
+            new PropertyMetadata(false, OnIsLayoutEditingChanged));
+
+    public bool IsLayoutEditing
+    {
+        get => (bool)GetValue(IsLayoutEditingProperty);
+        set => SetValue(IsLayoutEditingProperty, value);
+    }
+
+    private static void OnIsLayoutEditingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is FolderPanelView view)
+        {
+            view.UpdatePreviewHostOverlap();
+        }
+    }
+
     /// <summary>항목에서 마우스를 누른 자리 — 드래그로 볼지 클릭으로 볼지 여기서 갈린다.</summary>
     private Point? _dragOrigin;
 
@@ -224,6 +251,13 @@ public partial class FolderPanelView : UserControl
         {
             ApplyPreviewContent();
         }
+
+        // 드롭 과녁 글귀가 겹치는 것도 위 갈래들과 다른 일이다(행 셋도, 내용 자체도
+        // 안 바뀐다 — ① 단 창의 겹침만 다시 잰다) — 섞지 않는다(Phase 17 · D105).
+        if (e.PropertyName is nameof(FolderPanelViewModel.IsDropTarget))
+        {
+            UpdatePreviewHostOverlap();
+        }
     }
 
     /// <summary>미리보기 칸의 행 하한(Phase 17 · D86 · §3.2). 「정한 값」이다 — 고무줄 여백 32px 과 같은 종류.</summary>
@@ -274,10 +308,24 @@ public partial class FolderPanelView : UserControl
         }
     }
 
+    /// <summary>
+    /// 미리보기 칸에서 지금 보이기로 정해진 층(Phase 17 · D105). <see cref="ShowPreviewHost"/> ·
+    /// <see cref="ShowPreviewImage"/> · <see cref="ShowPreviewText"/> 셋만 이 필드를 세운다 —
+    /// <see cref="UpdatePreviewHostOverlap"/> 이 「지금 ① 단이 정해진 층인가」를 판단하는 데 쓴다.
+    /// </summary>
+    private enum PreviewLayer { Host, Image, Text }
+
+    /// <summary>
+    /// XAML 의 초기값과 맞춘다 — <c>PreviewHost</c>·<c>PreviewImage</c> 는 <c>Collapsed</c>,
+    /// <c>PreviewFallbackText</c> 만 기본으로 보인다(FolderPanelView.xaml).
+    /// </summary>
+    private PreviewLayer _previewLayer = PreviewLayer.Text;
+
     /// <summary>미리보기 칸의 세 자식 중 <see cref="PreviewHost"/> 만 보인다.</summary>
     private void ShowPreviewHost()
     {
-        PreviewHost.Visibility = Visibility.Visible;
+        _previewLayer = PreviewLayer.Host;
+        UpdatePreviewHostOverlap();
         PreviewImage.Visibility = Visibility.Collapsed;
         PreviewFallbackText.Visibility = Visibility.Collapsed;
     }
@@ -285,6 +333,7 @@ public partial class FolderPanelView : UserControl
     /// <summary>미리보기 칸의 세 자식 중 <see cref="PreviewImage"/> 만 보인다.</summary>
     private void ShowPreviewImage(System.Windows.Media.Imaging.BitmapSource image)
     {
+        _previewLayer = PreviewLayer.Image;
         PreviewImage.Source = image;
         PreviewHost.Visibility = Visibility.Collapsed;
         PreviewImage.Visibility = Visibility.Visible;
@@ -294,10 +343,31 @@ public partial class FolderPanelView : UserControl
     /// <summary>미리보기 칸의 세 자식 중 <see cref="PreviewFallbackText"/> 만 보인다.</summary>
     private void ShowPreviewText(string text)
     {
+        _previewLayer = PreviewLayer.Text;
         PreviewFallbackText.Text = text;
         PreviewHost.Visibility = Visibility.Collapsed;
         PreviewImage.Visibility = Visibility.Collapsed;
         PreviewFallbackText.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>
+    /// 드롭 과녁 글귀·배치 편집 손잡이가 이 컨트롤을 덮을 때 ① 단 네이티브 창을 감춘다
+    /// (Phase 17 · D105 · design.md §3.2). <see cref="_previewLayer"/> 이 <see
+    /// cref="PreviewLayer.Host"/> 가 아니면(이미 <c>Collapsed</c> 다) 아무것도 하지 않는다.
+    /// <see cref="PreviewHandlerHost.UnloadPreview"/> 는 부르지 않는다 — <c>IsDropTarget</c>
+    /// 은 마우스가 드나들 때마다 켜졌다 꺼지므로, 그때마다 COM 객체를 만들고 버리면 안 된다
+    /// (D105 §3 결정 4). <c>Visibility</c> 만으로 네이티브 창이 실제로 감춰지는지는 손 확인이
+    /// 잰다(D104 5-4 — 코드로는 가를 수 없었다).
+    /// </summary>
+    private void UpdatePreviewHostOverlap()
+    {
+        if (_previewLayer != PreviewLayer.Host)
+        {
+            return;
+        }
+
+        var overlapping = IsLayoutEditing || (ViewModel?.IsDropTarget ?? false);
+        PreviewHost.Visibility = overlapping ? Visibility.Collapsed : Visibility.Visible;
     }
 
     /// <summary>
