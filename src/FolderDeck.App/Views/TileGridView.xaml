@@ -136,9 +136,7 @@
                                                         ElementName=Root,
                                                         Converter={StaticResource TileMargin}}"
                                                IsHitTestVisible="{Binding DataContext.IsViewMode,
-                                                                  ElementName=TileRoot}"
-                                               IsLayoutEditing="{Binding DataContext.IsEditing,
-                                                                 ElementName=TileRoot}" />
+                                                                  ElementName=TileRoot}" />
 
                         <!-- 편집 손잡이 층 — 여기를 잡으면 이동, 오른쪽 아래 그립은 리사이즈. -->
                         <Border Background="{StaticResource Brush.EditOverlay}"

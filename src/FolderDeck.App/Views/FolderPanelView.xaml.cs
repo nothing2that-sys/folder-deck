@@ -25,33 +25,6 @@ public partial class FolderPanelView : UserControl
     /// <summary>그리드 → 폴더 행/대상함 드래그에 쓰는 앱 내부 포맷 (§4.2-2).</summary>
     public const string FileDragFormat = "FolderDeck.FileDrag";
 
-    /// <summary>
-    /// 배치 편집 손잡이가 이 컨트롤 전체를 덮는가(Phase 17 · D105). 손잡이는
-    /// <c>TileGridView</c> 가 이 컨트롤 위에 겹쳐 그리는 별도 층이라 이 컨트롤 자신은
-    /// 그것이 떠 있는지 알 방법이 없다 — 부모가 <c>TileViewModel.IsEditing</c> 을 여기로
-    /// 흘려 넣어야 한다(D104 5-1 이 실측한 통로, <see cref="Views.TileGridView"/> XAML).
-    /// 손잡이가 뜬 동안은 ① 단 네이티브 창(<see cref="PreviewHost"/>)을 감춰야 한다 —
-    /// 네이티브 창은 WPF 가 그린 것 위에 덮어 그리기 때문이다.
-    /// </summary>
-    public static readonly DependencyProperty IsLayoutEditingProperty =
-        DependencyProperty.Register(
-            nameof(IsLayoutEditing), typeof(bool), typeof(FolderPanelView),
-            new PropertyMetadata(false, OnIsLayoutEditingChanged));
-
-    public bool IsLayoutEditing
-    {
-        get => (bool)GetValue(IsLayoutEditingProperty);
-        set => SetValue(IsLayoutEditingProperty, value);
-    }
-
-    private static void OnIsLayoutEditingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is FolderPanelView view)
-        {
-            view.UpdatePreviewHostOverlap();
-        }
-    }
-
     /// <summary>항목에서 마우스를 누른 자리 — 드래그로 볼지 클릭으로 볼지 여기서 갈린다.</summary>
     private Point? _dragOrigin;
 
@@ -85,6 +58,10 @@ public partial class FolderPanelView : UserControl
     public FolderPanelView()
     {
         InitializeComponent();
+
+        // 해지하지 않는다 — 컨트롤 자신의 이벤트라 구독원이 이 인스턴스보다 오래 살
+        // 일이 없다(Phase 17 · D106).
+        IsHitTestVisibleChanged += (_, _) => UpdatePreviewHostOverlap();
     }
 
     private FolderPanelViewModel? ViewModel => DataContext as FolderPanelViewModel;
@@ -369,7 +346,17 @@ public partial class FolderPanelView : UserControl
     /// <para>
     /// 이유가 있으면 흰 빈 칸 대신 <c>PreviewFallbackText</c> 에 그 글귀를 보인다(D105
     /// 손 확인이 드러낸 빈 칸 문제, 결정 3·4). 이유별로 다른 글귀를 쓰는 것 자체가 진단
-    /// 장치다 — 배치 편집 글귀가 뜨면 <see cref="IsLayoutEditing"/> 이 도착한 것이다.
+    /// 장치다 — 배치 편집 글귀가 뜨면 「배치 편집 중」 판단이 도착한 것이다.
+    /// </para>
+    /// <para>
+    /// 「배치 편집 중」은 <see cref="UIElement.IsHitTestVisible"/> 의 반대로 읽는다(Phase 17
+    /// · D106) — <c>IsHitTestVisible</c> 은 <c>TileGridView.xaml</c> 이
+    /// <c>TileViewModel.IsViewMode</c>(= <c>!IsEditing</c>)로 채우므로, 지금은 「입력을 못
+    /// 받는다」와 「배치 편집 중이다」가 같은 뜻이다. <b>그 값을 끄는 자리가 그 바인딩
+    /// 하나뿐이라서</b> 성립하는 등식이다 — 나중에 다른 이유로 <c>IsHitTestVisible</c> 을
+    /// 끄는 자리가 생기면 미리보기가 엉뚱하게 접힌다. (D105 는 별도 전용
+    /// <c>DependencyProperty</c> 를 새로 두어 같은 값을 받으려 했으나 값이 도착하지 않았고
+    /// 원인은 못 밝혔다 — 그래서 이미 도착하고 있는 이 값을 대신 쓴다.)
     /// </para>
     /// </remarks>
     private void UpdatePreviewHostOverlap()
@@ -379,7 +366,7 @@ public partial class FolderPanelView : UserControl
             return;
         }
 
-        string? reason = IsLayoutEditing
+        string? reason = !IsHitTestVisible
             ? "배치 편집 중에는 미리보기를 접습니다"
             : (ViewModel?.IsDropTarget ?? false)
                 ? "끌어 놓는 동안에는 미리보기를 접습니다"
