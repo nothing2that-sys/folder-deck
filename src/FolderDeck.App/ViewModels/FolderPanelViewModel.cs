@@ -1090,9 +1090,30 @@ public sealed partial class FolderPanelViewModel : ObservableObject
             return;
         }
 
-        Entry.ViewMode = Entry.ViewMode == FolderViewMode.Details
-            ? FolderViewMode.List
-            : FolderViewMode.Details;
+        ApplyViewMode(Entry.ViewMode == FolderViewMode.Details ? FolderViewMode.List : FolderViewMode.Details);
+    }
+
+    /// <summary>
+    /// 「더 보기」 메뉴의 보기 방식 하위 메뉴(목록/자세히)가 고르는 값(Phase 20 · D119) —
+    /// <see cref="SetSortAsync"/> 가 정렬 기준을 <c>CommandParameter</c> 로 받는 것과 같은 결이다.
+    /// <see cref="ToggleViewMode"/>(헤더 아이콘이 쓰던 것, 시험이 이미 물고 있어 그대로 둔다)와
+    /// 로직을 <see cref="ApplyViewMode"/> 로 나눠 쓴다. 이미 그 방식이면 아무 일도 안 한다 —
+    /// 메뉴에서 체크된 항목을 다시 눌러도 선택·저장이 헛되이 일어나지 않게.
+    /// </summary>
+    [RelayCommand]
+    public void SetViewMode(FolderViewMode mode)
+    {
+        if (Entry is null || Entry.ViewMode == mode)
+        {
+            return;
+        }
+
+        ApplyViewMode(mode);
+    }
+
+    private void ApplyViewMode(FolderViewMode mode)
+    {
+        Entry!.ViewMode = mode;
 
         OnPropertyChanged(nameof(IsDetailsView));
         OnPropertyChanged(nameof(IsListView));
@@ -1663,7 +1684,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
     // ── 검색 ─────────────────────────────────────────────────────────────────
 
-    /// <summary>검색창을 편다 (🔍 클릭·포커스·<c>Ctrl+F</c>). 검색 타일은 늘 펴져 있어 아무 일도 안 한다(D69-e 6-2).</summary>
+    /// <summary>검색창을 편다 (「검색」 메뉴 항목 체크·포커스(<c>Ctrl+F</c>)). 검색 타일은 늘 펴져 있어 아무 일도 안 한다(D69-e 6-2).</summary>
     [RelayCommand]
     public void ExpandSearch()
     {
@@ -1676,7 +1697,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 명시적으로 닫는다 (✕ · 🔍 다시 누르기). <b>검색어도 같이 비운다</b> —
+    /// 명시적으로 닫는다 (✕ · 「더 보기」 메뉴의 「검색」 체크 해제). <b>검색어도 같이 비운다</b> —
     /// 입력줄이 사라졌는데 목록만 걸러진 채로 남으면 왜 이것만 보이는지 알 수 없다.
     /// 포커스가 빠지는 경우(<see cref="CollapseSearchIfEmpty"/>)와 달리 검색어가 있어도 닫는다.
     /// 검색 타일은 늘 펴져 있어 아무 일도 안 한다(D69-e 6-2).
@@ -1691,6 +1712,25 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
         SearchText = string.Empty;
         IsSearchExpanded = false;
+    }
+
+    /// <summary>
+    /// 「더 보기」 메뉴의 「검색」 체크 항목이 부르는 토글(Phase 20 · D119) — 예전 헤더 🔍
+    /// 아이콘의 <c>OnSearchToggleClick</c>(코드비하인드)이 하던 판정과 같다: 열려 있으면
+    /// 닫고, 닫혀 있으면 편다. 포커스를 주는 것(<c>FocusSearch</c>)은 뷰가 하는 일이라
+    /// 여기서는 하지 않는다 — <c>Ctrl+F</c> 경로는 그대로 <c>FocusSearch</c> 를 쓴다.
+    /// </summary>
+    [RelayCommand]
+    public void ToggleSearchExpanded()
+    {
+        if (IsSearchExpanded)
+        {
+            CloseSearch();
+        }
+        else
+        {
+            ExpandSearch();
+        }
     }
 
     /// <summary>

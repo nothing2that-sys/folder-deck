@@ -131,6 +131,32 @@ public sealed class SortEntryPointTests
         Assert.Equal(" · 수정 ↑", code.MetaSortText);
     }
 
+    /// <summary>
+    /// 정렬 기준을 커맨드로 바꾸면 <see cref="FolderPanelViewModel.SortIcon"/> 도 같이
+    /// 바뀐다(Phase 20 · D119 · T14) — 헤더 아이콘이 「더 보기」 메뉴로 옮겨가도 그 상태를
+    /// 체크로 대신 보여줘야 하므로(D117 A3), 값 자체가 커맨드 하나로 제대로 갱신되는지
+    /// 확인해 둔다.
+    /// </summary>
+    [Fact]
+    public async Task ChoosingACriterionUpdatesTheSortIconToo()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var code = f.ViewModel.Panels[0];
+        Assert.Equal("▴", code.SortIcon);
+
+        await code.SetSortCommand.ExecuteAsync(SortBy.Size);
+
+        Assert.Equal(SortBy.Size, code.Entry!.SortBy);
+        Assert.Equal("▴", code.SortIcon);
+
+        // 같은 기준을 다시 고르면 방향이 뒤집힌다 — 아이콘도 그것을 따라간다.
+        await code.SetSortCommand.ExecuteAsync(SortBy.Size);
+        Assert.True(code.Entry.SortDesc);
+        Assert.Equal("▾", code.SortIcon);
+    }
+
     /// <summary>메타 세 조각을 이어 붙인 것이 문구다 — 정렬을 바꿔도 어긋나지 않는다.</summary>
     [Fact]
     public async Task MetaPartsStillJoinIntoTheMetaLine()

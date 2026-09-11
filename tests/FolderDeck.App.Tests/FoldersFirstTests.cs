@@ -96,6 +96,42 @@ public sealed class FoldersFirstTests
         Assert.Equal(SortBy.Modified, code.Entry!.SortBy);
     }
 
+    /// <summary>
+    /// 「폴더 먼저」와 정렬 기준(<c>SortBy</c>)은 어느 쪽에서 건드려도 서로 안 바뀐다 —
+    /// <c>SortIcon</c> 의 <c>∪</c> 부분과 나머지 부분이 따로 논다(Phase 20 · D119 · T15,
+    /// R6 대조 시험). 이 회차는 정렬 기준 선택을 헤더 아이콘에서 메뉴로 옮기는데, 그
+    /// 과정에서 두 커맨드가 서로의 값을 건드리게 되지 않았는지 잡는 용도다.
+    /// <para>
+    /// 앞 방향(「폴더 먼저」를 꺼도 <c>SortBy</c> 는 그대로)은
+    /// <see cref="ChangingTheCriterionKeepsTheGroupingChoice"/> 의 반대다. 뒤 방향(정렬
+    /// 기준을 골라도 「폴더 먼저」는 그대로)이 <b>R6 이 실제로 무는 자리</b>다 —
+    /// R6 은 <c>SetSortAsync</c> 가 <c>FoldersFirst</c> 까지 뒤집게 만드는 시나리오라,
+    /// 앞 방향만 검사했다면 걸리지 않는다.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task TogglingEitherOneLeavesTheOtherAlone()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var code = f.ViewModel.Panels[0];
+        Assert.Equal(SortBy.Name, code.Entry!.SortBy);
+        Assert.Equal("▴", code.SortIcon);
+
+        await code.ToggleFoldersFirstCommand.ExecuteAsync(null);
+
+        Assert.Equal(SortBy.Name, code.Entry.SortBy);
+        Assert.Equal("∪▴", code.SortIcon);
+
+        await code.SetSortCommand.ExecuteAsync(SortBy.Size);
+
+        // 「폴더 먼저」는 여전히 꺼진 채다 — 정렬 기준을 고른 것이 건드리면 안 된다.
+        Assert.False(code.FoldersFirst);
+        Assert.Equal(SortBy.Size, code.Entry.SortBy);
+        Assert.Equal("∪▴", code.SortIcon);
+    }
+
     /// <summary>타일마다 따로다 — 옆 칸이 따라 바뀌지 않는다 (§3.1 · 정렬과 같은 결).</summary>
     [Fact]
     public async Task EachTileGroupsOnItsOwn()

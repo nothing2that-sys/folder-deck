@@ -166,6 +166,25 @@ public sealed class SearchBoxExpansionTests
         Assert.Equal(string.Empty, panel.SearchText);
     }
 
+    /// <summary>
+    /// 「더 보기」 메뉴의 「검색」 체크 항목이 부르는 토글(Phase 20 · D119 · T13) — 헤더의
+    /// 예전 🔍 아이콘 클릭(코드비하인드 <c>OnSearchToggleClick</c>)과 같은 판정을 이제
+    /// 커맨드로 직접 부를 수 있어야 한다.
+    /// </summary>
+    [Fact]
+    public void ToggleCommandFlipsTheExpandedState()
+    {
+        using var f = new MainWindowFixture();
+        var panel = f.Rotating;
+        Assert.False(panel.IsSearchExpanded);
+
+        panel.ToggleSearchExpandedCommand.Execute(null);
+        Assert.True(panel.IsSearchExpanded);
+
+        panel.ToggleSearchExpandedCommand.Execute(null);
+        Assert.False(panel.IsSearchExpanded);
+    }
+
     /// <summary>재귀 검색 중에 닫아도 검색이 취소되고 목록이 돌아온다.</summary>
     [Fact]
     public async Task ClosingCancelsARunningRecursiveSearch()

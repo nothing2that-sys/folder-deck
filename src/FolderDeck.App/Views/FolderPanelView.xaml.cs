@@ -77,24 +77,26 @@ public partial class FolderPanelView : UserControl
     }
 
     /// <summary>
-    /// 헤더 메타의 정렬 글자를 눌렀다 — <b>메뉴를 여는 것이 전부다</b> (부채 17).
+    /// 헤더의 「더 보기」(⋯)를 눌렀다 — <b>메뉴를 여는 것이 전부다</b>(Phase 20 · D119).
+    /// 예전 정렬 아이콘의 클릭 처리(부채 17)와 같은 자리를 그대로 물려받았다.
     /// </summary>
     /// <remarks>
     /// WPF <c>ContextMenu</c> 는 우클릭에만 저절로 열리므로 좌클릭으로 열려면 누군가
     /// <c>IsOpen</c> 을 세워야 하는데, 그것은 뷰가 가진 속성이라 VM 커맨드가 할 수 없다.
     /// <para>
-    /// <b>정렬을 정하는 일은 여기에 없다.</b> 이 핸들러는 <c>SortBy</c> 를 읽지도 쓰지도
-    /// 않는다 — 값을 바꾸는 것은 <c>MenuItem</c> 이 부르는 <c>SetSortCommand</c> 다.
+    /// <b>메뉴 항목이 무엇을 하는지는 여기에 없다.</b> 이 핸들러는 아무 상태도 읽지도 쓰지도
+    /// 않는다 — 값을 바꾸는 것은 각 <c>MenuItem</c> 이 부르는 커맨드(<c>SetSortCommand</c>·
+    /// <c>SetViewModeCommand</c>·<c>ToggleSearchExpandedCommand</c> 등)다.
     /// </para>
     /// </remarks>
-    private void OnSortTextClick(object sender, RoutedEventArgs e)
+    private void OnMoreMenuClick(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement target || target.ContextMenu is not { } menu)
         {
             return;
         }
 
-        // PlacementTarget 을 먼저 세운다 — 메뉴가 그 글자 아래에 뜨고, 메뉴 안의 바인딩이
+        // PlacementTarget 을 먼저 세운다 — 메뉴가 이 버튼 아래에 뜨고, 메뉴 안의 바인딩이
         // 이 버튼의 Tag(=패널 VM)를 타고 커맨드에 닿는다.
         menu.PlacementTarget = target;
         menu.Placement = PlacementMode.Bottom;
@@ -102,10 +104,11 @@ public partial class FolderPanelView : UserControl
     }
 
     /// <summary>
-    /// 상세 뷰의 컬럼 머리를 눌렀다 — <b>정렬 글자 메뉴와 같은 커맨드로 보낸다</b> (Phase 8-B 1).
+    /// 상세 뷰의 컬럼 머리를 눌렀다 — <b>정렬 메뉴와 같은 커맨드로 보낸다</b> (Phase 8-B 1).
     /// </summary>
     /// <remarks>
-    /// <see cref="OnSortTextClick"/> 과 같은 결이다: 여기서 <c>SortBy</c> 를 읽지도 쓰지도 않고,
+    /// <see cref="OnMoreMenuClick"/> 이 여는 메뉴 속 정렬 하위 메뉴와 같은 결이다:
+    /// 여기서 <c>SortBy</c> 를 읽지도 쓰지도 않고,
     /// 같은 기준을 다시 눌렀을 때 방향을 뒤집는 규칙도 여기 없다 — 전부
     /// <c>SetSortCommand</c>(<c>FolderPanelViewModel.SetSortAsync</c>) 안에 이미 있던 것이다.
     /// 이 핸들러가 하는 일은 <b>눌린 컬럼이 어느 기준인지</b> 골라 넘기는 것뿐이다.
@@ -406,7 +409,9 @@ public partial class FolderPanelView : UserControl
     }
 
     /// <summary>
-    /// 검색창을 펴고 포커스를 준다 (<c>Ctrl+F</c> · 접힌 검색줄 클릭).
+    /// 검색창을 펴고 포커스를 준다 (<c>Ctrl+F</c> 전용 — Phase 20 · D119 부터 「더 보기」
+    /// 메뉴의 「검색」은 <c>ToggleSearchExpandedCommand</c> 로 상태만 바꾸고 포커스는
+    /// 안 준다, 뷰가 하는 일이라서다).
     /// </summary>
     public void FocusSearch()
     {
@@ -425,24 +430,6 @@ public partial class FolderPanelView : UserControl
                 SearchBox.SelectAll();
             },
             DispatcherPriority.Input);
-    }
-
-    /// <summary>내비 클러스터의 🔍 — 토글이다. 열려 있으면 닫고, 닫혀 있으면 펴고 포커스한다.</summary>
-    private void OnSearchToggleClick(object sender, RoutedEventArgs e)
-    {
-        if (ViewModel is not { } panel)
-        {
-            return;
-        }
-
-        if (panel.IsSearchExpanded)
-        {
-            panel.CloseSearch();
-        }
-        else
-        {
-            FocusSearch();
-        }
     }
 
     /// <summary>
