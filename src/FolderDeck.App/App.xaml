@@ -157,50 +157,6 @@
         </Style>
 
         <!--
-            좁은 타일에서 아이콘을 접는 두 단계.
-
-            1x1 타일은 작은 창에서 100px 도 안 되는데 내비 아이콘 6개만 144px 다. 그대로 두면
-            잘리고, 잘리지 않게 breadcrumb 을 밀어내면 이번엔 <b>폴더 이름</b>이 사라진다 —
-            이름이 아이콘보다 중요하다. 그래서 대체 조작이 있는 것부터 순서대로 접는다.
-
-            240px 아래: 뒤로 · 앞으로 · 다시 읽기(⟳) 가 동시에 접힌다.
-            170px 아래: 상위 · 앵커 복귀(⌂) · 뷰 방식 · 미리보기(▤) · 정렬 · 검색(🔍) 여섯이
-            동시에 접힌다.
-            끝까지 남는 것: 확장(⤢) 하나 — 진입점이 그것 하나뿐이고, 타일이 좁을 때가
-            확장이 가장 필요한 때라서다(Phase 19 · D116 §4-7 (c)). 앵커 복귀는 대체
-            진입점이 셋(breadcrumb 첫 조각 · 왼쪽 리스트 재클릭 · Alt+Home)이라 접혀도
-            기능이 막히지 않는다 — 그래서 이 "끝까지 남는" 자리를 확장에 내주고 170px
-            단으로 내려갔다(D116 이 교환, D117 A1 이 관측).
-        -->
-        <Style x:Key="SecondaryNavButton" TargetType="Button" BasedOn="{StaticResource NavButton}">
-            <Style.Triggers>
-                <DataTrigger Value="False">
-                    <DataTrigger.Binding>
-                        <Binding RelativeSource="{RelativeSource AncestorType=UserControl}"
-                                 Path="ActualWidth"
-                                 Converter="{StaticResource WiderThan}"
-                                 ConverterParameter="240" />
-                    </DataTrigger.Binding>
-                    <Setter Property="Visibility" Value="Collapsed" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style x:Key="TertiaryNavButton" TargetType="Button" BasedOn="{StaticResource NavButton}">
-            <Style.Triggers>
-                <DataTrigger Value="False">
-                    <DataTrigger.Binding>
-                        <Binding RelativeSource="{RelativeSource AncestorType=UserControl}"
-                                 Path="ActualWidth"
-                                 Converter="{StaticResource WiderThan}"
-                                 ConverterParameter="170" />
-                    </DataTrigger.Binding>
-                    <Setter Property="Visibility" Value="Collapsed" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
-        <!--
             🔍 — 열려 있는 동안 눌린 표시. ToggleButton 을 쓰지 않는 이유:
             클릭하면 WPF 가 IsChecked 에 "로컬 값"을 심는데, 그 로컬 값이 OneWay 바인딩을
             영구히 이겨버린다. 그러면 포커스가 빠져 검색줄이 접힌 뒤에도 버튼만 눌린 채로 남는다
@@ -214,8 +170,40 @@
             </Style.Triggers>
         </Style>
 
-        <!-- 검색 토글도 같은 단계에서 접힌다(모양만 NavToggleButton 을 따른다). -->
-        <Style x:Key="TertiaryNavToggleButton" TargetType="Button"
+        <!--
+            헤더가 넓으면 아이콘 열 개, 좁으면 셋(⌂·⤢·⋯)으로 한 단에 갈린다(Phase 20 ·
+            D120 · W2) — 240/170 두 단계 접힘 사다리(D116~D119 가 쓰다가 이 회차가
+            지운 것 — git 기록에서만 남아 있다)를 대신한다. 사다리는 아이콘이 사라지면
+            기능도 같이 죽었다(D118 §7②) — 이 방식은 사라지는 대신 ⋯ 드롭다운 안으로
+            들어가 어느 폭에서도 기능이 죽지 않는다.
+
+            임계 290 의 유도(D120 §4-1, 버리는 프로브로 실측) —
+              아이콘 열 개 무리의 요구 폭 = 200px(SortIcon="▴", 기본값) ~ 203.55px
+                (SortIcon="∪▴", FoldersFirst 를 끈 가장 넓은 두 글자 상태).
+              가장 넓은 경우(203.55)를 기준으로 삼는다 — 아이콘 좁은 쪽을 썼다가 FoldersFirst
+                를 끈 상태에서 아슬아슬하게 다시 넘칠 여지를 남기지 않기 위해서다.
+              임계 = 203.55 + 64(앵커 c 의 breadcrumb MinWidth) + 16(여유, 경계에서
+                떨리지 않게) = 283.55 → 10 단위로 올림 = 290.
+            <b>아이콘 구성이 바뀌면(버튼을 넣거나 빼거나 폭을 바꾸면) 이 상수가 낡는다</b> —
+            그때는 이 프로브를 다시 돌려 새로 유도해야 한다. 세 스타일이 같은
+            ConverterParameter="290" 을 쓴다 — 하나만 고치고 셋을 놓치지 않는다.
+        -->
+        <Style x:Key="WideOnlyNavButton" TargetType="Button" BasedOn="{StaticResource NavButton}">
+            <Style.Triggers>
+                <DataTrigger Value="False">
+                    <DataTrigger.Binding>
+                        <Binding RelativeSource="{RelativeSource AncestorType=UserControl}"
+                                 Path="ActualWidth"
+                                 Converter="{StaticResource WiderThan}"
+                                 ConverterParameter="290" />
+                    </DataTrigger.Binding>
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 검색은 같은 임계에서 접히지만 모양은 NavToggleButton(눌린 표시)을 따른다. -->
+        <Style x:Key="WideOnlySearchToggleButton" TargetType="Button"
                BasedOn="{StaticResource NavToggleButton}">
             <Style.Triggers>
                 <DataTrigger Value="False">
@@ -223,7 +211,22 @@
                         <Binding RelativeSource="{RelativeSource AncestorType=UserControl}"
                                  Path="ActualWidth"
                                  Converter="{StaticResource WiderThan}"
-                                 ConverterParameter="170" />
+                                 ConverterParameter="290" />
+                    </DataTrigger.Binding>
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- ⋯(더 보기)는 반대다 — 넓을 때(아이콘 열 개가 다 보일 때) 숨는다. -->
+        <Style x:Key="NarrowOnlyNavButton" TargetType="Button" BasedOn="{StaticResource NavButton}">
+            <Style.Triggers>
+                <DataTrigger Value="True">
+                    <DataTrigger.Binding>
+                        <Binding RelativeSource="{RelativeSource AncestorType=UserControl}"
+                                 Path="ActualWidth"
+                                 Converter="{StaticResource WiderThan}"
+                                 ConverterParameter="290" />
                     </DataTrigger.Binding>
                     <Setter Property="Visibility" Value="Collapsed" />
                 </DataTrigger>

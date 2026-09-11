@@ -411,32 +411,134 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- 내비 클러스터 — 열 개에서 셋으로 줄었다(Phase 20 · D119).
+                    <!-- 내비 클러스터 — 폭에 따라 한 단으로 갈린다(Phase 20 · D120 · W2).
+                         넓으면 아이콘 열 개(예전 그대로), 좁으면 셋(⌂·⤢·⋯)으로 전부
+                         한 번에 바뀐다 — 중간 단계가 없다. 임계 290 의 유도는
+                         App.xaml 의 WideOnlyNavButton 주석에 있다.
 
-                         D118 §7② JH 관측: 아이콘이 열 개일 때는 접힘 사다리(240/170)가
-                         일하기도 전에 헤더 Grid 의 열 다툼(아래 앵커 c · App.xaml
-                         SecondaryNavButton/TertiaryNavButton 주석)으로 오른쪽부터 짜부라들며
-                         잘렸다 — ⤢(확장)가 맨 오른쪽이라 가장 먼저 죽었다. D116 이 「확장에
-                         끝까지 안 접히는 자리를 준다」며 세운 전제가 무너진 것이다.
-
-                         고치는 길은 접힘 단계를 손보는 것이 아니라 <b>아이콘 자체를 줄이는
-                         것</b>이다(D119 A2 근거 — 일곱은 이미 대체 경로가 있다: 단축키·마우스
-                         옆 버튼·컨텍스트 메뉴). 남는 셋(⌂·⤢·⋯)은 폭 합이 60px 대로 떨어져
-                         열 다툼이 발동하는 폭 아래로 내려간다. 셋뿐이라 접을 이유가 없다 —
-                         셋 다 스타일은 NavButton(비접힘)이다. 접으면 D116 이 겪은 것과 같은
-                         문제("끝까지 남는 자리를 어느 아이콘에 줄까")가 다시 생긴다. -->
+                         D119 는 열 개를 셋으로 아예 줄였으나, D118 §7② 에서 JH 가
+                         「아이콘이 너무 많이 숨겨져 불편하다, 폭이 되면 열 개를 그대로
+                         두고 좁아질 때만 ⋯ 로 바뀌어 달라」고 방향을 바꿨다(D120 §2) —
+                         이번 라운드가 그 요청을 반영한다. 240/170 접힘 사다리로 되돌아간
+                         것은 아니다 — 사다리는 아이콘이 사라지면 기능이 같이 죽었지만
+                         (D118 §7②, 접힘 사다리가 일하기도 전에 열 다툼으로 짜부라든
+                         것도 D119 가 밝혔다), 이번엔 사라지는 아이콘의 기능이 전부 ⋯
+                         드롭다운 안으로 들어가 있어 어느 폭에서도 기능이 죽지 않는다. -->
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Style="{StaticResource WideOnlyNavButton}" Width="20"
+                                Command="{Binding GoBackCommand}"
+                                AutomationProperties.Name="뒤로"
+                                ToolTip="뒤로 (마우스 뒤로 버튼 · Alt+←)" Content="←" />
+                        <Button Style="{StaticResource WideOnlyNavButton}" Width="20"
+                                Command="{Binding GoForwardCommand}"
+                                AutomationProperties.Name="앞으로"
+                                ToolTip="앞으로 (마우스 앞으로 버튼 · Alt+→)" Content="→" />
+                        <Button Style="{StaticResource WideOnlyNavButton}" Width="20"
+                                Command="{Binding GoUpCommand}"
+                                IsEnabled="{Binding CanGoUp}"
+                                AutomationProperties.Name="상위 폴더"
+                                ToolTip="상위 폴더 (Alt+↑)" Content="↑" />
+
                         <!-- 앵커 복귀는 진입점이 셋(breadcrumb 첫 조각 · 왼쪽 리스트 재클릭 ·
-                             Alt+Home, §4.6)이라 대체가 있지만, ⤢ 와 나란히 밖에 남기기로
-                             D117~D119 가 정했다(다른 성격의 "장소"·"크기" 조작 둘을 늘 보이게). -->
+                             Alt+Home, §4.6)이라 대체가 있지만, ⤢ 와 나란히 어느 폭에서도
+                             보이기로 D117~D120 이 정했다(다른 성격의 "장소"·"크기" 조작
+                             둘을 늘 보이게). -->
                         <Button Style="{StaticResource NavButton}" Width="20"
                                 Command="{Binding GoToAnchorCommand}"
                                 AutomationProperties.Name="앵커로 복귀"
                                 ToolTip="앵커로 복귀 (Alt+Home)" Content="⌂" />
 
+                        <Button Style="{StaticResource WideOnlyNavButton}" Width="20"
+                                Command="{Binding RefreshCommand}"
+                                AutomationProperties.Name="다시 읽기"
+                                ToolTip="다시 읽기 (F5)" Content="⟳" />
+
+                        <!-- 뷰 방식 토글 (§3.2). 상태를 보여 주는 곳과 바꾸는 곳이 같다 —
+                             글자가 아이콘이 됐을 뿐 커맨드도 뜻도 그대로다. -->
+                        <Button Style="{StaticResource WideOnlyNavButton}" Width="20"
+                                Command="{Binding ToggleViewModeCommand}"
+                                Content="{Binding ViewModeIcon}"
+                                AutomationProperties.Name="뷰 방식 전환"
+                                ToolTip="{Binding ViewModeTip}" />
+
+                        <!-- 미리보기 칸 토글 (Phase 17 · D86 · §3.2). 진입점이 여기인 이유는
+                             컬럼 머리글 우클릭을 열 토글이 이미 쓰고 있어서다(D79). -->
+                        <Button Style="{StaticResource WideOnlyNavButton}" Width="20"
+                                Command="{Binding ToggleShowPreviewCommand}"
+                                Content="▤"
+                                AutomationProperties.Name="미리보기 칸 전환"
+                                ToolTip="미리보기 칸" />
+
+                        <!-- 정렬 (부채 17 · Phase 8-C ③). 아이콘은 방향(▴/▾)과 통합(∪)만
+                             말하고 기준은 툴팁과 열리는 메뉴가 말한다. 폭만 Auto 다: 통합일
+                             때 두 글자(∪▾)가 된다. OnMoreMenuClick 은 ⋯ 버튼과 같은
+                             핸들러다 — sender 의 ContextMenu 를 여는 것 말고는 아무 일도
+                             안 해서 재사용된다. ContextMenu 는 시각 트리 밖이라 DataContext
+                             가 안 내려온다 — Tag 로 패널 VM 을 잡는다. 재귀 검색 중에는
+                             잠근다(§4.10, 찾은 순서 그대로라 기준을 바꿔도 순서가 안 바뀐다).
+
+                             아래 다섯 항목(기준 넷 + 폴더 먼저)은 ⋯ 의 "정렬" 하위 메뉴와
+                             내용이 같다 — 하나는 ContextMenu, 하나는 MenuItem.Items 라
+                             그릇 모양이 달라 같은 x:Shared="False" 리소스로 못 묶는다
+                             (D120 §4-2 가 CurrentFolderMenu/ColumnMenu 이디엄을 먼저
+                             확인했다 — 그 이디엄은 두 소비자가 똑같이 ContextMenu 를
+                             원할 때만 맞는다). 그래서 두 벌로 둔다 — 한쪽을 고치면
+                             반대쪽도 고쳐야 한다. -->
+                        <Button Style="{StaticResource WideOnlyNavButton}"
+                                Width="Auto" MinWidth="20" Padding="2,0"
+                                Click="OnMoreMenuClick"
+                                Content="{Binding SortIcon}"
+                                IsEnabled="{Binding IsRecursiveSearch, Converter={StaticResource InverseBool}}"
+                                ToolTipService.ShowOnDisabled="True"
+                                AutomationProperties.Name="정렬 기준 변경"
+                                ToolTip="{Binding SortTip}"
+                                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="이름"
+                                              Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:SortBy.Name}" />
+                                    <MenuItem Header="수정"
+                                              Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:SortBy.Modified}" />
+                                    <MenuItem Header="크기"
+                                              Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:SortBy.Size}" />
+                                    <MenuItem Header="종류"
+                                              Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:SortBy.Type}" />
+                                    <Separator />
+                                    <!-- 체크 표시의 주인은 바인딩 하나다(Phase 20 · D120 · W3)
+                                         — IsCheckable 을 안 준다. IsCheckable="True" 면
+                                         클릭이 체크를 스스로도 뒤집어 커맨드가 넣은 값과
+                                         따로 논다(이미 켜진 항목을 다시 누르면 커맨드는
+                                         같은 값을 다시 넣는데 체크만 풀리는 식) —
+                                         IsChecked 바인딩만으로도 체크 표시는 그려진다. -->
+                                    <MenuItem Header="폴더 먼저"
+                                              IsChecked="{Binding PlacementTarget.Tag.FoldersFirst,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                          Mode=OneWay}"
+                                              Command="{Binding PlacementTarget.Tag.ToggleFoldersFirstCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Visibility="{Binding PlacementTarget.Tag.IsSearchTile,
+                                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                           Converter={StaticResource InverseBoolToVisibility}}"
+                                              ToolTip="끄면 폴더와 파일을 한 덩어리로 정렬한다 — 아이콘에 ∪ 가 붙는다 (창을 다시 열면 켜진 상태로 돌아온다)" />
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+
+                        <Button Style="{StaticResource WideOnlySearchToggleButton}" Width="20"
+                                Click="OnSearchToggleClick"
+                                AutomationProperties.Name="검색"
+                                ToolTip="검색 (Ctrl+F)" Content="🔍" />
+
                         <!-- 타일 확장 ↔ 복원 (Phase 19 · D116 · §4-7). 진입점이 이것 하나뿐이라
-                             메뉴로 못 보낸다(D117 A2) — 대체 경로가 있는 것부터 메뉴로 보낸다는
-                             원칙(D119 §2)에서 그대로 밖에 남는다. -->
+                             메뉴로 못 보낸다(D117 A2) — ⌂ 와 나란히 어느 폭에서도 보인다. -->
                         <Button Style="{StaticResource NavButton}" Width="20"
                                 Command="{Binding ToggleExpandCommand}"
                                 CommandParameter="{Binding}"
@@ -444,15 +546,13 @@
                                 AutomationProperties.Name="타일 확장"
                                 ToolTip="{Binding ExpandTip}" />
 
-                        <!-- 더 보기 (Phase 20 · D119). 정렬 아이콘이 쓰던 방식을 그대로
+                        <!-- 더 보기 (Phase 20 · D119, 폭 갈림은 D120). 좁을 때만 보인다
+                             (NarrowOnlyNavButton) — 정렬 아이콘이 쓰던 방식을 그대로
                              따른다(D117 A5) — Button + 인라인 Button.ContextMenu + 클릭 시
-                             OnMoreMenuClick 이 IsOpen 을 세운다. ContextMenu 는 시각 트리
-                             밖이라 DataContext 가 안 내려온다 — Tag 로 패널 VM 을 잡는다
-                             (정렬 메뉴와 같은 우회). Phase 13 의 ContextMenuOpening 가드는
-                             이 아이콘 클러스터 자리에 안 걸린다(D117 A5 — 조상 사슬에
-                             ContextMenu 가 없다) — 새 Popup 을 만들지 않고 저장소에 이미 있는
-                             이디엄만 썼다. -->
-                        <Button Style="{StaticResource NavButton}" Width="20"
+                             OnMoreMenuClick 이 IsOpen 을 세운다. Phase 13 의
+                             ContextMenuOpening 가드는 이 아이콘 클러스터 자리에 안 걸린다
+                             (D117 A5 — 조상 사슬에 ContextMenu 가 없다). -->
+                        <Button Style="{StaticResource NarrowOnlyNavButton}" Width="20"
                                 Click="OnMoreMenuClick"
                                 AutomationProperties.Name="더 보기"
                                 ToolTip="더 보기" Content="⋯"
@@ -479,15 +579,20 @@
                                     <!-- 보기 방식 — 헤더 아이콘이 글리프(▦/☰)로 보여주던 상태를
                                          체크로 대신한다(D117 A3 손실 목록, D119 §4-4). 하위 메뉴
                                          둘로 갈라 지금 어느 쪽인지 체크가 늘 보이게 한다 —
-                                         토글 하나로 두면 체크 없이는 지금 값을 알 길이 없다. -->
-                                    <MenuItem Header="목록" IsCheckable="True"
+                                         토글 하나로 두면 체크 없이는 지금 값을 알 길이 없다.
+                                         IsCheckable 을 안 준다(D120 · W3) — 두면 클릭이 체크를
+                                         스스로 뒤집어 커맨드가 넣은 값과 따로 논다. 이미 선택된
+                                         쪽을 다시 누르면 커맨드는 같은 값을 다시 넣는데(그래서
+                                         SetViewMode 가 값이 같으면 아무 일도 안 한다, D119)
+                                         체크만 풀려 "둘 다 해제"로 보였다(D119 §7② JH 관측). -->
+                                    <MenuItem Header="목록"
                                               IsChecked="{Binding PlacementTarget.Tag.IsListView,
                                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
                                                           Mode=OneWay}"
                                               Command="{Binding PlacementTarget.Tag.SetViewModeCommand,
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                               CommandParameter="{x:Static models:FolderViewMode.List}" />
-                                    <MenuItem Header="자세히" IsCheckable="True"
+                                    <MenuItem Header="자세히"
                                               IsChecked="{Binding PlacementTarget.Tag.IsDetailsView,
                                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
                                                           Mode=OneWay}"
@@ -497,7 +602,7 @@
 
                                     <!-- 미리보기 — 예전 헤더 아이콘(▤)은 상태를 안 보여줬다
                                          (D117 A3) — 체크가 붙는 것은 손실이 아니라 개선이다. -->
-                                    <MenuItem Header="미리보기" IsCheckable="True"
+                                    <MenuItem Header="미리보기"
                                               IsChecked="{Binding PlacementTarget.Tag.CurrentShowPreview,
                                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
                                                           Mode=OneWay}"
@@ -535,8 +640,10 @@
                                              타일은 이 토글이 뜻이 없다 — ToggleFoldersFirstAsync
                                              가 Entry 를 써서 아무 일도 안 한다(D69-f 결정 6).
                                              죽은 손잡이를 보이는 채로 두지 않는다. 이미 메뉴
-                                             안에 있었으므로 옮겨도 잃는 것이 없다(D117 A2-8b). -->
-                                        <MenuItem Header="폴더 먼저" IsCheckable="True"
+                                             안에 있었으므로 옮겨도 잃는 것이 없다(D117 A2-8b).
+                                             IsCheckable 을 안 준다 — 왼쪽 정렬 버튼의 같은
+                                             항목과 같은 이유(D120 · W3). -->
+                                        <MenuItem Header="폴더 먼저"
                                                   IsChecked="{Binding PlacementTarget.Tag.FoldersFirst,
                                                               RelativeSource={RelativeSource AncestorType=ContextMenu},
                                                               Mode=OneWay}"
@@ -553,8 +660,10 @@
                                          보여준다. ToggleSearchExpandedCommand 는 예전 헤더 🔍
                                          아이콘의 OnSearchToggleClick 과 같은 판정을 커맨드로
                                          올린 것이다(D119 §4-2) — 포커스를 주는 것은 뷰의 일이라
-                                         Ctrl+F 경로(FocusSearch)만 그대로 한다. -->
-                                    <MenuItem Header="검색" InputGestureText="Ctrl+F" IsCheckable="True"
+                                         Ctrl+F 경로(FocusSearch)만 그대로 한다. IsCheckable
+                                         을 안 준다 — 위 보기 방식·미리보기·폴더 먼저와 같은
+                                         이유(D120 · W3). -->
+                                    <MenuItem Header="검색" InputGestureText="Ctrl+F"
                                               IsChecked="{Binding PlacementTarget.Tag.IsSearchExpanded,
                                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
                                                           Mode=OneWay}"

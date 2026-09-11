@@ -25,8 +25,9 @@
         <!-- ── 1층: 셀 경계 + 빈 칸 (배치 편집 모드 중 · 아무 타일도 확장 중이 아닐 때만) ──
              Phase 19 · D116 · §4-4 — 확장 중에는 배치 편집 자체가 막히지만(§4-5), 그 전환
              순간에 빈 칸이 잠깐 비쳐 보이는 것도 막는다. 새 컨버터를 만들지 않고
-             MultiDataTrigger 로 두 조건을 겹친다(App.xaml 의 SecondaryNavButton 호버 트리거와
-             같은 이디엄). 칸마다 깃발을 두지 않는다 — 층 하나에 트리거 하나다. -->
+             MultiDataTrigger 로 두 조건을 겹친다(App.xaml 의 RowActionButton 이 쓰는
+             MultiDataTrigger 와 같은 이디엄). 칸마다 깃발을 두지 않는다 — 층 하나에
+             트리거 하나다. -->
         <ItemsControl ItemsSource="{Binding Cells}">
             <ItemsControl.Style>
                 <Style TargetType="ItemsControl">

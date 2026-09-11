@@ -77,8 +77,10 @@ public partial class FolderPanelView : UserControl
     }
 
     /// <summary>
-    /// 헤더의 「더 보기」(⋯)를 눌렀다 — <b>메뉴를 여는 것이 전부다</b>(Phase 20 · D119).
-    /// 예전 정렬 아이콘의 클릭 처리(부채 17)와 같은 자리를 그대로 물려받았다.
+    /// 「더 보기」(⋯) 또는(넓을 때) 정렬 아이콘을 눌렀다 — <b>메뉴를 여는 것이
+    /// 전부다</b>(Phase 20 · D119, 정렬 버튼 재사용은 D120 · W2). 정렬 아이콘의 원래
+    /// 클릭 처리(부채 17)와 같은 자리를 그대로 물려받았다 — 둘 다 각자의
+    /// <c>ContextMenu</c> 를 여는 것 말고는 아무 일도 안 해서 하나의 핸들러로 족하다.
     /// </summary>
     /// <remarks>
     /// WPF <c>ContextMenu</c> 는 우클릭에만 저절로 열리므로 좌클릭으로 열려면 누군가
@@ -409,9 +411,9 @@ public partial class FolderPanelView : UserControl
     }
 
     /// <summary>
-    /// 검색창을 펴고 포커스를 준다 (<c>Ctrl+F</c> 전용 — Phase 20 · D119 부터 「더 보기」
-    /// 메뉴의 「검색」은 <c>ToggleSearchExpandedCommand</c> 로 상태만 바꾸고 포커스는
-    /// 안 준다, 뷰가 하는 일이라서다).
+    /// 검색창을 펴고 포커스를 준다 (<c>Ctrl+F</c> · 넓을 때 보이는 헤더 🔍 클릭 —
+    /// D120 이 되살렸다. 「더 보기」 메뉴의 「검색」은 <c>ToggleSearchExpandedCommand</c>
+    /// 로 상태만 바꾸고 포커스는 안 준다, 뷰가 하는 일이라서다).
     /// </summary>
     public void FocusSearch()
     {
@@ -430,6 +432,28 @@ public partial class FolderPanelView : UserControl
                 SearchBox.SelectAll();
             },
             DispatcherPriority.Input);
+    }
+
+    /// <summary>
+    /// 헤더 🔍(넓을 때만 보인다, D120 W2) — 토글이다. 열려 있으면 닫고, 닫혀 있으면
+    /// 펴고 포커스한다. D119 가 지웠다가(그때는 아이콘 자체가 없었다) D120 이 헤더를
+    /// 폭에 따라 되살리며 다시 필요해졌다.
+    /// </summary>
+    private void OnSearchToggleClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } panel)
+        {
+            return;
+        }
+
+        if (panel.IsSearchExpanded)
+        {
+            panel.CloseSearch();
+        }
+        else
+        {
+            FocusSearch();
+        }
     }
 
     /// <summary>

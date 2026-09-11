@@ -181,4 +181,28 @@ public sealed class ViewModeToggleTests
         Assert.Null(rotating.MetaText);
         Assert.Equal(0, saves);
     }
+
+    /// <summary>
+    /// 「더 보기」 메뉴의 목록/자세히 체크 항목이 부르는 <c>SetViewModeCommand</c>(Phase 20 ·
+    /// D120 · T17, 대조 시험) — 같은 값으로 두 번 불러도 값이 그대로다. R6(D120 §3) 이
+    /// 이것을 "뒤집기"로 바꾸면 두 번째 호출에서 값이 달아나며 이 시험이 빨개진다.
+    /// <b>지금은 이미 초록이어도 정상이다</b> — <c>SetViewMode</c> 자체가 이미 그렇게
+    /// 짜여 있다(D119, 같은 값이면 <c>Entry.ViewMode == mode</c> 가드에 걸려 아무 일도
+    /// 안 한다).
+    /// </summary>
+    [Fact]
+    public async Task SettingTheSameValueTwiceLeavesItUnchanged()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var code = f.ViewModel.Panels[0];
+        Assert.Equal(FolderViewMode.Details, code.Entry!.ViewMode);
+
+        code.SetViewModeCommand.Execute(FolderViewMode.Details);
+        Assert.Equal(FolderViewMode.Details, code.Entry.ViewMode);
+
+        code.SetViewModeCommand.Execute(FolderViewMode.Details);
+        Assert.Equal(FolderViewMode.Details, code.Entry.ViewMode);
+    }
 }
