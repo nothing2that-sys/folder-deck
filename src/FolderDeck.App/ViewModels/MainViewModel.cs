@@ -2603,6 +2603,15 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
         foreach (var tile in doomedTiles)
         {
+            // 확장된 타일 자신을 지우는 경우 — 지우기 전에 푼다. OnExpandedTileChanged 가
+            // Tiles 를 순회해 두 깃발을 내리는데, 이미 빠진 타일은 그 순회에 안 걸려
+            // ExpandedTile 이 유령 참조로 남고 나머지 타일 전부가 계속 숨은 채 남는다
+            // (D117 A7-2 · D118 W3).
+            if (ReferenceEquals(ExpandedTile, tile))
+            {
+                ExpandedTile = null;
+            }
+
             Workspace.Tiles!.Remove(tile.Spec);
             Tiles.Remove(tile);
             tile.Panel.Clear();

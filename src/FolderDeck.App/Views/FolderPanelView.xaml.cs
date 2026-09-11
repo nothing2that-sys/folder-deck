@@ -654,6 +654,21 @@ public partial class FolderPanelView : UserControl
     }
 
     /// <summary>
+    /// breadcrumb 오른쪽 우선 잘림(Phase 20 · D118 · W1). 경로가 바뀌어 항목 폭 합이
+    /// 달라지거나(<c>ExtentWidthChange</c>) 타일이 좁아져 보이는 폭이 달라질 때
+    /// (<c>ViewportWidthChange</c>) 오른쪽 끝(현재 폴더)으로 다시 민다. 이 스크롤 자체가
+    /// 일으키는 <c>HorizontalChange</c> 만 있는 재호출은 두 값이 0 이라 걸러진다 — 무한
+    /// 루프가 안 된다.
+    /// </summary>
+    private void OnBreadcrumbScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (e.ExtentWidthChange != 0 || e.ViewportWidthChange != 0)
+        {
+            BreadcrumbScroll.ScrollToRightEnd();
+        }
+    }
+
+    /// <summary>
     /// 임계를 넘으면 고무줄을 시작하고, 시작한 뒤에는 사각형과 선택을 갱신한다.
     /// <b>항목 드래그 판정이 이 고무줄 흐름보다 먼저 온다</b> (D71).
     /// </summary>

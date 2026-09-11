@@ -589,54 +589,73 @@
                          Breadcrumbs 가 비었을 때 등)는 히트테스트에 안 걸린다(B-0 §B.4 가
                          [추측]으로 남겨 둔 것을 D75-c 가 실제로 확인하고 고쳤다).
                          ContextMenuOpening 은 ListArea 와 같은 핸들러다(D75-d) — 검색 타일
-                         가드가 여기도 필요해서다. -->
-                    <ItemsControl ItemsSource="{Binding Breadcrumbs}"
-                                  VerticalAlignment="Center" ClipToBounds="True"
+                         가드가 여기도 필요해서다.
+
+                         오른쪽 우선 잘림(Phase 20 · D118 · W1) — 현재 폴더 이름이 먼저
+                         잘리던 것을 고친다(D117 A6). ItemsControl 에 HorizontalAlignment
+                         만 주는 안(가)은 실측으로 기각했다: ItemsControl 자신의 DesiredSize
+                         가 이미 슬롯 폭으로 눌린 채 계산되므로(기본 Template 이 폭을 무한대로
+                         재지 않는다) alignment 오프셋이 0 이 되어 Left·Right·Stretch 가
+                         똑같이 움직인다 — 왼쪽으로 넘치지 않는다. 그래서 (나) 로 간다:
+                         ScrollViewer 로 감싸고 코드 비하인드가 오른쪽 끝으로 미는 것 — 항목
+                         폭 합이 슬롯보다 넓으면 왼쪽(앞쪽 조각)이 스크롤 밖으로 밀려나고
+                         오른쪽(현재 폴더)이 항상 보인다. Background·ToolTip·ContextMenu 가
+                         ItemsControl 에서 여기(ScrollViewer)로 옮겨온 이유는 같다 —
+                         내용보다 넓은 빈 자리의 히트테스트를 이 바깥 껍데기가 챙겨야
+                         해서다. -->
+                    <ScrollViewer x:Name="BreadcrumbScroll"
+                                  VerticalAlignment="Center"
+                                  HorizontalScrollBarVisibility="Hidden"
+                                  VerticalScrollBarVisibility="Disabled"
                                   Background="Transparent"
                                   ToolTip="우클릭: 지금 보고 있는 폴더 메뉴"
                                   ContextMenu="{StaticResource CurrentFolderMenu}"
-                                  ContextMenuOpening="OnListContextMenuOpening">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="›" Foreground="{StaticResource Brush.TextSecondary}"
-                                               Margin="1,0" VerticalAlignment="Center">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsAnchor}" Value="True">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                    <Button Style="{StaticResource LinkButton}"
-                                            Content="{Binding Name}"
-                                            ToolTip="{Binding Path}"
-                                            Command="{Binding DataContext.NavigateToCommand,
-                                                              RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            CommandParameter="{Binding Path}">
-                                        <Button.Resources>
-                                            <Style TargetType="TextBlock">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsAnchor}" Value="True">
-                                                        <Setter Property="FontWeight" Value="SemiBold" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Resources>
-                                    </Button>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                                  ContextMenuOpening="OnListContextMenuOpening"
+                                  ScrollChanged="OnBreadcrumbScrollChanged">
+                        <ItemsControl ItemsSource="{Binding Breadcrumbs}"
+                                      VerticalAlignment="Center" ClipToBounds="True">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="›" Foreground="{StaticResource Brush.TextSecondary}"
+                                                   Margin="1,0" VerticalAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsAnchor}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <Button Style="{StaticResource LinkButton}"
+                                                Content="{Binding Name}"
+                                                ToolTip="{Binding Path}"
+                                                Command="{Binding DataContext.NavigateToCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding Path}">
+                                            <Button.Resources>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsAnchor}" Value="True">
+                                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Resources>
+                                        </Button>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
                     </DockPanel>
                 </Grid>
 

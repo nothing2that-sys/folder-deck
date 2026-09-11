@@ -153,4 +153,54 @@ public sealed class TileExpandTests
         Assert.Equal(before, after);
         Assert.Equal(9, Workspace.CurrentSchemaVersion);
     }
+
+    // ── T10~T12(D118 §3) — RemoveFolder 가 확장된 타일을 지울 때의 정리 ──────────
+
+    [Fact]
+    public void RemovingTheExpandedTilesFolderClearsExpandedTile()
+    {
+        using var f = new MainWindowFixture();
+        var codeRow = f.Row("code");
+        var tile = f.ViewModel.Tiles.Single(t => t.IsPinned && t.Spec.FolderId == codeRow.Entry.Id);
+        f.ViewModel.ExpandedTile = tile;
+
+        f.ViewModel.RemoveFolder(codeRow);
+
+        Assert.Null(f.ViewModel.ExpandedTile);
+    }
+
+    [Fact]
+    public void RemovingTheExpandedTilesFolderLowersTheHiddenFlagOnSurvivors()
+    {
+        using var f = new MainWindowFixture();
+        var codeRow = f.Row("code");
+        var tile = f.ViewModel.Tiles.Single(t => t.IsPinned && t.Spec.FolderId == codeRow.Entry.Id);
+        f.ViewModel.ExpandedTile = tile;
+
+        // 지우기 전 — 다른 타일들이 실제로 숨겨져 있었는지부터 확인한다. 안 그러면 "가드가
+        // 지운 뒤 값을 내렸다"와 "애초에 한 번도 안 켜졌다"를 이 시험이 구분하지 못한다
+        // (ClearingExpandedTileLowersBothFlagsOnEveryTile 의 같은 주석 · D116 R2 와 같은 이유).
+        var survivors = f.ViewModel.Tiles.Where(t => !ReferenceEquals(t, tile)).ToList();
+        Assert.NotEmpty(survivors);
+        Assert.All(survivors, t => Assert.True(t.IsHiddenByExpansion));
+
+        f.ViewModel.RemoveFolder(codeRow);
+
+        Assert.All(f.ViewModel.Tiles, t => Assert.False(t.IsHiddenByExpansion));
+    }
+
+    [Fact]
+    public void RemovingADifferentFoldersRegistrationLeavesExpansionAlone()
+    {
+        using var f = new MainWindowFixture();
+        var codeRow = f.Row("code");
+        var outputRow = f.Row("산출물");
+        var tile = f.ViewModel.Tiles.Single(t => t.IsPinned && t.Spec.FolderId == codeRow.Entry.Id);
+        f.ViewModel.ExpandedTile = tile;
+
+        f.ViewModel.RemoveFolder(outputRow);
+
+        Assert.Same(tile, f.ViewModel.ExpandedTile);
+        Assert.True(tile.IsExpanded);
+    }
 }
