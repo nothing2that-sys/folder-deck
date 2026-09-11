@@ -488,7 +488,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         _store.SaveSettingsDebounced(_settings);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanToggleLayoutEdit))]
     public void ToggleLayoutEdit()
     {
         IsEditingLayout = !IsEditingLayout;
@@ -503,6 +503,13 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         }
     }
 
+    /// <summary>
+    /// 확장 중에는 배치 편집으로 들어갈 수 없다(Phase 19 · D116 · §4-5). 편집 손잡이는 저장값
+    /// 기준으로 그려지는데 화면은 파생값(<see cref="TileViewModel.EffectiveCellX"/> 등) 기준이라
+    /// 두 좌표계가 어긋나기 때문이다 — 눌러 보고 거절당하기 전에 버튼을 비활성으로 알린다.
+    /// </summary>
+    private bool CanToggleLayoutEdit() => !IsAnyTileExpanded;
+
     partial void OnIsEditingLayoutChanged(bool value)
     {
         foreach (var tile in Tiles)
@@ -510,6 +517,56 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             tile.IsEditing = value;
             tile.IsDragging = false;
         }
+    }
+
+    // ── 타일 확장 (Phase 19 · D116) ──────────────────────────────────────────
+
+    /// <summary>
+    /// 격자 전체로 확장된 타일. <c>null</c> 이면 아무 타일도 확장돼 있지 않다. 저장하지
+    /// 않는 런타임 값이다(§7.1의 「저장하지 않는 런타임 값」과 같은 층) — 워크스페이스
+    /// 스키마는 그대로 v9 다.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnyTileExpanded))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleLayoutEditCommand))]
+    private TileViewModel? expandedTile;
+
+    public bool IsAnyTileExpanded => ExpandedTile is not null;
+
+    /// <summary>
+    /// 확장된 타일이 바뀔 때마다 모든 타일에 밀어 넣는다 — <see cref="OnIsEditingLayoutChanged"/>
+    /// 가 <c>IsEditing</c> 을 미는 것과 같은 모양이다(D114 A4).
+    /// </summary>
+    partial void OnExpandedTileChanged(TileViewModel? value)
+    {
+        foreach (var tile in Tiles)
+        {
+            tile.IsExpanded = ReferenceEquals(tile, value);
+            tile.IsHiddenByExpansion = value is not null && !ReferenceEquals(tile, value);
+            tile.ExpandedSpanX = GridCols;
+            tile.ExpandedSpanY = GridRows;
+        }
+    }
+
+    /// <summary>
+    /// 헤더의 확장 아이콘이 누르는 커맨드(§4-7 (b)). 어느 타일인지는 <paramref name="panel"/>
+    /// 로만 안다 — 패널은 자기 <see cref="FolderPanelViewModel"/> 만 알고 타일은 모른다.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleExpand(FolderPanelViewModel? panel)
+    {
+        if (panel is null)
+        {
+            return;
+        }
+
+        var tile = Tiles.FirstOrDefault(t => ReferenceEquals(t.Panel, panel));
+        if (tile is null)
+        {
+            return;
+        }
+
+        ExpandedTile = ReferenceEquals(ExpandedTile, tile) ? null : tile;
     }
 
     // ── 타일 이동 · 리사이즈 ─────────────────────────────────────────────────
@@ -2164,6 +2221,16 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             return;
         }
 
+        // 왼쪽 리스트는 §3.2 가 「유일한 컨트롤러」로 못박은 자리다(Phase 19 · D116 · §4-6) —
+        // 확장 중에 무시하면 그것이 컨트롤러가 아니게 된다. 배치 편집(위 가드)과 다르게 처리하는
+        // 이유는 배치 편집이 「파일을 안 만지는 모드」인 반면 확장은 「파일을 보는 상태」라서다.
+        // 대상 판정은 아래 두 줄이 이미 하는 것(PinnedTileFor·ResolveRotatingTile)을 그대로 쓴다.
+        var targetTile = PinnedTileFor(row) ?? ResolveRotatingTile(row.RotationSlot);
+        if (targetTile is not null && !ReferenceEquals(targetTile, ExpandedTile))
+        {
+            ExpandedTile = null;
+        }
+
         if (PinnedTileFor(row) is { } pinned)
         {
             // 앵커 밖에 있었으면 되돌아오는 것 자체가 응답이다. 이미 앵커에 있었다면
@@ -2968,6 +3035,11 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             // 붙여넣기(Ctrl+V · breadcrumb 우클릭)가 닿을 통로 (§4.6 330~336행 · A군 ③ C-2).
             // 클립보드를 읽고 판정하고 엔진에 얹는 일은 전부 이쪽이다 — 패널은 목적지만 안다.
             PasteInto = PasteIntoAsync,
+
+            // 헤더 확장 아이콘이 닿을 통로 (Phase 19 · D116 · §4-7). 패널은 자기가 어느
+            // 타일인지, 격자 전체가 지금 무슨 상태인지 모른다 — RegisterFolderCommand 와 같은
+            // 결이다.
+            ToggleExpandCommand = ToggleExpandCommand,
         };
 
         if (isSearchTile)

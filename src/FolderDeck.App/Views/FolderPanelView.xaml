@@ -436,7 +436,11 @@
                                 IsEnabled="{Binding CanGoUp}"
                                 AutomationProperties.Name="상위 폴더"
                                 ToolTip="상위 폴더 (Alt+↑)" Content="↑" />
-                        <Button Style="{StaticResource NavButton}" Width="20"
+                        <!-- Phase 19 · D116 · §4-7 (c) — Tertiary 로 내린다. 앵커 복귀는 진입점이
+                             셋(breadcrumb 첫 조각 · 왼쪽 리스트 재클릭 · Alt+Home, §4.6)이라
+                             접혀도 기능이 막히지 않는다. 확장은 진입점이 하나뿐이라 그 비접힘
+                             자리를 이쪽에 내준다 — 헤더에 순 증가하는 폭은 0. -->
+                        <Button Style="{StaticResource TertiaryNavButton}" Width="20"
                                 Command="{Binding GoToAnchorCommand}"
                                 AutomationProperties.Name="앵커로 복귀"
                                 ToolTip="앵커로 복귀 (Alt+Home)" Content="⌂" />
@@ -533,6 +537,22 @@
                                 Click="OnSearchToggleClick"
                                 AutomationProperties.Name="검색"
                                 ToolTip="검색 (Ctrl+F)" Content="🔍" />
+
+                        <!-- 타일 확장 ↔ 복원 (Phase 19 · D116 · §4-7). 맨 끝에 둔다 — 앞 아홉은
+                             「어디를 볼까」·「어떻게 볼까」이고 이것은 「얼마나 크게 볼까」로 결이
+                             다르다. 스타일은 NavButton(비접힘) — 타일이 좁을 때가 확장이 가장
+                             필요한 때인데 Tertiary 는 170px 아래에서 사라져 필요한 순간에 없다.
+                             그 대가로 비접힘 자리가 둘(이 버튼·앵커 복귀)이 되는 것은 앵커 복귀
+                             스타일을 TertiaryNavButton 으로 내려 상쇄한다(§4-7 (c), 이 파일의
+                             GoToAnchorCommand 버튼) — 순 증가 폭은 0 이다. 검색 타일에서도 가드
+                             없이 보인다 — 옮기기·크기 바꾸기가
+                             되는 타일이라 확장도 된다(§3.2). -->
+                        <Button Style="{StaticResource NavButton}" Width="20"
+                                Command="{Binding ToggleExpandCommand}"
+                                CommandParameter="{Binding}"
+                                Content="{Binding ExpandIcon}"
+                                AutomationProperties.Name="타일 확장"
+                                ToolTip="{Binding ExpandTip}" />
                     </StackPanel>
 
                     <!-- 폴더 이름 줄 = breadcrumb + 개수 (Phase 8-C ③).

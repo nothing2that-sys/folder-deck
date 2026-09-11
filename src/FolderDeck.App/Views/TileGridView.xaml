@@ -22,9 +22,26 @@
           LostMouseCapture="OnHostLostCapture"
           KeyDown="OnHostKeyDown">
 
-        <!-- ── 1층: 셀 경계 + 빈 칸 (배치 편집 모드에서만) ── -->
-        <ItemsControl ItemsSource="{Binding Cells}"
-                      Visibility="{Binding IsEditingLayout, Converter={StaticResource BoolToVisibility}}">
+        <!-- ── 1층: 셀 경계 + 빈 칸 (배치 편집 모드 중 · 아무 타일도 확장 중이 아닐 때만) ──
+             Phase 19 · D116 · §4-4 — 확장 중에는 배치 편집 자체가 막히지만(§4-5), 그 전환
+             순간에 빈 칸이 잠깐 비쳐 보이는 것도 막는다. 새 컨버터를 만들지 않고
+             MultiDataTrigger 로 두 조건을 겹친다(App.xaml 의 SecondaryNavButton 호버 트리거와
+             같은 이디엄). 칸마다 깃발을 두지 않는다 — 층 하나에 트리거 하나다. -->
+        <ItemsControl ItemsSource="{Binding Cells}">
+            <ItemsControl.Style>
+                <Style TargetType="ItemsControl">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsEditingLayout}" Value="True" />
+                                <Condition Binding="{Binding IsAnyTileExpanded}" Value="False" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Visibility" Value="Visible" />
+                        </MultiDataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ItemsControl.Style>
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                     <Grid>
@@ -107,11 +124,19 @@
                 </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemContainerStyle>
+                <!-- Phase 19 · D116 · §4-4 — 확장 중인 타일은 EffectiveCellX 등이 0/0/격자
+                     전체를 내고, 나머지는 저장값을 그대로 낸다(TileViewModel 의 파생 속성).
+                     확장이 아무 데도 없으면 이 넷은 CellX 등과 값이 같다. -->
                 <Style TargetType="ContentPresenter">
-                    <Setter Property="Grid.Column" Value="{Binding CellX}" />
-                    <Setter Property="Grid.Row" Value="{Binding CellY}" />
-                    <Setter Property="Grid.ColumnSpan" Value="{Binding SpanX}" />
-                    <Setter Property="Grid.RowSpan" Value="{Binding SpanY}" />
+                    <Setter Property="Grid.Column" Value="{Binding EffectiveCellX}" />
+                    <Setter Property="Grid.Row" Value="{Binding EffectiveCellY}" />
+                    <Setter Property="Grid.ColumnSpan" Value="{Binding EffectiveSpanX}" />
+                    <Setter Property="Grid.RowSpan" Value="{Binding EffectiveSpanY}" />
+                    <!-- 다른 타일이 확장 중이면 이 타일은 접힌다 — 안 접으면 PreviewHandlerHost
+                         (네이티브 자식 창)가 WPF Z 순서를 안 지키고 확장된 타일 위로 뚫고
+                         나온다(D114 A7). -->
+                    <Setter Property="Visibility"
+                            Value="{Binding IsHiddenByExpansion, Converter={StaticResource InverseBoolToVisibility}}" />
                 </Style>
             </ItemsControl.ItemContainerStyle>
             <ItemsControl.ItemTemplate>

@@ -105,6 +105,28 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     private bool isRotating;
 
     /// <summary>
+    /// 확장 중인가(Phase 19 · D116) — <see cref="TileViewModel.IsExpanded"/> 의 사본이다.
+    /// 헤더의 확장 아이콘 글리프·툴팁을 고르는 데만 쓴다 — 배치는 <c>TileGridView</c> 가
+    /// <c>TileViewModel</c> 을 직접 보고 정한다(§4.4).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ExpandIcon))]
+    [NotifyPropertyChangedFor(nameof(ExpandTip))]
+    private bool isExpanded;
+
+    /// <summary>확장 ⤢ · 복원 ⤡ 토글(§4-7 (b)) — <see cref="ViewModeIcon"/> 과 같은 모양이다.</summary>
+    public string ExpandIcon => IsExpanded ? "⤡" : "⤢";
+
+    public string ExpandTip => IsExpanded ? "원래 크기로 복원" : "타일을 화면 전체로 확장";
+
+    /// <summary>
+    /// 확장 버튼이 누른 커맨드가 닿을 통로(Phase 19 · D116) — <see cref="MainViewModel"/> 의
+    /// <c>ExpandedTile</c> 을 토글한다. <see cref="RegisterFolderCommand"/> 와 같은 결이다 —
+    /// 패널은 자기가 어느 타일인지도, 격자 전체 상태도 모른다.
+    /// </summary>
+    public System.Windows.Input.ICommand? ToggleExpandCommand { get; set; }
+
+    /// <summary>
     /// 전역 검색 타일인가(D69-e 결정 2·3). <c>Entry</c>·<c>CurrentPath</c> 가 늘 null 인
     /// 자리라 <see cref="IsEmpty"/> 하나만 새로 가른다 — 나머지(<see cref="CanGoUp"/> 등)는
     /// 이미 null 로 막혀 있다. 생성자로만 정해지고 타일의 남은 수명 동안 바뀌지 않는다
