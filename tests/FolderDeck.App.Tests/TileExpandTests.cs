@@ -151,7 +151,7 @@ public sealed class TileExpandTests
         var after = File.ReadAllText(file);
 
         Assert.Equal(before, after);
-        Assert.Equal(9, Workspace.CurrentSchemaVersion);
+        Assert.Equal(10, Workspace.CurrentSchemaVersion);
     }
 
     // ── T10~T12(D118 §3) — RemoveFolder 가 확장된 타일을 지울 때의 정리 ──────────

@@ -165,6 +165,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ModifiedHeaderText))]
     [NotifyPropertyChangedFor(nameof(IsDetailsView))]
     [NotifyPropertyChangedFor(nameof(IsListView))]
+    [NotifyPropertyChangedFor(nameof(IsLargeIconView))]
     [NotifyPropertyChangedFor(nameof(CurrentShowPreview))]
     [NotifyPropertyChangedFor(nameof(CurrentPreviewRatio))]
     private FolderEntry? entry;
@@ -676,6 +677,9 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
     public bool IsListView => !IsSearchTile && Entry is not null && Entry.ViewMode == FolderViewMode.List;
 
+    public bool IsLargeIconView =>
+        !IsSearchTile && Entry is not null && Entry.ViewMode == FolderViewMode.LargeIcons;
+
     public bool HasSearchText => !string.IsNullOrEmpty(SearchText);
 
     /// <summary>재귀 검색이 걸린 상태 — details 뷰에 "위치" 열을 띄우는 조건이기도 하다.</summary>
@@ -742,12 +746,20 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         ? $"{everythingTotalCount}개 중 {DisplayItems.Count}개"
         : $"{DisplayItems.Count}개";
 
-    /// <summary>뷰 방식 아이콘 — list 는 줄 셋, details 는 격자 (§1.2 유니코드 글리프만).</summary>
-    public string ViewModeIcon => Entry?.ViewMode == FolderViewMode.Details ? "▦" : "☰";
+    /// <summary>뷰 방식 아이콘 — list 줄 셋, details 작은 격자, 큰 아이콘 큰 격자.</summary>
+    public string ViewModeIcon => Entry?.ViewMode switch
+    {
+        FolderViewMode.Details => "▦",
+        FolderViewMode.LargeIcons => "▩",
+        _ => "☰",
+    };
 
-    public string ViewModeTip => Entry?.ViewMode == FolderViewMode.Details
-        ? "지금 details — 눌러서 list 로 (컬럼 없이 이름만)"
-        : "지금 list — 눌러서 details 로 (이름·크기·수정 컬럼)";
+    public string ViewModeTip => Entry?.ViewMode switch
+    {
+        FolderViewMode.Details => "지금 details — 눌러서 큰 아이콘으로",
+        FolderViewMode.LargeIcons => "지금 큰 아이콘 — 눌러서 list로 (컬럼 없이 이름만)",
+        _ => "지금 list — 눌러서 details로 (이름·크기·수정 컬럼)",
+    };
 
     /// <summary>
     /// 정렬 아이콘 — 방향 삼각형 하나, 통합 정렬이면 앞에 <c>∪</c> 가 붙는다 (Phase 8-C ③).
@@ -792,7 +804,12 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// <summary>
     /// 메타의 가운데 조각 — 뷰 방식. <b>눌러서 뒤집는 글자</b>다(§3.2 · Stage 3D).
     /// </summary>
-    public string ViewModeText => Entry?.ViewMode == FolderViewMode.Details ? "details" : "list";
+    public string ViewModeText => Entry?.ViewMode switch
+    {
+        FolderViewMode.Details => "details",
+        FolderViewMode.LargeIcons => "largeIcons",
+        _ => "list",
+    };
 
     /// <summary>
     /// 메타의 뒤 조각 — 구분점과 정렬(" · 이름 ↑"). 통합 정렬이면 " · 통합"이 뒤에 붙는다
@@ -1067,14 +1084,15 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     };
 
     /// <summary>
-    /// 뷰 방식을 뒤집는다 — <c>list</c> ↔ <c>details</c> (§3.2 · §7.1 <c>folders[].viewMode</c>).
+    /// 뷰 방식을 순환한다 — <c>list</c> → <c>details</c> → <c>largeIcons</c> → <c>list</c>.
     /// </summary>
     /// <remarks>
-    /// <b>표시 셋이 함께 움직여야 한다</b>: 두 <c>ListView</c> 의 <c>Visibility</c> 를 가르는
-    /// <see cref="IsDetailsView"/>·<see cref="IsListView"/> 와 헤더 메타 문구다. 하나만
+    /// <b>표시 넷이 함께 움직여야 한다</b>: 세 <c>ListView</c> 의 <c>Visibility</c> 를 가르는
+    /// <see cref="IsDetailsView"/>·<see cref="IsListView"/>·<see cref="IsLargeIconView"/>와
+    /// 헤더 메타 문구다. 하나만
     /// 갱신하면 목록과 문구가 어긋난다.
     /// <para>
-    /// <b>선택은 비운다.</b> 두 <c>ListView</c> 가 각자 선택을 들고 있어서, 그대로 두면 보이게
+    /// <b>선택은 비운다.</b> 세 <c>ListView</c> 가 각자 선택을 들고 있어서, 그대로 두면 보이게
     /// 된 목록에는 아무것도 안 골라져 있는데 헤더는 "N개 선택"을 말하고 <c>Del</c> 이 그것을
     /// 지운다. v1 은 전환을 넘어 선택을 잇지 않는다. 뷰 방식을 먼저 뒤집고 나서 비우므로,
     /// 떠나는 목록은 이미 <c>Collapsed</c> 다 — 그 목록이 내는 <c>SelectionChanged</c> 는
@@ -1090,7 +1108,12 @@ public sealed partial class FolderPanelViewModel : ObservableObject
             return;
         }
 
-        ApplyViewMode(Entry.ViewMode == FolderViewMode.Details ? FolderViewMode.List : FolderViewMode.Details);
+        ApplyViewMode(Entry.ViewMode switch
+        {
+            FolderViewMode.List => FolderViewMode.Details,
+            FolderViewMode.Details => FolderViewMode.LargeIcons,
+            _ => FolderViewMode.List,
+        });
     }
 
     /// <summary>
@@ -1117,6 +1140,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
         OnPropertyChanged(nameof(IsDetailsView));
         OnPropertyChanged(nameof(IsListView));
+        OnPropertyChanged(nameof(IsLargeIconView));
         OnPropertyChanged(nameof(ViewModeText));
         OnPropertyChanged(nameof(ViewModeIcon));
         OnPropertyChanged(nameof(ViewModeTip));
@@ -1135,7 +1159,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// 되돌린다 — 크기 내림차순을 보다가 이름으로 옮겼는데 이름이 거꾸로 서 있으면 놀란다.
     /// <para>
     /// <b>선택을 비우지 않는다.</b> 뷰 방식 토글(<see cref="ToggleViewMode"/>)과 달리 여기서는
-    /// 두 <c>ListView</c> 의 <c>Visibility</c> 가 갈리지 않는다. 목록은 <see cref="RefreshAsync"/>
+    /// 세 <c>ListView</c> 의 <c>Visibility</c> 가 갈리지 않는다. 목록은 <see cref="RefreshAsync"/>
     /// 가 다시 읽고 그 안에서 고른 것을 <b>경로로</b> 다시 잡아 준다(§4.8) — 정렬을 바꿨다고
     /// 고른 파일이 날아가면 매크로를 만들려던 손이 헛돈다.
     /// </para>
@@ -1770,7 +1794,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// 목록을 갈아끼우기 <b>직전</b>에 FPU 마스크를 되돌린다 (F-1 그물).
     /// </summary>
     /// <remarks>
-    /// <c>DisplayItems</c> 대입이 곧 두 <c>ListView</c> 의 <c>ItemsSource</c> 통째 교체이고,
+    /// <c>DisplayItems</c> 대입이 곧 세 <c>ListView</c> 의 <c>ItemsSource</c> 통째 교체이고,
     /// 그 다음이 레이아웃 패스다. 셸 확장이 FPU 마스크를 풀고 갔으면 그 레이아웃에서 터지므로
     /// 이 길목에서 한 번 더 켠다 — <see cref="FpuGuard"/> 는 안 풀려 있으면 아무것도 하지
     /// 않아 뜨거운 경로에서도 값싸다.

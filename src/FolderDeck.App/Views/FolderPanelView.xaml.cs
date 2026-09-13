@@ -2,11 +2,14 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using FolderDeck.App.Interop;
 using FolderDeck.App.Services;
@@ -50,6 +53,17 @@ public partial class FolderPanelView : UserControl
     private readonly ShellThumbnailService _previewThumbnailService = new();
 
     /// <summary>
+    /// Recycling 컨테이너 안의 Image가 다른 항목으로 갈아 끼워진 뒤 옛 비동기 결과를 받지
+    /// 않도록 Image별 세대를 보관한다. 약한 키라 화면 밖 컨테이너의 수명을 늘리지 않는다.
+    /// </summary>
+    private readonly ConditionalWeakTable<Image, LargeIconRequestState> _largeIconRequests = new();
+
+    private sealed class LargeIconRequestState
+    {
+        public int Generation { get; set; }
+    }
+
+    /// <summary>
     /// 미리보기 취득 세대 번호(D95 §2 결정 8). 취득이 비동기라 빠르게 갈아타면 옛 결과가
     /// 나중에 도착한다 — 돌아왔을 때 이 값이 그대로일 때만 그린다.
     /// </summary>
@@ -64,7 +78,7 @@ public partial class FolderPanelView : UserControl
 
     /// <summary>
     /// <c>ListView.SelectedItems</c> 는 바인딩할 수 없는 읽기 전용 컬렉션이라 여기서 옮긴다
-    /// (§4.2 다중 선택). 두 ListView(details/list) 중 지금 보이는 쪽만 값을 낸다.
+    /// (§4.2 다중 선택). 세 ListView(details/list/largeIcons) 중 지금 보이는 쪽만 값을 낸다.
     /// </summary>
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -74,6 +88,108 @@ public partial class FolderPanelView : UserControl
         }
 
         panel.SelectedItems = [.. list.SelectedItems.OfType<FileItemViewModel>()];
+    }
+
+    private void OnLargeIconImageLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is Image image)
+        {
+            LoadLargeIconAsync(image);
+        }
+    }
+
+    private void OnLargeIconImageUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Image image)
+        {
+            return;
+        }
+
+        _largeIconRequests.GetOrCreateValue(image).Generation++;
+        image.Source = null;
+    }
+
+    private void OnLargeIconImageDataContextChanged(
+        object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is Image { IsLoaded: true } image)
+        {
+            LoadLargeIconAsync(image);
+        }
+    }
+
+    private async void LoadLargeIconAsync(Image image)
+    {
+        var state = _largeIconRequests.GetOrCreateValue(image);
+        var generation = ++state.Generation;
+        image.Source = null;
+
+        if (image.DataContext is not FileItemViewModel item)
+        {
+            return;
+        }
+
+        var dpi = VisualTreeHelper.GetDpi(image);
+        var pixelWidth = Math.Max(1, (int)Math.Ceiling(image.Width * dpi.DpiScaleX));
+        var pixelHeight = Math.Max(1, (int)Math.Ceiling(image.Height * dpi.DpiScaleY));
+
+        BitmapSource? visual;
+        try
+        {
+            visual = await _previewThumbnailService.GetShellVisualAsync(
+                item.FullPath, item.IsDirectory, pixelWidth, pixelHeight).ConfigureAwait(true);
+        }
+        catch
+        {
+            // async void 이벤트에서 예외를 밖으로 내보내지 않는다. 셸 visual을 못 얻은 항목은
+            // 빈 이미지로 남고 다음 실현 때 다시 요청한다(null은 캐시하지 않는다).
+            return;
+        }
+
+        if (!image.IsLoaded || state.Generation != generation
+            || !ReferenceEquals(image.DataContext, item))
+        {
+            return;
+        }
+
+        image.Source = visual;
+    }
+
+    private void OnLargeIconListIsVisibleChanged(
+        object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is not ListView { IsVisible: true } list)
+        {
+            return;
+        }
+
+        // Collapsed 동안 ItemsSource가 교체되면 WPF가 ItemsHost measure를 다음 프레임까지
+        // 미루는 경우가 있다. 표시 직후 한 번 더 재측정해 폴더 행만 남는 stale realization을
+        // 그대로 그리지 않는다.
+        list.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            list.InvalidateMeasure();
+            FindVisualChild<VirtualizingWrapPanel>(list)?.InvalidateMeasure();
+        });
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match)
+            {
+                return match;
+            }
+
+            if (FindVisualChild<T>(child) is { } descendant)
+            {
+                return descendant;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -151,6 +267,7 @@ public partial class FolderPanelView : UserControl
     {
         DetailsList.UnselectAll();
         SimpleList.UnselectAll();
+        LargeIconList.UnselectAll();
     }
 
     /// <summary>
@@ -165,6 +282,7 @@ public partial class FolderPanelView : UserControl
 
         Reapply(DetailsList, panel);
         Reapply(SimpleList, panel);
+        Reapply(LargeIconList, panel);
 
         static void Reapply(ListView list, FolderPanelViewModel panel)
         {
@@ -559,7 +677,7 @@ public partial class FolderPanelView : UserControl
     /// <summary>고무줄 후보로 누른 자리 (<c>ListArea</c> 좌표). 임계를 넘기 전에는 이것만 있다.</summary>
     private Point? _bandOrigin;
 
-    /// <summary>누른 자리가 든 목록. 항목 사각형을 이 목록에서만 뽑는다(뷰 방식이 둘이다).</summary>
+    /// <summary>누른 자리가 든 목록. 항목 사각형을 이 목록에서만 뽑는다(뷰 방식이 셋이다).</summary>
     private ListView? _bandList;
 
     /// <summary>임계를 넘어 실제로 그리기 시작했나. <c>_bandOrigin</c> 만으로는 아직 클릭이다.</summary>
@@ -584,7 +702,7 @@ public partial class FolderPanelView : UserControl
     /// 목록에서 왼쪽 버튼을 눌렀다 — <b>여기서는 아무것도 바꾸지 않는다.</b> 누른 자리만 기억한다.
     /// </summary>
     /// <remarks>
-    /// <b>두 <see cref="ListView"/> 가 이 핸들러 하나를 쓴다</b>(§3.2 의 두 뷰 방식). 뷰 방식마다
+    /// <b>세 <see cref="ListView"/> 가 이 핸들러 하나를 쓴다</b>(§3.2 의 세 뷰 방식). 뷰 방식마다
     /// 따로 쓰면 하나만 고쳐지는 사고가 난다.
     /// <para>
     /// 선택을 지우는 것도 캡처도 <b>임계를 넘은 뒤</b>다(<see cref="BeginBand"/>). 여기서 지우면

@@ -1,4 +1,9 @@
 using FolderDeck.App.Views;
+using System.Runtime.ExceptionServices;
+using System.Threading;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace FolderDeck.App.Tests;
 
@@ -69,5 +74,87 @@ public sealed class VirtualizingWrapPanelLayoutTests
         int row, double currentOffset, double viewportRows, double expected)
     {
         Assert.Equal(expected, VirtualizingWrapLayout.OffsetToRevealRow(row, currentOffset, viewportRows));
+    }
+
+    [Fact]
+    public void ACollapsedRecyclingListRealizesFilesAfterItBecomesVisibleAndResets()
+    {
+        RunOnSta(() =>
+        {
+            var list = new ListView
+            {
+                Width = 360,
+                Height = 240,
+                Visibility = Visibility.Collapsed,
+                ItemsSource = new[] { "folder-a", "folder-b" },
+                ItemsPanel = new ItemsPanelTemplate(
+                    new FrameworkElementFactory(typeof(VirtualizingWrapPanel))),
+            };
+
+            VirtualizingPanel.SetIsVirtualizing(list, true);
+            VirtualizingPanel.SetVirtualizationMode(list, VirtualizationMode.Recycling);
+            ScrollViewer.SetCanContentScroll(list, true);
+
+            using var host = new TestWindow(list);
+            host.Show();
+            list.Visibility = Visibility.Visible;
+            host.UpdateLayout();
+
+            list.Visibility = Visibility.Collapsed;
+            list.ItemsSource = new[] { "folder-a", "file-a.dwg", "file-b.png" };
+            list.Visibility = Visibility.Visible;
+            host.UpdateLayout();
+
+            Assert.NotNull(list.ItemContainerGenerator.ContainerFromIndex(0));
+            Assert.NotNull(list.ItemContainerGenerator.ContainerFromIndex(1));
+            Assert.NotNull(list.ItemContainerGenerator.ContainerFromIndex(2));
+        });
+    }
+
+    private static void RunOnSta(Action action)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (failure is not null)
+        {
+            ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+    }
+
+    private sealed class TestWindow : IDisposable
+    {
+        private readonly Window _window;
+
+        public TestWindow(UIElement content)
+        {
+            _window = new Window
+            {
+                Width = 400,
+                Height = 300,
+                ShowInTaskbar = false,
+                WindowStyle = WindowStyle.None,
+                Content = content,
+            };
+        }
+
+        public void Show() => _window.Show();
+
+        public void UpdateLayout() => _window.UpdateLayout();
+
+        public void Dispose() => _window.Close();
     }
 }

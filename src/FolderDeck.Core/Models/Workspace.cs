@@ -40,9 +40,12 @@ public sealed class Workspace
     /// 미리보기 칸은 Phase 17 전에 <b>없던 것</b>이라 <c>= false</c> 여야 구파일 동작이 그대로다.
     /// <c>previewRatio</c> 는 이 저장소의 첫 <b>연속 범위 클램프</b>다 — 범위(0.0 이상 1.0
     /// 이하) 밖의 값은 가장 가까운 끝값으로 자르지 않고 기본값 0.35 로 떨어진다.
+    /// 10 — <see cref="FolderViewMode"/>에 <c>LargeIcons</c> 추가(Phase 21 · D125).
+    /// 기존 값 뒤에 붙는 열거자이고 v9 파일은 그대로 읽힌다. 반대로 구버전 앱은
+    /// <c>viewMode: "largeIcons"</c>를 모르면 JSON 역직렬화에서 하드 실패한다.
     /// </para>
     /// </summary>
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = 10;
 
     /// <summary>
     /// 스키마 버전은 저장소 소유다. 저장할 때 <see cref="CurrentSchemaVersion"/> 이 찍히고,

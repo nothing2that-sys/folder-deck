@@ -151,6 +151,17 @@
             </Style.Triggers>
         </Style>
 
+        <!-- 큰 아이콘 격자의 고정 셀. 이벤트는 기본 항목 스타일을 그대로 물려
+             더블클릭·드래그·셸 우클릭 진입점이 갈라지지 않게 한다. -->
+        <Style x:Key="LargeIconItemContainer" TargetType="ListViewItem"
+               BasedOn="{StaticResource FileItemContainer}">
+            <Setter Property="Width" Value="120" />
+            <Setter Property="Height" Value="120" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Padding" Value="4" />
+        </Style>
+
         <!-- 항목 앞 글리프 (Phase 8-B 3 -> 8-C 1). 세 자리(상세·검색·list)가 같은 것을 그리므로
              스타일 하나로 묶는다 — 색을 또 손볼 때 고칠 자리가 하나다.
 
@@ -174,8 +185,8 @@
 
         <!-- 항목 앞 아이콘(Phase 11 · D68-c). 셸 아이콘(② 단)과 글리프(③ 단)를 같은 칸에
              겹쳐 두고, 셸 아이콘이 왔으면(ShellIcon 이 null 이 아니면) 그것만 보이게 가른다.
-             ItemGlyph 스타일은 그대로 두고 이 템플릿 안에서 재사용한다 — 세 자리에 마크업을
-             세 벌 만들지 않기 위해서다. -->
+             ItemGlyph 스타일은 그대로 두고 이 템플릿 안에서 재사용한다 — 목록과 상세에
+             마크업을 두 벌 만들지 않기 위해서다. 큰 아이콘은 D126의 Shell visual만 쓴다. -->
         <DataTemplate x:Key="ItemIcon">
             <Grid>
                 <Image x:Name="ShellIconImage" Source="{Binding ShellIcon}" Width="16" Height="16"
@@ -599,6 +610,13 @@
                                               Command="{Binding PlacementTarget.Tag.SetViewModeCommand,
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                               CommandParameter="{x:Static models:FolderViewMode.Details}" />
+                                    <MenuItem Header="큰 아이콘"
+                                              IsChecked="{Binding PlacementTarget.Tag.IsLargeIconView,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                          Mode=OneWay}"
+                                              Command="{Binding PlacementTarget.Tag.SetViewModeCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:FolderViewMode.LargeIcons}" />
 
                                     <!-- 미리보기 — 예전 헤더 아이콘(▤)은 상태를 안 보여줬다
                                          (D117 A3) — 체크가 붙는 것은 손실이 아니라 개선이다. -->
@@ -926,27 +944,55 @@
                           ScrollViewer.ScrollChanged="OnDetailsScrollChanged"
                           VirtualizingPanel.IsVirtualizing="True"
                           VirtualizingPanel.VirtualizationMode="Recycling"
-                          ScrollViewer.CanContentScroll="True">
+                          ScrollViewer.CanContentScroll="True"
+                          Visibility="{Binding IsDetailsView, Converter={StaticResource BoolToVisibility}}">
                     <ListView.Style>
                         <Style TargetType="ListView">
                             <Setter Property="View" Value="{StaticResource NormalGridView}" />
-                            <Setter Property="Visibility" Value="Collapsed" />
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsDetailsView}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
                                 <!-- 재귀 검색·전역 검색 중에는 "위치" 열이 붙은 뷰로 갈아탄다
                                      (D69-e — NeedsLocationColumn 이 둘을 함께 가른다). -->
-                                <MultiDataTrigger>
-                                    <MultiDataTrigger.Conditions>
-                                        <Condition Binding="{Binding IsDetailsView}" Value="True" />
-                                        <Condition Binding="{Binding NeedsLocationColumn}" Value="True" />
-                                    </MultiDataTrigger.Conditions>
+                                <DataTrigger Binding="{Binding NeedsLocationColumn}" Value="True">
                                     <Setter Property="View" Value="{StaticResource SearchGridView}" />
-                                </MultiDataTrigger>
+                                </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </ListView.Style>
+                </ListView>
+
+                <!-- Phase 21 D126: Windows Shell thumbnail/큰 아이콘과 이름을 표시한다.
+                     목록용 커스텀 글리프는 이 뷰에 섞지 않는다. -->
+                <ListView x:Name="LargeIconList" ItemsSource="{Binding DisplayItems}"
+                          ItemContainerStyle="{StaticResource LargeIconItemContainer}"
+                          BorderThickness="0" Background="Transparent"
+                          SelectionMode="Extended"
+                          SelectionChanged="OnSelectionChanged"
+                          PreviewMouseLeftButtonDown="OnListPreviewMouseLeftButtonDown"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.CanContentScroll="True"
+                          IsVisibleChanged="OnLargeIconListIsVisibleChanged"
+                          Visibility="{Binding IsLargeIconView, Converter={StaticResource BoolToVisibility}}">
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <v:VirtualizingWrapPanel />
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Width="108" Height="108" HorizontalAlignment="Center">
+                                <Image Width="76" Height="76" Margin="0,0,0,4"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Stretch="Uniform" SnapsToDevicePixels="True"
+                                       Loaded="OnLargeIconImageLoaded"
+                                       Unloaded="OnLargeIconImageUnloaded"
+                                       DataContextChanged="OnLargeIconImageDataContextChanged" />
+                                <TextBlock Text="{Binding Name}" Height="28"
+                                           TextAlignment="Center" TextWrapping="Wrap"
+                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding FullPath}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
                 </ListView>
 
                 <ListView x:Name="SimpleList" ItemsSource="{Binding DisplayItems}"

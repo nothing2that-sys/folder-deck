@@ -54,13 +54,13 @@ public sealed class AppSettingsSchemaTests : IDisposable
         Assert.Equal(4, AppSettings.CurrentSchemaVersion);
 
     /// <summary>
-    /// 두 스키마는 독립적으로 버전이 오른다 — 워크스페이스는 지금 8(Phase 15 · D79 ·
-    /// <c>folders[].showSize</c>/<c>showModified</c>)이고, 그것은 <see cref="AppSettings"/> 의
-    /// 새 필드들과는 무관하다(결정 4).
+    /// 두 스키마는 독립적으로 버전이 오른다 — 워크스페이스는 지금 10(Phase 21 · D125 ·
+    /// <c>FolderViewMode.LargeIcons</c>)이고, 그것은 <see cref="AppSettings"/>의 새 필드들과는
+    /// 무관하다(결정 4).
     /// </summary>
     [Fact]
     public void TheWorkspaceSchemaMovesForItsOwnReasons() =>
-        Assert.Equal(9, Workspace.CurrentSchemaVersion);
+        Assert.Equal(10, Workspace.CurrentSchemaVersion);
 
     // ── 왕복 ─────────────────────────────────────────────────────────────────
 

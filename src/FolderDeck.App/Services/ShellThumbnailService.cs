@@ -15,17 +15,29 @@ namespace FolderDeck.App.Services;
 /// <remarks>
 /// <b><see cref="IDisposable"/> 이 아니다</b> — <see cref="ShellIconService"/> 와 같다.
 /// <para>
-/// 캐시는 <b>한 칸</b>이다(D95 §2 결정 4) — 미리보기 칸에는 늘 파일 하나만 뜨므로, 스플리터를
-/// 끄는 동안 같은 파일을 다시 묻는 것만 막으면 된다. <see cref="ShellIconService"/> 처럼 여럿을
-/// 들고 있을 이유가 없다. 이 서비스는 <b>패널마다 하나</b>다(D95 §2 결정 5) — 앱 전체가 한 칸을
-/// 나눠 쓰면 타일 둘이 서로 밀어낸다.
+/// 캐시는 <b>64칸 LRU</b>다(Phase 21 · D126). 미리보기 한 칸뿐이던 D95 때는 한 칸이면
+/// 충분했지만, 큰 아이콘 격자는 한 화면에서도 수십 경로를 비동기로 요청한다. 패널마다 하나라는
+/// 수명(D95 §2 결정 5)은 그대로 유지해 다른 타일이 이 패널의 캐시를 밀어내지 않는다.
 /// </para>
 /// </remarks>
 public sealed class ShellThumbnailService
 {
+    internal const int DefaultCacheCapacity = 64;
+
     private readonly object _gate = new();
-    private string? _cachedStamp;
-    private BitmapSource? _cachedImage;
+    private readonly int _cacheCapacity;
+    private readonly Dictionary<string, CacheEntry> _cache = new(StringComparer.Ordinal);
+    private readonly LinkedList<string> _lru = new();
+
+    private sealed record CacheEntry(
+        BitmapSource Image, int RequestedPixelWidth, int RequestedPixelHeight,
+        LinkedListNode<string> Node);
+
+    public ShellThumbnailService(int cacheCapacity = DefaultCacheCapacity)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(cacheCapacity, 1);
+        _cacheCapacity = cacheCapacity;
+    }
 
     /// <summary>
     /// 캐시 도장 — 경로(소문자) · 길이 · 수정 시각을 합친 것(D95 §5 R3). 셋 중 하나만 바뀌어도
@@ -37,12 +49,20 @@ public sealed class ShellThumbnailService
 
     /// <summary>캐시에 있으면 그 자리에서 준다. 없으면 false — <b>셸을 부르지 않는다.</b></summary>
     internal bool TryGetCached(string stamp, out BitmapSource? image)
+        => TryGetCached(ThumbnailKey(stamp), 0, 0, out image);
+
+    private bool TryGetCached(
+        string key, int minimumPixelWidth, int minimumPixelHeight, out BitmapSource? image)
     {
         lock (_gate)
         {
-            if (_cachedStamp == stamp)
+            if (_cache.TryGetValue(key, out var entry)
+                && entry.RequestedPixelWidth >= minimumPixelWidth
+                && entry.RequestedPixelHeight >= minimumPixelHeight)
             {
-                image = _cachedImage;
+                _lru.Remove(entry.Node);
+                _lru.AddFirst(entry.Node);
+                image = entry.Image;
                 return true;
             }
         }
@@ -51,8 +71,12 @@ public sealed class ShellThumbnailService
         return false;
     }
 
-    /// <summary><see cref="ShouldCache"/> 가 참일 때만 한 칸을 갈아 끼운다.</summary>
+    /// <summary><see cref="ShouldCache"/> 가 참일 때만 LRU 캐시에 넣는다.</summary>
     internal void Store(string stamp, BitmapSource? image)
+        => StoreByKey(ThumbnailKey(stamp), image, 0, 0);
+
+    private void StoreByKey(
+        string key, BitmapSource? image, int requestedPixelWidth, int requestedPixelHeight)
     {
         if (!ShouldCache(image))
         {
@@ -61,10 +85,37 @@ public sealed class ShellThumbnailService
 
         lock (_gate)
         {
-            _cachedStamp = stamp;
-            _cachedImage = image;
+            if (_cache.TryGetValue(key, out var previous)
+                && (previous.RequestedPixelWidth > requestedPixelWidth
+                    || previous.RequestedPixelHeight > requestedPixelHeight)
+                && previous.RequestedPixelWidth >= requestedPixelWidth
+                && previous.RequestedPixelHeight >= requestedPixelHeight)
+            {
+                _lru.Remove(previous.Node);
+                _lru.AddFirst(previous.Node);
+                return;
+            }
+
+            if (_cache.Remove(key, out previous))
+            {
+                _lru.Remove(previous.Node);
+            }
+
+            var node = _lru.AddFirst(key);
+            _cache[key] = new CacheEntry(
+                image!, requestedPixelWidth, requestedPixelHeight, node);
+
+            while (_cache.Count > _cacheCapacity && _lru.Last is { } oldest)
+            {
+                _lru.RemoveLast();
+                _cache.Remove(oldest.Value);
+            }
         }
     }
+
+    private static string ThumbnailKey(string stamp) => "T:" + stamp;
+
+    private static string ShellVisualKey(string stamp) => "V:" + stamp;
 
     /// <summary>
     /// 얻은 이미지를 캐시에 넣어야 하는가 — <paramref name="image"/> 이 <see langword="null"/>
@@ -100,17 +151,79 @@ public sealed class ShellThumbnailService
             return Task.FromResult<BitmapSource?>(null);
         }
 
-        if (TryGetCached(stamp, out var cached))
+        var key = ThumbnailKey(stamp);
+        if (TryGetCached(key, pixelWidth, pixelHeight, out var cached))
         {
             return Task.FromResult(cached);
         }
 
         return Task.Run(() =>
         {
-            var image = Fetch(path, pixelWidth, pixelHeight);
-            Store(stamp, image);
+            var image = Fetch(path, pixelWidth, pixelHeight, thumbnailOnly: true);
+            StoreByKey(key, image, pixelWidth, pixelHeight);
             return image;
         });
+    }
+
+    /// <summary>
+    /// 큰 아이콘 격자용 Shell visual. Windows Shell이 thumbnail을 제공하면 thumbnail을,
+    /// 아니면 해당 형식이나 폴더의 큰 아이콘을 돌려준다. 셸 호출은 항상 thread pool에서 돈다.
+    /// </summary>
+    public Task<BitmapSource?> GetShellVisualAsync(
+        string path, bool isDirectory, int pixelWidth, int pixelHeight)
+    {
+        if (!TryComputeStamp(path, isDirectory, out var stamp))
+        {
+            return Task.FromResult<BitmapSource?>(null);
+        }
+
+        var key = ShellVisualKey(stamp);
+        if (TryGetCached(key, pixelWidth, pixelHeight, out var cached))
+        {
+            return Task.FromResult(cached);
+        }
+
+        return Task.Run(() =>
+        {
+            var image = Fetch(path, pixelWidth, pixelHeight, thumbnailOnly: false);
+            StoreByKey(key, image, pixelWidth, pixelHeight);
+            return image;
+        });
+    }
+
+    private static bool TryComputeStamp(string path, bool isDirectory, out string stamp)
+    {
+        try
+        {
+            if (isDirectory)
+            {
+                var directory = new DirectoryInfo(path);
+                if (!directory.Exists)
+                {
+                    stamp = string.Empty;
+                    return false;
+                }
+
+                stamp = ComputeStamp(path, 0, directory.LastWriteTimeUtc);
+                return true;
+            }
+
+            var file = new FileInfo(path);
+            if (!file.Exists)
+            {
+                stamp = string.Empty;
+                return false;
+            }
+
+            stamp = ComputeStamp(path, file.Length, file.LastWriteTimeUtc);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or ArgumentException or NotSupportedException)
+        {
+            stamp = string.Empty;
+            return false;
+        }
     }
 
     /// <summary>
@@ -121,11 +234,16 @@ public sealed class ShellThumbnailService
     /// <c>CreateBitmapSourceFromHBitmap</c> 변환은 가드 밖이다 — <see
     /// cref="ShellIconService.Fetch"/> 가 그렇게 하고 있다.
     /// </summary>
-    private static BitmapSource? Fetch(string path, int pixelWidth, int pixelHeight)
+    private static BitmapSource? Fetch(
+        string path, int pixelWidth, int pixelHeight, bool thumbnailOnly)
     {
         var iid = typeof(IShellItem).GUID;
         var size = new SIZE { cx = pixelWidth, cy = pixelHeight };
-        const int flags = ShellItemNative.SIIGBF_BIGGERSIZEOK | ShellItemNative.SIIGBF_THUMBNAILONLY;
+        var flags = ShellItemNative.SIIGBF_BIGGERSIZEOK;
+        if (thumbnailOnly)
+        {
+            flags |= ShellItemNative.SIIGBF_THUMBNAILONLY;
+        }
 
         object? item = null;
 
