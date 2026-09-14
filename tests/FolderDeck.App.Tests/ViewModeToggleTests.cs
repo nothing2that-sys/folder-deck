@@ -4,7 +4,7 @@ using FolderDeck.Core.Models;
 namespace FolderDeck.App.Tests;
 
 /// <summary>
-/// 타일 헤더 메타의 뷰 글자를 눌러 세 뷰 방식을 순환한다 (§3.2 · §7.1 <c>folders[].viewMode</c>).
+/// 타일 헤더 메타의 뷰 글자를 눌러 네 뷰 방식을 순환한다 (§3.2 · §7.1 <c>folders[].viewMode</c>).
 /// Stage 3D 까지 <c>viewMode</c> 는 읽기만 하는 값이어서 JSON 을 손으로 고쳐야 바뀌었다.
 /// </summary>
 public sealed class ViewModeToggleTests
@@ -19,23 +19,24 @@ public sealed class ViewModeToggleTests
         Assert.Equal(FolderViewMode.Details, code.Entry!.ViewMode);
 
         code.ToggleViewModeCommand.Execute(null);
+        code.ToggleViewModeCommand.Execute(null);
 
-        Assert.Equal(FolderViewMode.LargeIcons, code.Entry.ViewMode);
+        Assert.Equal(FolderViewMode.ExtraLargeIcons, code.Entry.ViewMode);
 
         // 저장은 pinned·배치가 이미 쓰는 디바운스 통로로 간다 — 새 경로를 만들지 않았다.
         f.Store.Flush();
         var reloaded = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
         Assert.Equal(
-            FolderViewMode.LargeIcons,
+            FolderViewMode.ExtraLargeIcons,
             reloaded.Folders.Single(e => e.Path == f.CodePath).ViewMode);
     }
 
     /// <summary>
-    /// 세 <c>ListView</c> 의 <c>Visibility</c> 를 가르는 값 셋과 헤더 문구가 <b>함께</b> 움직인다.
+    /// 네 <c>ListView</c> 의 <c>Visibility</c> 를 가르는 값 넷과 헤더 문구가 <b>함께</b> 움직인다.
     /// 하나만 갱신되면 목록과 문구가 어긋난다.
     /// </summary>
     [Fact]
-    public async Task FourIndicatorsMoveTogether()
+    public async Task FiveIndicatorsMoveTogether()
     {
         using var f = new MainWindowFixture();
         await f.ViewModel.InitializeAsync();
@@ -45,18 +46,22 @@ public sealed class ViewModeToggleTests
         code.PropertyChanged += (_, e) => seen.Add(e.PropertyName);
 
         code.ToggleViewModeCommand.Execute(null);
+        seen.Clear();
+        code.ToggleViewModeCommand.Execute(null);
 
         Assert.Contains(nameof(FolderPanelViewModel.IsDetailsView), seen);
         Assert.Contains(nameof(FolderPanelViewModel.IsListView), seen);
         Assert.Contains(nameof(FolderPanelViewModel.IsLargeIconView), seen);
+        Assert.Contains(nameof(FolderPanelViewModel.IsExtraLargeIconView), seen);
         Assert.Contains(nameof(FolderPanelViewModel.MetaText), seen);
         Assert.Contains(nameof(FolderPanelViewModel.ViewModeText), seen);
 
         Assert.False(code.IsDetailsView);
         Assert.False(code.IsListView);
-        Assert.True(code.IsLargeIconView);
-        Assert.Equal("largeIcons", code.ViewModeText);
-        Assert.Contains("largeIcons", code.MetaText);
+        Assert.False(code.IsLargeIconView);
+        Assert.True(code.IsExtraLargeIconView);
+        Assert.Equal("extraLargeIcons", code.ViewModeText);
+        Assert.Contains("extraLargeIcons", code.MetaText);
         Assert.DoesNotContain("details", code.MetaText);
     }
 
@@ -75,13 +80,14 @@ public sealed class ViewModeToggleTests
     }
 
     [Fact]
-    public async Task TogglingThreeTimesComesBack()
+    public async Task TogglingFourTimesComesBack()
     {
         using var f = new MainWindowFixture();
         await f.ViewModel.InitializeAsync();
 
         var code = f.ViewModel.Panels[0];
 
+        code.ToggleViewModeCommand.Execute(null);
         code.ToggleViewModeCommand.Execute(null);
         code.ToggleViewModeCommand.Execute(null);
         code.ToggleViewModeCommand.Execute(null);
@@ -109,7 +115,7 @@ public sealed class ViewModeToggleTests
     }
 
     /// <summary>
-    /// 전환하면 선택이 비워진다 — 세 <c>ListView</c> 가 각자 선택을 들고 있어서 그대로 두면
+    /// 전환하면 선택이 비워진다 — 네 <c>ListView</c> 가 각자 선택을 들고 있어서 그대로 두면
     /// 보이게 된 목록에는 아무것도 안 골라져 있는데 헤더는 "N개 선택"을 말한다. v1 은 잇지 않는다.
     /// </summary>
     [Fact]
@@ -127,7 +133,7 @@ public sealed class ViewModeToggleTests
 
         code.ToggleViewModeCommand.Execute(null);
 
-        // 목록에서도 실제로 풀리도록 뷰에 알린다(세 ListView 를 다 훑는 그 통로다).
+        // 목록에서도 실제로 풀리도록 뷰에 알린다(네 ListView 를 다 훑는 그 통로다).
         Assert.Equal(1, cleared);
         Assert.Empty(code.SelectedItems);
         Assert.False(code.HasSelection);
@@ -182,6 +188,7 @@ public sealed class ViewModeToggleTests
         Assert.False(rotating.IsDetailsView);
         Assert.False(rotating.IsListView);
         Assert.False(rotating.IsLargeIconView);
+        Assert.False(rotating.IsExtraLargeIconView);
         Assert.Null(rotating.MetaText);
         Assert.Equal(0, saves);
     }
@@ -223,5 +230,21 @@ public sealed class ViewModeToggleTests
         Assert.True(code.IsLargeIconView);
         Assert.Equal("▩", code.ViewModeIcon);
         Assert.Contains("큰 아이콘", code.ViewModeTip);
+    }
+
+    [Fact]
+    public async Task TheMenuCommandCanSelectExtraLargeIconsDirectly()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+
+        var code = f.ViewModel.Panels[0];
+        code.SetViewModeCommand.Execute(FolderViewMode.ExtraLargeIcons);
+
+        Assert.Equal(FolderViewMode.ExtraLargeIcons, code.Entry!.ViewMode);
+        Assert.True(code.IsExtraLargeIconView);
+        Assert.False(code.IsLargeIconView);
+        Assert.Equal("▣", code.ViewModeIcon);
+        Assert.Contains("아주 큰 아이콘", code.ViewModeTip);
     }
 }

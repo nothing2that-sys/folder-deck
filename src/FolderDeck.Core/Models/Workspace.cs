@@ -43,9 +43,12 @@ public sealed class Workspace
     /// 10 — <see cref="FolderViewMode"/>에 <c>LargeIcons</c> 추가(Phase 21 · D125).
     /// 기존 값 뒤에 붙는 열거자이고 v9 파일은 그대로 읽힌다. 반대로 구버전 앱은
     /// <c>viewMode: "largeIcons"</c>를 모르면 JSON 역직렬화에서 하드 실패한다.
+    /// 11 — <see cref="FolderViewMode"/>에 <c>ExtraLargeIcons</c> 추가(Phase 21 · D126B).
+    /// v10 파일과 기존 <c>LargeIcons</c> 값은 그대로 읽힌다. 반대로 v10 앱은
+    /// <c>viewMode: "extraLargeIcons"</c>를 모르면 기존 정책대로 하드 실패한다.
     /// </para>
     /// </summary>
-    public const int CurrentSchemaVersion = 10;
+    public const int CurrentSchemaVersion = 11;
 
     /// <summary>
     /// 스키마 버전은 저장소 소유다. 저장할 때 <see cref="CurrentSchemaVersion"/> 이 찍히고,

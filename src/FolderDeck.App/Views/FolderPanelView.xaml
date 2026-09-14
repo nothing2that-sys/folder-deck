@@ -76,6 +76,7 @@
             <MenuItem Header="붙여넣기" InputGestureText="Ctrl+V"
                       Command="{Binding PasteIntoCurrentCommand}" />
             <Separator />
+            <MenuItem Header="탐색기에서 열기" Command="{Binding RevealCurrentFolderCommand}" />
             <MenuItem Header="경로 복사" Command="{Binding CopyCurrentPathCommand}" />
             <Separator />
             <MenuItem Header="이 폴더를 앵커로 지정" Command="{Binding SetAnchorToCurrentCommand}" />
@@ -156,7 +157,16 @@
         <Style x:Key="LargeIconItemContainer" TargetType="ListViewItem"
                BasedOn="{StaticResource FileItemContainer}">
             <Setter Property="Width" Value="120" />
-            <Setter Property="Height" Value="120" />
+            <Setter Property="Height" Value="144" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Padding" Value="4" />
+        </Style>
+
+        <Style x:Key="ExtraLargeIconItemContainer" TargetType="ListViewItem"
+               BasedOn="{StaticResource FileItemContainer}">
+            <Setter Property="Width" Value="144" />
+            <Setter Property="Height" Value="168" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Padding" Value="4" />
@@ -617,6 +627,13 @@
                                               Command="{Binding PlacementTarget.Tag.SetViewModeCommand,
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                               CommandParameter="{x:Static models:FolderViewMode.LargeIcons}" />
+                                    <MenuItem Header="아주 큰 아이콘"
+                                              IsChecked="{Binding PlacementTarget.Tag.IsExtraLargeIconView,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                          Mode=OneWay}"
+                                              Command="{Binding PlacementTarget.Tag.SetViewModeCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:FolderViewMode.ExtraLargeIcons}" />
 
                                     <!-- 미리보기 — 예전 헤더 아이콘(▤)은 상태를 안 보여줬다
                                          (D117 A3) — 체크가 붙는 것은 손실이 아니라 개선이다. -->
@@ -975,21 +992,55 @@
                           Visibility="{Binding IsLargeIconView, Converter={StaticResource BoolToVisibility}}">
                     <ListView.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <v:VirtualizingWrapPanel />
+                            <v:VirtualizingWrapPanel ItemHeight="144" />
                         </ItemsPanelTemplate>
                     </ListView.ItemsPanel>
                     <ListView.ItemTemplate>
                         <DataTemplate>
-                            <StackPanel Width="108" Height="108" HorizontalAlignment="Center">
+                            <StackPanel Width="108" Height="132" HorizontalAlignment="Center">
                                 <Image Width="76" Height="76" Margin="0,0,0,4"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Stretch="Uniform" SnapsToDevicePixels="True"
                                        Loaded="OnLargeIconImageLoaded"
                                        Unloaded="OnLargeIconImageUnloaded"
                                        DataContextChanged="OnLargeIconImageDataContextChanged" />
-                                <TextBlock Text="{Binding Name}" Height="28"
+                                <TextBlock Text="{Binding Name}" Height="48"
                                            TextAlignment="Center" TextWrapping="Wrap"
-                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding FullPath}" />
+                                           ToolTip="{Binding FullPath}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <!-- Phase 21 D126B: 기존 큰 아이콘은 유지하고 한 단계 더 큰 Shell visual을 제공한다. -->
+                <ListView x:Name="ExtraLargeIconList" ItemsSource="{Binding DisplayItems}"
+                          ItemContainerStyle="{StaticResource ExtraLargeIconItemContainer}"
+                          BorderThickness="0" Background="Transparent"
+                          SelectionMode="Extended"
+                          SelectionChanged="OnSelectionChanged"
+                          PreviewMouseLeftButtonDown="OnListPreviewMouseLeftButtonDown"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.CanContentScroll="True"
+                          IsVisibleChanged="OnLargeIconListIsVisibleChanged"
+                          Visibility="{Binding IsExtraLargeIconView, Converter={StaticResource BoolToVisibility}}">
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <v:VirtualizingWrapPanel ItemWidth="144" ItemHeight="168" />
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Width="132" Height="156" HorizontalAlignment="Center">
+                                <Image Width="100" Height="100" Margin="0,0,0,4"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Stretch="Uniform" SnapsToDevicePixels="True"
+                                       Loaded="OnLargeIconImageLoaded"
+                                       Unloaded="OnLargeIconImageUnloaded"
+                                       DataContextChanged="OnLargeIconImageDataContextChanged" />
+                                <TextBlock Text="{Binding Name}" Height="48"
+                                           TextAlignment="Center" TextWrapping="Wrap"
+                                           ToolTip="{Binding FullPath}" />
                             </StackPanel>
                         </DataTemplate>
                     </ListView.ItemTemplate>

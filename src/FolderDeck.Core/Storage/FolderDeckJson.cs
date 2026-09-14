@@ -31,7 +31,8 @@ public static class FolderDeckJson
             AllowTrailingCommas = true,
         };
 
-        // enum 은 "list"/"details"/"largeIcons"처럼 camelCase 문자열로. 숫자는 받지 않고,
+        // enum 은 "list"/"details"/"largeIcons"/"extraLargeIcons"처럼 camelCase 문자열로.
+        // 숫자는 받지 않고,
         // 모르는 값이면 JsonException → CorruptData 로 보고된다(조용히 기본값으로 넘기지 않음).
         options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
 

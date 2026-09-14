@@ -152,7 +152,7 @@ public sealed class PanelHeaderTests
 
     // ── 뷰 방식 아이콘 ───────────────────────────────────────────────────────
 
-    /// <summary>list는 줄 셋, details는 작은 격자, 큰 아이콘은 큰 격자. 유니코드 글리프만 쓴다.</summary>
+    /// <summary>list·details·큰 아이콘·아주 큰 아이콘을 서로 다른 글리프로 표시한다.</summary>
     [Fact]
     public async Task TheViewModeIconSaysWhichViewIsOn()
     {
@@ -167,6 +167,11 @@ public sealed class PanelHeaderTests
 
         Assert.True(code.IsLargeIconView);
         Assert.Equal("▩", code.ViewModeIcon);
+
+        code.ToggleViewModeCommand.Execute(null);
+
+        Assert.True(code.IsExtraLargeIconView);
+        Assert.Equal("▣", code.ViewModeIcon);
 
         code.ToggleViewModeCommand.Execute(null);
 
@@ -189,6 +194,11 @@ public sealed class PanelHeaderTests
         code.ToggleViewModeCommand.Execute(null);
 
         Assert.Contains("지금 큰 아이콘", code.ViewModeTip);
+        Assert.Contains("아주 큰 아이콘", code.ViewModeTip);
+
+        code.ToggleViewModeCommand.Execute(null);
+
+        Assert.Contains("지금 아주 큰 아이콘", code.ViewModeTip);
         Assert.Contains("list", code.ViewModeTip);
 
         code.ToggleViewModeCommand.Execute(null);

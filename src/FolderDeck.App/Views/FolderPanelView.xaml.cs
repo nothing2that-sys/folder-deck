@@ -78,7 +78,7 @@ public partial class FolderPanelView : UserControl
 
     /// <summary>
     /// <c>ListView.SelectedItems</c> 는 바인딩할 수 없는 읽기 전용 컬렉션이라 여기서 옮긴다
-    /// (§4.2 다중 선택). 세 ListView(details/list/largeIcons) 중 지금 보이는 쪽만 값을 낸다.
+    /// (§4.2 다중 선택). 네 ListView(details/list/largeIcons/extraLargeIcons) 중 지금 보이는 쪽만 값을 낸다.
     /// </summary>
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -268,6 +268,7 @@ public partial class FolderPanelView : UserControl
         DetailsList.UnselectAll();
         SimpleList.UnselectAll();
         LargeIconList.UnselectAll();
+        ExtraLargeIconList.UnselectAll();
     }
 
     /// <summary>
@@ -283,6 +284,7 @@ public partial class FolderPanelView : UserControl
         Reapply(DetailsList, panel);
         Reapply(SimpleList, panel);
         Reapply(LargeIconList, panel);
+        Reapply(ExtraLargeIconList, panel);
 
         static void Reapply(ListView list, FolderPanelViewModel panel)
         {
@@ -677,7 +679,7 @@ public partial class FolderPanelView : UserControl
     /// <summary>고무줄 후보로 누른 자리 (<c>ListArea</c> 좌표). 임계를 넘기 전에는 이것만 있다.</summary>
     private Point? _bandOrigin;
 
-    /// <summary>누른 자리가 든 목록. 항목 사각형을 이 목록에서만 뽑는다(뷰 방식이 셋이다).</summary>
+    /// <summary>누른 자리가 든 목록. 항목 사각형을 이 목록에서만 뽑는다(뷰 방식이 넷이다).</summary>
     private ListView? _bandList;
 
     /// <summary>임계를 넘어 실제로 그리기 시작했나. <c>_bandOrigin</c> 만으로는 아직 클릭이다.</summary>
@@ -702,7 +704,7 @@ public partial class FolderPanelView : UserControl
     /// 목록에서 왼쪽 버튼을 눌렀다 — <b>여기서는 아무것도 바꾸지 않는다.</b> 누른 자리만 기억한다.
     /// </summary>
     /// <remarks>
-    /// <b>세 <see cref="ListView"/> 가 이 핸들러 하나를 쓴다</b>(§3.2 의 세 뷰 방식). 뷰 방식마다
+    /// <b>네 <see cref="ListView"/> 가 이 핸들러 하나를 쓴다</b>(§3.2 의 네 뷰 방식). 뷰 방식마다
     /// 따로 쓰면 하나만 고쳐지는 사고가 난다.
     /// <para>
     /// 선택을 지우는 것도 캡처도 <b>임계를 넘은 뒤</b>다(<see cref="BeginBand"/>). 여기서 지우면
@@ -1451,8 +1453,11 @@ public partial class FolderPanelView : UserControl
                 // 들어와 있는 포커스도 매 다운마다 패널 자신으로 끌어올려 버린다.
                 //
                 // e.Handled 는 세우지 않는다 — 이후 경로(항목 선택·고무줄·버튼·TextBox·
-                // ContextMenu)가 그대로 돌아야 한다. 그것이 이 한 줄의 유일한 안전장치다.
-                if (!IsKeyboardFocusWithin)
+                // ContextMenu)가 그대로 돌아야 한다. ButtonBase에서 시작한 클릭은 버튼이
+                // 직접 포커스를 잡게 둔다. 여기서 부모가 먼저 Focus()하면 비활성 타일의 첫
+                // 클릭이 타일 활성화에만 소비되고 Button.Click까지 이어지지 않을 수 있다.
+                if (!IsKeyboardFocusWithin
+                    && PanelFocusPolicy.ShouldFocusPanelOnLeftClick(e.OriginalSource as DependencyObject))
                 {
                     Focus();
                 }

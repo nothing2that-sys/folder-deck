@@ -202,9 +202,9 @@ public sealed class SchemaMigrationTests : IDisposable
     }
 
     [Fact]
-    public void CurrentSchemaVersionIsTen()
+    public void CurrentSchemaVersionIsEleven()
     {
-        Assert.Equal(10, Workspace.CurrentSchemaVersion);
+        Assert.Equal(11, Workspace.CurrentSchemaVersion);
     }
 
     [Fact]
@@ -825,14 +825,14 @@ public sealed class SchemaMigrationTests : IDisposable
     }
 
     [Fact]
-    public void SavingStampsWorkspaceSchemaVersionTen()
+    public void SavingStampsWorkspaceSchemaVersionEleven()
     {
         var workspace = new Workspace { Title = "버전 찍힘" };
 
         Assert.Null(_store.SaveWorkspace(workspace));
 
         var json = File.ReadAllText(_paths.WorkspaceFile(workspace.Id));
-        Assert.Contains("\"schemaVersion\": 10", json);
+        Assert.Contains("\"schemaVersion\": 11", json);
     }
 
     // ── schemaVersion 8 (Phase 15 · D79) ─────────────────────────────────────
@@ -956,9 +956,9 @@ public sealed class SchemaMigrationTests : IDisposable
         Assert.Equal(FolderEntry.DefaultPreviewRatio, folder.PreviewRatio);
     }
 
-    /// <summary>저장하면 지금 판(10)으로 승격되고 v9의 두 슬롯도 파일에 적힌다.</summary>
+    /// <summary>저장하면 지금 판(11)으로 승격되고 v9의 두 슬롯도 파일에 적힌다.</summary>
     [Fact]
-    public void SavingAV8FilePromotesItToV10AndWritesTheV9Slots()
+    public void SavingAV8FilePromotesItToV11AndWritesTheV9Slots()
     {
         var id = WriteV8File();
         var workspace = _store.LoadWorkspace(id).ValueOrThrow();
@@ -967,12 +967,12 @@ public sealed class SchemaMigrationTests : IDisposable
         Assert.Null(_store.SaveWorkspace(workspace));
 
         var json = File.ReadAllText(_paths.WorkspaceFile(id));
-        Assert.Contains("\"schemaVersion\": 10", json);
+        Assert.Contains("\"schemaVersion\": 11", json);
         Assert.Contains("\"showPreview\": true", json);
         Assert.Contains("\"previewRatio\": 0.35", json);
 
         var reloaded = _store.LoadWorkspace(id).ValueOrThrow();
-        Assert.Equal(10, reloaded.SchemaVersion);
+        Assert.Equal(11, reloaded.SchemaVersion);
         Assert.True(reloaded.Folders[0].ShowPreview);
         Assert.Equal(FolderEntry.DefaultPreviewRatio, reloaded.Folders[0].PreviewRatio);
 
@@ -1017,7 +1017,7 @@ public sealed class SchemaMigrationTests : IDisposable
         Assert.Equal(FolderEntry.DefaultPreviewRatio, workspace.Folders[1].PreviewRatio);
     }
 
-    // ── schemaVersion 10 (Phase 21 · D125) ────────────────────────────────────
+    // ── schemaVersion 10~11 (Phase 21 · D125 · D126B) ─────────────────────────
 
     [Fact]
     public void AV9FileKeepsItsExistingViewMode()
@@ -1059,7 +1059,31 @@ public sealed class SchemaMigrationTests : IDisposable
 
         Assert.Null(_store.SaveWorkspace(workspace));
         var json = File.ReadAllText(_paths.WorkspaceFile(id));
-        Assert.Contains("\"schemaVersion\": 10", json);
+        Assert.Contains("\"schemaVersion\": 11", json);
         Assert.Contains("\"viewMode\": \"largeIcons\"", json);
+    }
+
+    [Fact]
+    public void ExtraLargeIconsLoadsAndSurvivesASave()
+    {
+        var id = Guid.NewGuid();
+        File.WriteAllText(_paths.WorkspaceFile(id), $$"""
+        {
+          "schemaVersion": 11,
+          "id": "{{id}}",
+          "title": "아주 큰 아이콘",
+          "folders": [
+            { "id": "{{Guid.NewGuid()}}", "path": "D:\\work\\a", "viewMode": "extraLargeIcons" }
+          ]
+        }
+        """);
+
+        var workspace = _store.LoadWorkspace(id).ValueOrThrow();
+        Assert.Equal(FolderViewMode.ExtraLargeIcons, Assert.Single(workspace.Folders).ViewMode);
+
+        Assert.Null(_store.SaveWorkspace(workspace));
+        var json = File.ReadAllText(_paths.WorkspaceFile(id));
+        Assert.Contains("\"schemaVersion\": 11", json);
+        Assert.Contains("\"viewMode\": \"extraLargeIcons\"", json);
     }
 }

@@ -29,7 +29,7 @@ public sealed class WorkspaceRoundTripTests
                 new FolderEntry
                 {
                     Path = @"D:\some\logs",
-                    ViewMode = FolderViewMode.LargeIcons,
+                    ViewMode = FolderViewMode.ExtraLargeIcons,
                     SortBy = SortBy.Type,
                 },
             ],
@@ -56,7 +56,7 @@ public sealed class WorkspaceRoundTripTests
         Assert.True(reloaded.Folders[0].Pinned);
 
         Assert.Null(reloaded.Folders[1].DisplayName);
-        Assert.Equal(FolderViewMode.LargeIcons, reloaded.Folders[1].ViewMode);
+        Assert.Equal(FolderViewMode.ExtraLargeIcons, reloaded.Folders[1].ViewMode);
         Assert.Equal(SortBy.Type, reloaded.Folders[1].SortBy);
     }
 
@@ -87,13 +87,13 @@ public sealed class WorkspaceRoundTripTests
         var workspace = new Workspace
         {
             Title = "enum",
-            Folders = [new FolderEntry { Path = @"D:\x", ViewMode = FolderViewMode.LargeIcons, SortBy = SortBy.Modified }],
+            Folders = [new FolderEntry { Path = @"D:\x", ViewMode = FolderViewMode.ExtraLargeIcons, SortBy = SortBy.Modified }],
         };
 
         temp.Store.SaveWorkspace(workspace);
         var json = File.ReadAllText(temp.Paths.WorkspaceFile(workspace.Id));
 
-        Assert.Contains("\"viewMode\": \"largeIcons\"", json);
+        Assert.Contains("\"viewMode\": \"extraLargeIcons\"", json);
         Assert.Contains("\"sortBy\": \"modified\"", json);
     }
 

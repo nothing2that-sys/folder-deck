@@ -111,6 +111,82 @@ public sealed class VirtualizingWrapPanelLayoutTests
         });
     }
 
+    [Fact]
+    public void ThePanelAcceptsAnExtraLargeFixedCellSize()
+    {
+        RunOnSta(() =>
+        {
+            var panel = new VirtualizingWrapPanel
+            {
+                ItemWidth = 144,
+                ItemHeight = 144,
+            };
+
+            Assert.Equal(144, panel.ItemWidth);
+            Assert.Equal(144, panel.ItemHeight);
+            Assert.Equal(5, VirtualizingWrapLayout.ColumnCount(800, panel.ItemWidth));
+        });
+    }
+
+    [Fact]
+    public void ScrollingPastAColumnBoundaryRealizesTheLastFile()
+    {
+        RunOnSta(() =>
+        {
+            var items = Enumerable.Range(0, 100).Select(i => $"file-{i:000}.dwg").ToArray();
+            var list = new ListView
+            {
+                Width = 600,
+                Height = 240,
+                ItemsSource = items,
+                ItemsPanel = new ItemsPanelTemplate(
+                    new FrameworkElementFactory(typeof(VirtualizingWrapPanel))),
+            };
+
+            VirtualizingPanel.SetIsVirtualizing(list, true);
+            VirtualizingPanel.SetVirtualizationMode(list, VirtualizationMode.Recycling);
+            ScrollViewer.SetCanContentScroll(list, true);
+
+            using var host = new TestWindow(list);
+            host.Show();
+            host.UpdateLayout();
+
+            var scroll = FindVisualChild<ScrollViewer>(list);
+            Assert.NotNull(scroll);
+            scroll.ScrollToEnd();
+            host.UpdateLayout();
+
+            var last = Assert.IsType<ListViewItem>(
+                list.ItemContainerGenerator.ContainerFromIndex(items.Length - 1));
+            var panel = Assert.IsType<VirtualizingWrapPanel>(
+                FindVisualChild<VirtualizingWrapPanel>(list));
+            Assert.True(
+                last.IsVisible && panel.IsAncestorOf(last),
+                $"offset={panel.VerticalOffset}, extent={panel.ExtentHeight}, "
+                + $"viewport={panel.ViewportHeight}, children={VisualTreeHelper.GetChildrenCount(panel)}, "
+                + $"parent={VisualTreeHelper.GetParent(last)?.GetType().Name ?? "null"}, size={last.RenderSize}");
+        });
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match)
+            {
+                return match;
+            }
+
+            if (FindVisualChild<T>(child) is { } descendant)
+            {
+                return descendant;
+            }
+        }
+
+        return null;
+    }
+
     private static void RunOnSta(Action action)
     {
         Exception? failure = null;

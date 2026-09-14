@@ -6,6 +6,7 @@ public enum FolderViewMode
     List,
     Details,
     LargeIcons,
+    ExtraLargeIcons,
 }
 
 /// <summary>파일 목록 정렬 기준 (§7.1 <c>sortBy</c>).</summary>

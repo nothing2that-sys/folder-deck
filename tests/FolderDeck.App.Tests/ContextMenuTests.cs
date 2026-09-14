@@ -50,6 +50,23 @@ public sealed class ContextMenuTests
     }
 
     [Fact]
+    public async Task HeaderRevealsTheCurrentFolderInExplorer()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+        await f.ViewModel.ShowFolderAsync(f.Row("작업"));
+        var panel = f.Rotating;
+        var current = Path.Combine(f.WorkPath, "Recipe");
+        await panel.NavigateToAsync(current);
+
+        panel.RevealCurrentFolderCommand.Execute(null);
+
+        var revealed = Assert.Single(f.Shell.Revealed);
+        Assert.Equal(current, revealed.Path);
+        Assert.True(revealed.IsDirectory);
+    }
+
+    [Fact]
     public async Task RevealPassesTheFileWithItsDirectoryFlagFalse()
     {
         using var f = new MainWindowFixture();
@@ -130,6 +147,7 @@ public sealed class ContextMenuTests
         panel.CopyItemPath(null);
         panel.RevealItem(null);
         panel.CopyCurrentPath();   // 아직 아무 폴더도 안 띄운 상태
+        panel.RevealCurrentFolderCommand.Execute(null);
 
         Assert.Empty(f.Clipboard.Texts);
         Assert.Empty(f.Shell.Revealed);

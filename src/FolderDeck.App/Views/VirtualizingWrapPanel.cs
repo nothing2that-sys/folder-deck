@@ -101,16 +101,45 @@ internal static class VirtualizingWrapLayout
 }
 
 /// <summary>
-/// 120×120 DIP 고정 셀을 행 우선으로 배치하는 세로 스크롤 가상화 패널(Phase 21 · D124).
+/// 지정된 고정 크기 셀을 행 우선으로 배치하는 세로 스크롤 가상화 패널(Phase 21 · D124/D126B).
 /// </summary>
 public sealed class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
 {
-    public const double ItemWidth = 120;
-    public const double ItemHeight = 120;
+    public const double DefaultItemWidth = 120;
+    public const double DefaultItemHeight = 120;
+
+    public static readonly DependencyProperty ItemWidthProperty = DependencyProperty.Register(
+        nameof(ItemWidth), typeof(double), typeof(VirtualizingWrapPanel),
+        new FrameworkPropertyMetadata(
+            DefaultItemWidth,
+            FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsArrange),
+        IsValidItemSize);
+
+    public static readonly DependencyProperty ItemHeightProperty = DependencyProperty.Register(
+        nameof(ItemHeight), typeof(double), typeof(VirtualizingWrapPanel),
+        new FrameworkPropertyMetadata(
+            DefaultItemHeight,
+            FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsArrange),
+        IsValidItemSize);
+
+    public double ItemWidth
+    {
+        get => (double)GetValue(ItemWidthProperty);
+        set => SetValue(ItemWidthProperty, value);
+    }
+
+    public double ItemHeight
+    {
+        get => (double)GetValue(ItemHeightProperty);
+        set => SetValue(ItemHeightProperty, value);
+    }
+
+    private static bool IsValidItemSize(object value) =>
+        value is double size && double.IsFinite(size) && size > 0;
 
     private Size _extent;
     private Size _viewport;
-    private Size _pixelViewport = new(ItemWidth, ItemHeight);
+    private Size _pixelViewport = new(DefaultItemWidth, DefaultItemHeight);
     private Point _offset;
     private int _columns = 1;
 
@@ -151,7 +180,6 @@ public sealed class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         var owner = ItemsControl.GetItemsOwner(this);
         var itemCount = owner?.Items.Count ?? 0;
         _columns = VirtualizingWrapLayout.ColumnCount(finalSize.Width, ItemWidth);
-
         for (var childIndex = 0; childIndex < InternalChildren.Count; childIndex++)
         {
             var itemIndex = ItemContainerGenerator.IndexFromGeneratorPosition(
@@ -218,20 +246,23 @@ public sealed class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         for (var itemIndex = firstIndex; itemIndex <= lastIndex; itemIndex++, childIndex++)
         {
             var child = (UIElement)ItemContainerGenerator.GenerateNext(out var isNewlyRealized);
-            if (!isNewlyRealized)
+            var isAttached = ReferenceEquals(VisualTreeHelper.GetParent(child), this);
+            if (!isNewlyRealized && isAttached)
             {
                 continue;
             }
 
-            if (childIndex >= InternalChildren.Count)
+            if (!isAttached && childIndex >= InternalChildren.Count)
             {
                 AddInternalChild(child);
             }
-            else
+            else if (!isAttached)
             {
                 InsertInternalChild(childIndex, child);
             }
 
+            // Recycling generator는 pool에서 꺼낸 컨테이너에도 isNewlyRealized=false를 줄 수 있다.
+            // 그 컨테이너는 generator에는 연결됐지만 visual parent는 null이므로 다시 붙이고 준비한다.
             ItemContainerGenerator.PrepareItemContainer(child);
         }
     }
