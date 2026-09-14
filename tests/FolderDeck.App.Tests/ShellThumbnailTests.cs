@@ -161,4 +161,51 @@ public sealed class ShellThumbnailTests
             root.Delete(recursive: true);
         }
     }
+
+    [Fact]
+    public async Task AQueuedLargeIconRequestCanBeCancelledBeforeItCallsTheShell()
+    {
+        var firstFolder = Directory.CreateTempSubdirectory("FolderDeck-first-icon-");
+        var secondFolder = Directory.CreateTempSubdirectory("FolderDeck-second-icon-");
+        using var releaseFirst = new ManualResetEventSlim();
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fetchCount = 0;
+        using var gate = new SemaphoreSlim(1, 1);
+
+        BitmapSource? BlockingFetch(string path, int width, int height, bool thumbnailOnly)
+        {
+            Interlocked.Increment(ref fetchCount);
+            firstStarted.TrySetResult();
+            releaseFirst.Wait(TimeSpan.FromSeconds(10));
+            return null;
+        }
+
+        try
+        {
+            var service = new ShellThumbnailService(
+                cacheCapacity: 4, fetch: BlockingFetch, fetchGate: gate);
+            var first = service.GetShellVisualAsync(firstFolder.FullName, true, 76, 76);
+            await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            using var cts = new CancellationTokenSource();
+            var queued = service.GetShellVisualAsync(secondFolder.FullName, true, 76, 76, cts.Token);
+            cts.Cancel();
+
+            try
+            {
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => queued);
+                Assert.Equal(1, Volatile.Read(ref fetchCount));
+            }
+            finally
+            {
+                releaseFirst.Set();
+                await first;
+            }
+        }
+        finally
+        {
+            firstFolder.Delete(recursive: true);
+            secondFolder.Delete(recursive: true);
+        }
+    }
 }

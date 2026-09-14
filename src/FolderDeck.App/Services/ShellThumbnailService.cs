@@ -24,8 +24,14 @@ public sealed class ShellThumbnailService
 {
     internal const int DefaultCacheCapacity = 64;
 
+    // 세 패널이 동시에 큰 아이콘을 실현해도 Shell COM 작업은 둘만 실제로 실행한다. 대기
+    // 요청은 thread pool을 차지하지 않고, 화면 밖으로 나가면 token으로 시작 전에 취소된다.
+    private static readonly SemaphoreSlim SharedFetchGate = new(2, 2);
+
     private readonly object _gate = new();
     private readonly int _cacheCapacity;
+    private readonly Func<string, int, int, bool, BitmapSource?> _fetch;
+    private readonly SemaphoreSlim _fetchGate;
     private readonly Dictionary<string, CacheEntry> _cache = new(StringComparer.Ordinal);
     private readonly LinkedList<string> _lru = new();
 
@@ -34,9 +40,21 @@ public sealed class ShellThumbnailService
         LinkedListNode<string> Node);
 
     public ShellThumbnailService(int cacheCapacity = DefaultCacheCapacity)
+        : this(cacheCapacity, Fetch, SharedFetchGate)
+    {
+    }
+
+    internal ShellThumbnailService(
+        int cacheCapacity,
+        Func<string, int, int, bool, BitmapSource?> fetch,
+        SemaphoreSlim fetchGate)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(cacheCapacity, 1);
+        ArgumentNullException.ThrowIfNull(fetch);
+        ArgumentNullException.ThrowIfNull(fetchGate);
         _cacheCapacity = cacheCapacity;
+        _fetch = fetch;
+        _fetchGate = fetchGate;
     }
 
     /// <summary>
@@ -157,12 +175,8 @@ public sealed class ShellThumbnailService
             return Task.FromResult(cached);
         }
 
-        return Task.Run(() =>
-        {
-            var image = Fetch(path, pixelWidth, pixelHeight, thumbnailOnly: true);
-            StoreByKey(key, image, pixelWidth, pixelHeight);
-            return image;
-        });
+        return FetchAndStoreAsync(
+            path, key, pixelWidth, pixelHeight, thumbnailOnly: true, CancellationToken.None);
     }
 
     /// <summary>
@@ -170,7 +184,8 @@ public sealed class ShellThumbnailService
     /// 아니면 해당 형식이나 폴더의 큰 아이콘을 돌려준다. 셸 호출은 항상 thread pool에서 돈다.
     /// </summary>
     public Task<BitmapSource?> GetShellVisualAsync(
-        string path, bool isDirectory, int pixelWidth, int pixelHeight)
+        string path, bool isDirectory, int pixelWidth, int pixelHeight,
+        CancellationToken cancellationToken = default)
     {
         if (!TryComputeStamp(path, isDirectory, out var stamp))
         {
@@ -183,12 +198,39 @@ public sealed class ShellThumbnailService
             return Task.FromResult(cached);
         }
 
-        return Task.Run(() =>
+        return FetchAndStoreAsync(
+            path, key, pixelWidth, pixelHeight, thumbnailOnly: false, cancellationToken);
+    }
+
+    private async Task<BitmapSource?> FetchAndStoreAsync(
+        string path,
+        string key,
+        int pixelWidth,
+        int pixelHeight,
+        bool thumbnailOnly,
+        CancellationToken cancellationToken)
+    {
+        await _fetchGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            var image = Fetch(path, pixelWidth, pixelHeight, thumbnailOnly: false);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // 같은 항목의 앞 요청이 gate를 기다리는 동안 cache를 채웠을 수 있다.
+            if (TryGetCached(key, pixelWidth, pixelHeight, out var cached))
+            {
+                return cached;
+            }
+
+            var image = await Task.Run(
+                () => _fetch(path, pixelWidth, pixelHeight, thumbnailOnly),
+                CancellationToken.None).ConfigureAwait(false);
             StoreByKey(key, image, pixelWidth, pixelHeight);
             return image;
-        });
+        }
+        finally
+        {
+            _fetchGate.Release();
+        }
     }
 
     private static bool TryComputeStamp(string path, bool isDirectory, out string stamp)

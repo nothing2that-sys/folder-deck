@@ -61,6 +61,8 @@ public partial class FolderPanelView : UserControl
     private sealed class LargeIconRequestState
     {
         public int Generation { get; set; }
+
+        public CancellationTokenSource? Cancellation { get; set; }
     }
 
     /// <summary>
@@ -105,7 +107,9 @@ public partial class FolderPanelView : UserControl
             return;
         }
 
-        _largeIconRequests.GetOrCreateValue(image).Generation++;
+        var state = _largeIconRequests.GetOrCreateValue(image);
+        state.Generation++;
+        state.Cancellation?.Cancel();
         image.Source = null;
     }
 
@@ -122,12 +126,16 @@ public partial class FolderPanelView : UserControl
     {
         var state = _largeIconRequests.GetOrCreateValue(image);
         var generation = ++state.Generation;
+        state.Cancellation?.Cancel();
         image.Source = null;
 
         if (image.DataContext is not FileItemViewModel item)
         {
             return;
         }
+
+        var cancellation = new CancellationTokenSource();
+        state.Cancellation = cancellation;
 
         var dpi = VisualTreeHelper.GetDpi(image);
         var pixelWidth = Math.Max(1, (int)Math.Ceiling(image.Width * dpi.DpiScaleX));
@@ -137,13 +145,27 @@ public partial class FolderPanelView : UserControl
         try
         {
             visual = await _previewThumbnailService.GetShellVisualAsync(
-                item.FullPath, item.IsDirectory, pixelWidth, pixelHeight).ConfigureAwait(true);
+                item.FullPath, item.IsDirectory, pixelWidth, pixelHeight, cancellation.Token)
+                .ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            return;
         }
         catch
         {
             // async void 이벤트에서 예외를 밖으로 내보내지 않는다. 셸 visual을 못 얻은 항목은
             // 빈 이미지로 남고 다음 실현 때 다시 요청한다(null은 캐시하지 않는다).
             return;
+        }
+        finally
+        {
+            if (ReferenceEquals(state.Cancellation, cancellation))
+            {
+                state.Cancellation = null;
+            }
+
+            cancellation.Dispose();
         }
 
         if (!image.IsLoaded || state.Generation != generation
@@ -158,8 +180,21 @@ public partial class FolderPanelView : UserControl
     private void OnLargeIconListIsVisibleChanged(
         object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (sender is not ListView { IsVisible: true } list)
+        if (sender is not ListView list)
         {
+            return;
+        }
+
+        if (!list.IsVisible)
+        {
+            foreach (var image in FindVisualChildren<Image>(list))
+            {
+                var state = _largeIconRequests.GetOrCreateValue(image);
+                state.Generation++;
+                state.Cancellation?.Cancel();
+                image.Source = null;
+            }
+
             return;
         }
 
@@ -170,6 +205,11 @@ public partial class FolderPanelView : UserControl
         {
             list.InvalidateMeasure();
             FindVisualChild<VirtualizingWrapPanel>(list)?.InvalidateMeasure();
+
+            foreach (var image in FindVisualChildren<Image>(list))
+            {
+                LoadLargeIconAsync(image);
+            }
         });
     }
 
@@ -190,6 +230,24 @@ public partial class FolderPanelView : UserControl
         }
 
         return null;
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent)
+        where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var descendant in FindVisualChildren<T>(child))
+            {
+                yield return descendant;
+            }
+        }
     }
 
     /// <summary>

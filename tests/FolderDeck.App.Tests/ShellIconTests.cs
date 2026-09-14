@@ -120,12 +120,14 @@ public sealed class ShellIconTests
     public void ARetriedApiCallIsNeededWhenTheResultSucceedsButTheIconHandleIsZero() =>
         Assert.True(ShellIconService.ShouldRetryFetch(NonZero, IntPtr.Zero));
 
-    /// <summary>D73 계측에서 한 번도 안 나온 경우 — 반환값 자체가 0이면 API 가 거절한
-    /// 것이라 다시 부르지 않는다(hIcon 값과 무관하다).</summary>
+    /// <summary>
+    /// 과거 D73 계측에는 없었지만 전체 시험과 실제 목록에서 다시 관측된 빈 결과도 한 번은
+    /// 다시 부른다. 이 길을 놓치면 FileItemViewModel 이 그 행을 세션 동안 글리프로 고정한다.
+    /// </summary>
     [Fact]
-    public void NoRetryWhenTheResultItselfIsZero()
+    public void AZeroResultIsAlsoRetriedWhenNoIconWasReturned()
     {
-        Assert.False(ShellIconService.ShouldRetryFetch(IntPtr.Zero, IntPtr.Zero));
+        Assert.True(ShellIconService.ShouldRetryFetch(IntPtr.Zero, IntPtr.Zero));
         Assert.False(ShellIconService.ShouldRetryFetch(IntPtr.Zero, NonZero));
     }
 
@@ -137,6 +139,19 @@ public sealed class ShellIconTests
     [Fact]
     public void ANullImageIsNotCached() =>
         Assert.False(ShellIconService.ShouldCache(null));
+
+    [Fact]
+    public void AFolderUsesTheGenericDirectoryShellIconAfterItsPathLookupFails()
+    {
+        Assert.True(ShellIconService.ShouldUseDirectoryFallback(
+            isDirectory: true, useFileAttributes: false, iconWasReturned: false));
+        Assert.False(ShellIconService.ShouldUseDirectoryFallback(
+            isDirectory: false, useFileAttributes: false, iconWasReturned: false));
+        Assert.False(ShellIconService.ShouldUseDirectoryFallback(
+            isDirectory: true, useFileAttributes: true, iconWasReturned: false));
+        Assert.False(ShellIconService.ShouldUseDirectoryFallback(
+            isDirectory: true, useFileAttributes: false, iconWasReturned: true));
+    }
 
     [Fact]
     public async Task ANonNullImageIsCached()

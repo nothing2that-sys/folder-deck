@@ -26,6 +26,11 @@ public sealed class ShellIconService
     private static readonly HashSet<string> PathKeyExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".exe", ".lnk", ".ico" };
 
+    // SHGetFileInfo는 서비스 인스턴스가 달라도 같은 process-global Shell 경로를 탄다. 전체
+    // 시험과 실제 목록에서 동시 호출 때 산발 null이 재현되므로 호출 자체를 한 번에 하나로
+    // 제한한다. wait는 비동기이고 실제 native 호출만 worker thread에서 돌아 UI를 막지 않는다.
+    private static readonly SemaphoreSlim FetchGate = new(1, 1);
+
     private readonly ConcurrentDictionary<string, BitmapSource?> _cache = new();
 
     /// <summary>
@@ -73,9 +78,23 @@ public sealed class ShellIconService
         }
 
         var useFileAttributes = key.StartsWith(ExtensionKeyPrefix, StringComparison.Ordinal);
-        return Task.Run(() =>
+        return FetchAndCacheAsync(path, isDirectory, key, useFileAttributes);
+    }
+
+    private async Task<BitmapSource?> FetchAndCacheAsync(
+        string path, bool isDirectory, string key, bool useFileAttributes)
+    {
+        await FetchGate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            var icon = Fetch(path, useFileAttributes);
+            // 같은 key의 앞선 요청이 gate를 기다리는 동안 성공했으면 native 호출을 생략한다.
+            if (_cache.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+
+            var icon = await Task.Run(
+                () => Fetch(path, useFileAttributes, isDirectory)).ConfigureAwait(false);
 
             // 실패(null)는 캐시하지 않는다(D74) — 넣으면 확장자 하나가 한 번 헛나갔을 때
             // 그 확장자가 세션 내내 📄 로 굳는다(D73 이 잰 산발 실패의 원인 하나).
@@ -85,7 +104,11 @@ public sealed class ShellIconService
             }
 
             return icon;
-        });
+        }
+        finally
+        {
+            FetchGate.Release();
+        }
     }
 
     /// <summary>모든 캐시를 비운다(언제 부를지는 D68-c 가 정한다).</summary>
@@ -100,12 +123,20 @@ public sealed class ShellIconService
 
     /// <summary>
     /// <see cref="ShellIconNative.SHGetFileInfo"/> 를 다시 불러야 하는가 — <paramref name="result"/>
-    /// 가 <b>성공(0 이 아님)인데 <paramref name="hIcon"/> 만 0</b>일 때만 참이다(D74 · D73 Q2 실측).
-    /// <paramref name="result"/> 가 0이면 API 가 거절한 것이라 다시 부르지 않는다 — D73 계측에서
-    /// 80회 중 한 번도 나오지 않은 경우다.
+    /// 가 usable icon을 주지 않았을 때 참이다. D73에서는 성공 반환과 빈 handle만 측정됐지만,
+    /// 이후 전체 시험과 실제 목록에서 최종 <c>null</c>이 다시 관측됐다. 반환값까지 0인 빈 결과도
+    /// 같은 제한된 되풀이 안에서 한 번 더 부르되, handle이 있으면 반환값과 관계없이 끝낸다.
     /// </summary>
     internal static bool ShouldRetryFetch(IntPtr result, IntPtr hIcon) =>
-        result != IntPtr.Zero && hIcon == IntPtr.Zero;
+        hIcon == IntPtr.Zero;
+
+    /// <summary>
+    /// 실제 폴더 경로에서 고유 Shell 아이콘을 끝내 얻지 못한 경우에만 일반 directory Shell
+    /// 아이콘을 요청한다. 파일이나 이미 attributes 기반인 요청에는 fallback을 겹치지 않는다.
+    /// </summary>
+    internal static bool ShouldUseDirectoryFallback(
+        bool isDirectory, bool useFileAttributes, bool iconWasReturned) =>
+        isDirectory && !useFileAttributes && !iconWasReturned;
 
     /// <summary>
     /// 호출 자리는 이 하나뿐이다 — <b>되풀이로 최대 두 번</b> 돈다(D74). 확장자 키
@@ -119,7 +150,18 @@ public sealed class ShellIconService
     /// 호출). 같은 스레드·같은 경로로 곧장 다시 부르면 7/7 이 성공했다 — 그래서 한 번만
     /// 되풀이한다(§2 "재시도는 한 번만").
     /// </remarks>
-    private static BitmapSource? Fetch(string path, bool useFileAttributes)
+    private static BitmapSource? Fetch(string path, bool useFileAttributes, bool isDirectory)
+    {
+        var icon = FetchCore(path, useFileAttributes, isDirectory);
+        if (ShouldUseDirectoryFallback(isDirectory, useFileAttributes, icon is not null))
+        {
+            icon = FetchCore(path, useFileAttributes: true, isDirectory: true);
+        }
+
+        return icon;
+    }
+
+    private static BitmapSource? FetchCore(string path, bool useFileAttributes, bool isDirectory)
     {
         var flags = ShellIconNative.SHGFI_ICON | ShellIconNative.SHGFI_SMALLICON;
         uint attributes = 0;
@@ -127,7 +169,9 @@ public sealed class ShellIconService
         if (useFileAttributes)
         {
             flags |= ShellIconNative.SHGFI_USEFILEATTRIBUTES;
-            attributes = ShellIconNative.FILE_ATTRIBUTE_NORMAL;
+            attributes = isDirectory
+                ? ShellIconNative.FILE_ATTRIBUTE_DIRECTORY
+                : ShellIconNative.FILE_ATTRIBUTE_NORMAL;
         }
 
         var info = new ShellIconNative.SHFILEINFO();
@@ -149,6 +193,11 @@ public sealed class ShellIconService
 
         if (result == IntPtr.Zero || info.hIcon == IntPtr.Zero)
         {
+            if (info.hIcon != IntPtr.Zero)
+            {
+                ShellIconNative.DestroyIcon(info.hIcon);
+            }
+
             return null;
         }
 

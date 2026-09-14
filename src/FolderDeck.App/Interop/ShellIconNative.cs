@@ -10,6 +10,7 @@ internal static class ShellIconNative
     internal const uint SHGFI_ICON = 0x00000100;
     internal const uint SHGFI_SMALLICON = 0x00000001;
     internal const uint SHGFI_USEFILEATTRIBUTES = 0x00000010;
+    internal const uint FILE_ATTRIBUTE_DIRECTORY = 0x00000010;
     internal const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
