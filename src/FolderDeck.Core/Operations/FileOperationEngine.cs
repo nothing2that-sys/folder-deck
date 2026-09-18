@@ -293,8 +293,8 @@ public sealed class FileOperationEngine(IRecycleBin recycleBin) : IFileOperation
             {
                 // 복사는 이미 끝났다 — 여기서 그냥 던지면 RunUnit 의 바깥 catch 가 "권한이
                 // 없다"로만 접어 사용자가 목적지에 이미 다 들어갔다는 걸 모르게 된다(검토 회차
-                // 발견 — ReadOnly 파일이 섞인 폴더 이동. 이 환경의 .NET 런타임에서는 재현되지
-                // 않았지만 — 손 확인, 아래 참고 — 문서화된 .NET/Win32 동작이라 방어는 남긴다).
+                // 발견). 실패 사유가 무엇이든(ReadOnly 든 잠김이든) 이 메시지는 유효하다 —
+                // TryDeleteSourceTree 주석 참고.
                 return fail(
                     $"복사는 끝났지만 원본을 지우지 못했다 — {deleteError} " +
                     "(목적지에 이미 있다, 원본도 그대로 남아 있다)",
@@ -306,11 +306,17 @@ public sealed class FileOperationEngine(IRecycleBin recycleBin) : IFileOperation
     }
 
     /// <summary>
-    /// 복사가 끝난 뒤 원본 트리를 지운다. <c>Directory.Delete(recursive:true)</c> 는 내부에
-    /// ReadOnly 속성 파일이 하나라도 있으면 속성을 안 풀고 <see cref="UnauthorizedAccessException"/>
-    /// 을 던지는 것이 .NET/Win32 의 알려진 동작이라(검토 회차 발견), 그 경우만 속성을 지우고
-    /// 한 번 더 시도한다.
+    /// 복사가 끝난 뒤 원본 트리를 지운다. 실패해도 여기서 던지지 않고 사유만 돌려준다 —
+    /// 복사는 이미 끝났으므로 <see cref="RunUnit"/> 의 바깥 catch 가 그냥 삼키면 "권한이
+    /// 없다"로만 접혀 사용자가 목적지에 이미 다 들어갔다는 걸 모르게 된다(검토 회차 발견).
     /// </summary>
+    /// <remarks>
+    /// 한때 여기서 <see cref="UnauthorizedAccessException"/> 이면 ReadOnly 속성을 지우고
+    /// 한 번 더 시도했다(.NET/Win32 문서화된 동작 방어). 그런데 이 환경에서 재현되지도
+    /// 않았고(손 확인), 재시도까지 실패하면 이미 지운 속성이 복구 안 되는 새 결함만
+    /// 남겼다(코덱스 적대적 검증 발견, 2026-09-18). 검증 안 된 방어보다 원래 동작이 낫다고
+    /// 판단해 재시도를 뺐다 — JH 결정.
+    /// </remarks>
     private static bool TryDeleteSourceTree(string path, out string? error)
     {
         try
@@ -319,37 +325,10 @@ public sealed class FileOperationEngine(IRecycleBin recycleBin) : IFileOperation
             error = null;
             return true;
         }
-        catch (UnauthorizedAccessException)
-        {
-            try
-            {
-                ClearReadOnlyRecursive(path);
-                Directory.Delete(path, recursive: true);
-                error = null;
-                return true;
-            }
-            catch (Exception retryEx)
-            {
-                error = Describe(retryEx);
-                return false;
-            }
-        }
         catch (Exception ex)
         {
             error = Describe(ex);
             return false;
-        }
-    }
-
-    private static void ClearReadOnlyRecursive(string path)
-    {
-        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-        {
-            var attributes = File.GetAttributes(file);
-            if ((attributes & FileAttributes.ReadOnly) != 0)
-            {
-                File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
-            }
         }
     }
 
@@ -420,12 +399,15 @@ public sealed class FileOperationEngine(IRecycleBin recycleBin) : IFileOperation
                     return stats;
                 }
 
-                if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0)
+                if (new DirectoryInfo(child).LinkTarget is not null)
                 {
                     // 정션/디렉터리 심볼릭 링크 — 안으로 재귀하면 자기 조상을 가리킬 때 무한
                     // 재귀(StackOverflowException, catch 로 못 잡고 프로세스가 즉시 종료된다)로
                     // 이어질 수 있다(검토 회차 발견). 링크를 다시 만들지는 않고 건너뛴 사실만
-                    // 남긴다.
+                    // 남긴다. LinkTarget 으로 판별한다 — ReparsePoint 속성만 보면 OneDrive
+                    // 같은 클라우드 동기화 폴더까지 링크로 오인해 정상 내용을 건너뛸 수 있다
+                    // (코덱스 적대적 검증 발견 · 실측: 정션은 LinkTarget 이 실제 경로, 보통
+                    // 폴더는 null — §FolderEnumerator.cs 같은 판별).
                     stats.Failures.Add($"{Path.GetFileName(child)}: 정션/링크라 건너뛰었다");
                     continue;
                 }

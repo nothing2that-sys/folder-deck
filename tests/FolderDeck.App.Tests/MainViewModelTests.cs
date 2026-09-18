@@ -1,3 +1,4 @@
+using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Models;
 
 namespace FolderDeck.App.Tests;
@@ -226,6 +227,46 @@ public sealed class MainViewModelTests
 
         Assert.False(f.Row("code").IsInaccessible);
         Assert.False(f.Row("문서").IsInaccessible);
+    }
+
+    /// <summary>
+    /// 패널에 뜬 채로 폴더가 다시 닿게 되면 F5 없이도 회색이 풀려야 한다 — 재조회 자체가
+    /// 그 계기다(검토 회차 발견 · <c>UpdateRowStates</c> 편도 래치 수정의 회귀 시험. 코덱스
+    /// 적대적 검증에서 이 수정에 자동 시험이 없다는 지적을 받았다).
+    /// <see cref="MainWindowFixture.UnreachablePath"/>는 존재하지 않는 호스트라 이 시나리오에
+    /// 못 쓴다 — 대신 로컬에 없는 경로를 만들었다가 실제로 만들어 "복구"를 흉내낸다.
+    /// </summary>
+    [Fact]
+    public async Task ARecoveredFolderClearsInaccessibleOnItsOwnRefresh()
+    {
+        using var f = new MainWindowFixture();
+        f.Store.Flush();
+        var reopened = f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow();
+
+        var recoveringPath = Path.Combine(Path.GetDirectoryName(f.CodePath)!, "recovers");
+        reopened.Folders.Add(new FolderEntry
+        {
+            Path = recoveringPath, DisplayName = "복구됨", Description = "시험용",
+        });
+
+        var viewModel = new MainViewModel(
+            reopened, f.Store, new FolderEnumerator(), f.Shell, f.Clipboard, f.Engine, f.Prompt,
+            f.MacroEditor, f.FolderEditor, f.SelfLauncher);
+
+        await viewModel.InitializeAsync();
+
+        var row = viewModel.Rows.Single(r => r.DisplayName == "복구됨");
+        Assert.True(row.IsInaccessible);
+
+        await viewModel.ShowFolderAsync(row);
+        Assert.True(viewModel.RotatingPanel!.HasFailure);
+
+        // 실제로 만들어서 이제는 닿는다 — 재조회가 이 사실을 알아채야 한다.
+        Directory.CreateDirectory(recoveringPath);
+        await viewModel.RotatingPanel!.RefreshAsync();
+
+        Assert.False(viewModel.RotatingPanel!.HasFailure);
+        Assert.False(row.IsInaccessible);
     }
 
     // ── 갱신 (§8) ────────────────────────────────────────────────────────────

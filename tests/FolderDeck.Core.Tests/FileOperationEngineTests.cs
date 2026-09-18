@@ -731,40 +731,6 @@ public sealed class FileOperationEngineTests : IDisposable
         return process?.ExitCode == 0 && Directory.Exists(linkPath);
     }
 
-    // ── ReadOnly 파일이 섞인 폴더 이동 (검토 회차 발견) ─────────────────────
-
-    /// <summary>
-    /// <c>Directory.Delete(recursive:true)</c> 는 ReadOnly 속성 파일이 하나라도 있으면
-    /// 속성을 안 풀고 예외를 던진다(.NET/Win32 공지 동작). 복사는 이미 끝났으므로, 속성을
-    /// 지우고 한 번 더 시도해 원본을 마저 지운다.
-    /// </summary>
-    [Fact]
-    public async Task MovingAFolderWithAReadOnlyFileStillRemovesTheOriginal()
-    {
-        var a = File_("src/tree/a.txt", "A");
-        File.SetAttributes(a, File.GetAttributes(a) | FileAttributes.ReadOnly);
-        var tree = Path.Combine(_root, "src", "tree");
-        var one = Dir("one");
-
-        try
-        {
-            var report = await Run(FileOperationKind.Move, [tree], [one]);
-
-            Assert.Equal(OperationItemStatus.Succeeded, Assert.Single(report.Results).Status);
-            Assert.False(Directory.Exists(tree));
-            Assert.Equal("A", File.ReadAllText(Path.Combine(one, "tree", "a.txt")));
-        }
-        finally
-        {
-            // 정리 — 목적지에 남은 ReadOnly 사본도 지울 수 있어야 Dispose 가 안 걸린다.
-            var copied = Path.Combine(one, "tree", "a.txt");
-            if (File.Exists(copied))
-            {
-                File.SetAttributes(copied, File.GetAttributes(copied) & ~FileAttributes.ReadOnly);
-            }
-        }
-    }
-
     // ── 진행 보고 ────────────────────────────────────────────────────────────
 
     [Fact]

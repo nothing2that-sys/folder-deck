@@ -114,10 +114,20 @@ public sealed class FolderEnumerator : IFolderEnumerator
                 ct.ThrowIfCancellationRequested();
 
                 bool isDirectory;
+                bool isLink;
                 FolderItem item;
                 try
                 {
                     isDirectory = (info.Attributes & FileAttributes.Directory) != 0;
+
+                    // LinkTarget 이 있어야 정션/심볼릭 링크다(코덱스 적대적 검증 발견 · 실측
+                    // 확인). OneDrive 같은 클라우드 동기화 폴더도 ReparsePoint 속성은 켜져
+                    // 있지만 LinkTarget 은 없어서, 그 속성만 보면 정상 폴더까지 링크로 오인해
+                    // 안으로 안 들어가고 내용이 검색에서 조용히 빠질 수 있었다. 같은 보호
+                    // 구간에서 한 번만 읽는다 — 아래에서 다시 읽지 않는다(따로 있던 재읽기가
+                    // 그 사이 항목이 사라지면 검색 전체를 죽일 수 있다는 지적도 같이 없앤다).
+                    isLink = info.LinkTarget is not null;
+
                     item = new FolderItem(
                         info.Name,
                         info.FullName,
@@ -133,7 +143,7 @@ public sealed class FolderEnumerator : IFolderEnumerator
                 // 정션/디렉터리 심볼릭 링크는 안으로 안 들어간다 — 조상 폴더를 가리키면
                 // 취소할 때까지 검색이 끝나지 않는다(검토 회차 발견). 링크 자신은 그대로
                 // 검색 결과 후보다(위 이름 비교에 그대로 걸린다) — 안으로 재귀만 안 한다.
-                if (isDirectory && (info.Attributes & FileAttributes.ReparsePoint) == 0)
+                if (isDirectory && !isLink)
                 {
                     pending.Push(info.FullName);
                 }
