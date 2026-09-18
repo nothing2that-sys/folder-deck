@@ -196,11 +196,15 @@
         <!-- 항목 앞 아이콘(Phase 11 · D68-c). 셸 아이콘(② 단)과 글리프(③ 단)를 같은 칸에
              겹쳐 두고, 셸 아이콘이 왔으면(ShellIcon 이 null 이 아니면) 그것만 보이게 가른다.
              ItemGlyph 스타일은 그대로 두고 이 템플릿 안에서 재사용한다 — 목록과 상세에
-             마크업을 두 벌 만들지 않기 위해서다. 큰 아이콘은 D126의 Shell visual만 쓴다. -->
+             마크업을 두 벌 만들지 않기 위해서다. 큰 아이콘은 D126의 Shell visual만 쓴다.
+             Unloaded·DataContextChanged 는 head-of-line blocking 완화(2026-09-18 프로브 §1) —
+             화면 밖으로 스크롤된 행의 대기 중인 취득을 취소한다. -->
         <DataTemplate x:Key="ItemIcon">
             <Grid>
                 <Image x:Name="ShellIconImage" Source="{Binding ShellIcon}" Width="16" Height="16"
-                       VerticalAlignment="Center" Margin="0,0,5,0" />
+                       VerticalAlignment="Center" Margin="0,0,5,0"
+                       Unloaded="OnShellIconImageUnloaded"
+                       DataContextChanged="OnShellIconImageDataContextChanged" />
                 <TextBlock x:Name="GlyphText" Style="{StaticResource ItemGlyph}" Visibility="Collapsed" />
             </Grid>
             <DataTemplate.Triggers>

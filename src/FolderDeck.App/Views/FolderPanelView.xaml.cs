@@ -92,6 +92,32 @@ public partial class FolderPanelView : UserControl
         panel.SelectedItems = [.. list.SelectedItems.OfType<FileItemViewModel>()];
     }
 
+    /// <summary>
+    /// list/details의 작은 셸 아이콘(② 단) 행이 재활용(Recycling 가상화)될 때 붙는다 —
+    /// 컨테이너는 그대로 두고 <c>DataContext</c>만 바뀌므로 <c>Unloaded</c>는 안 뜬다.
+    /// 화면 밖으로 밀려나는 옛 항목의 대기 중인 취득을 취소한다(2026-09-18 프로브 §1).
+    /// </summary>
+    private void OnShellIconImageDataContextChanged(
+        object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.OldValue is FileItemViewModel oldItem)
+        {
+            oldItem.CancelPendingShellIconFetch();
+        }
+    }
+
+    /// <summary>
+    /// 컨테이너 자체가 트리에서 완전히 빠질 때(뷰 전환·항목 소스 교체 등, 재활용이 아닌
+    /// 경우) 붙는다 — 이때는 <c>DataContext</c>가 그대로라 위 핸들러가 못 잡는다.
+    /// </summary>
+    private void OnShellIconImageUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is Image { DataContext: FileItemViewModel item })
+        {
+            item.CancelPendingShellIconFetch();
+        }
+    }
+
     private void OnLargeIconImageLoaded(object sender, RoutedEventArgs e)
     {
         if (sender is Image image)

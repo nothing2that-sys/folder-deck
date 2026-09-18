@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Windows.Media.Imaging;
 using FolderDeck.App.Services;
 using FolderDeck.App.ViewModels;
 using FolderDeck.Core.Enumeration;
@@ -220,5 +221,60 @@ public sealed class ShellIconBindingTests
                 Directory.Delete(dir);
             }
         }
+    }
+
+    // ── head-of-line blocking 완화(2026-09-18 프로브 §1) — 취소 뒤 재요청 ──
+
+    /// <summary>
+    /// <see cref="FileItemViewModel.CancelPendingShellIconFetch"/> 가 요청 플래그를
+    /// 되돌리지 않으면, 화면 밖으로 스크롤되며 취소된 행이 다시 보여도 영원히 글리프로
+    /// 굳는다. 대기 중인 첫 요청을 취소한 뒤 다시 <see cref="FileItemViewModel.ShellIcon"/>
+    /// 을 읽으면(뷰가 재실현 때 다시 하는 일) 네이티브 fetch 가 다시 걸려야 한다.
+    /// </summary>
+    [Fact]
+    public async Task ACancelledFetchResetsTheRequestFlagSoALaterViewCanRetry()
+    {
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var releaseFirst = new ManualResetEventSlim();
+        var fetchCount = 0;
+
+        BitmapSource? ControlledFetch(string path, bool useFileAttributes, bool isDirectory)
+        {
+            if (Interlocked.Increment(ref fetchCount) == 1)
+            {
+                firstStarted.TrySetResult();
+                releaseFirst.Wait(TimeSpan.FromSeconds(10));
+            }
+            else
+            {
+                secondStarted.TrySetResult();
+            }
+
+            return null;
+        }
+
+        using var gate = new SemaphoreSlim(1, 1);
+        var service = new ShellIconService(gate, ControlledFetch);
+        var vm = new FileItemViewModel(MakeItem(MissingTxtPath(), isDirectory: false), shellIconService: service);
+
+        _ = vm.ShellIcon; // 첫 요청을 건다 — ControlledFetch 안에서 막힌다.
+        await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        vm.CancelPendingShellIconFetch();
+        releaseFirst.Set();
+
+        // 첫 fetch가 취소된 채로 끝나고 finally에서 요청 플래그를 되돌릴 때까지, getter를
+        // 계속 다시 불러 재요청을 시도한다(플래그가 아직 안 풀렸으면 조용히 아무 일도 안 한다).
+        // 되돌리는 로직이 깨지면(회귀) 영원히 안 풀리므로 — 무한 대기 대신 제한된 되풀이로
+        // 묶는다(D67 §2 관례).
+        for (var attempt = 0; attempt < 200 && !secondStarted.Task.IsCompleted; attempt++)
+        {
+            _ = vm.ShellIcon;
+            await Task.Delay(10);
+        }
+
+        Assert.True(secondStarted.Task.IsCompleted, "취소 뒤 재요청이 200회 시도 안에 새 fetch를 걸지 않았다");
+        Assert.Equal(2, Volatile.Read(ref fetchCount));
     }
 }

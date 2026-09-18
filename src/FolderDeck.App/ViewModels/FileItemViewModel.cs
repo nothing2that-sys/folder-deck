@@ -29,6 +29,8 @@ public sealed partial class FileItemViewModel(
 
     private bool _shellIconRequested;
 
+    private CancellationTokenSource? _shellIconCancellation;
+
     public FolderItem Item { get; } = item;
 
     /// <summary>
@@ -94,14 +96,48 @@ public sealed partial class FileItemViewModel(
 
     private async void FetchShellIconAsync(ShellIconService service)
     {
+        var cancellation = new CancellationTokenSource();
+        _shellIconCancellation = cancellation;
+
         try
         {
-            Icon = await service.GetIconAsync(FullPath, IsDirectory);
+            var icon = await service.GetIconAsync(FullPath, IsDirectory, cancellation.Token);
+            if (!cancellation.IsCancellationRequested)
+            {
+                Icon = icon;
+            }
         }
         catch
         {
-            // 예외를 밖으로 내보내지 않는다 — 실패하면 ③ 단(글리프)으로 남는다.
+            // 예외를 밖으로 내보내지 않는다 — 실패·취소하면 ③ 단(글리프)으로 남는다.
         }
+        finally
+        {
+            if (ReferenceEquals(_shellIconCancellation, cancellation))
+            {
+                _shellIconCancellation = null;
+            }
+
+            cancellation.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 화면 밖으로 스크롤돼 컨테이너가 재활용·폐기될 때 뷰가 부른다(2026-09-18 프로브 §1 —
+    /// head-of-line blocking). 대기 중인 취득을 <see cref="ShellIconService"/> 의 게이트
+    /// 대기열에서 빼고, 요청 플래그를 되돌려 나중에 다시 보이면 새로 걸 수 있게 한다 —
+    /// 그래서 취소된 항목이 영원히 글리프로 굳지 않는다. 이미 끝났거나(캐시 적중·완료)
+    /// 아직 한 번도 안 걸었으면 아무 일도 안 한다.
+    /// </summary>
+    internal void CancelPendingShellIconFetch()
+    {
+        if (_shellIconCancellation is null)
+        {
+            return;
+        }
+
+        _shellIconCancellation.Cancel();
+        _shellIconRequested = false;
     }
 
     /// <summary>

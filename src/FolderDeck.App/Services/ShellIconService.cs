@@ -29,9 +29,28 @@ public sealed class ShellIconService
     // SHGetFileInfo는 서비스 인스턴스가 달라도 같은 process-global Shell 경로를 탄다. 전체
     // 시험과 실제 목록에서 동시 호출 때 산발 null이 재현되므로 호출 자체를 한 번에 하나로
     // 제한한다. wait는 비동기이고 실제 native 호출만 worker thread에서 돌아 UI를 막지 않는다.
-    private static readonly SemaphoreSlim FetchGate = new(1, 1);
+    private static readonly SemaphoreSlim SharedFetchGate = new(1, 1);
 
     private readonly ConcurrentDictionary<string, BitmapSource?> _cache = new();
+    private readonly SemaphoreSlim _fetchGate;
+    private readonly Func<string, bool, bool, BitmapSource?> _fetch;
+
+    public ShellIconService() : this(SharedFetchGate, Fetch)
+    {
+    }
+
+    /// <summary>
+    /// 시험 전용 — <see cref="ShellThumbnailService"/>의 같은 자리(D126)와 같은 이유로
+    /// 게이트·네이티브 호출을 갈아 끼운다. head-of-line blocking 시험(2026-09-18 프로브 §1)이
+    /// 가짜 <paramref name="fetch"/>로 대기 중 취소를 재현하는 데 쓴다.
+    /// </summary>
+    internal ShellIconService(SemaphoreSlim fetchGate, Func<string, bool, bool, BitmapSource?> fetch)
+    {
+        ArgumentNullException.ThrowIfNull(fetchGate);
+        ArgumentNullException.ThrowIfNull(fetch);
+        _fetchGate = fetchGate;
+        _fetch = fetch;
+    }
 
     /// <summary>
     /// 캐시 키를 뽑는다 — 폴더 · <c>.exe</c> · <c>.lnk</c> · <c>.ico</c> 는 전체 경로,
@@ -69,7 +88,13 @@ public sealed class ShellIconService
     /// 셸 아이콘을 비동기로 얻는다. <b>캐시 적중이면 스레드를 갈아타지 않고</b> 완료된
     /// <see cref="Task"/> 를 돌려준다 — 보이는 줄마다 스레드를 한 번씩 태우면 안 된다.
     /// </summary>
-    public Task<BitmapSource?> GetIconAsync(string path, bool isDirectory)
+    /// <param name="cancellationToken">
+    /// 게이트 대기열에서 기다리는 동안만 듣는다(2026-09-18 프로브 §1 — head-of-line
+    /// blocking) — 이미 게이트를 잡고 도는 네이티브 <c>SHGetFileInfo</c> 호출 자체는
+    /// 취소하지 못한다.
+    /// </param>
+    public Task<BitmapSource?> GetIconAsync(
+        string path, bool isDirectory, CancellationToken cancellationToken = default)
     {
         var key = ComputeCacheKey(path, isDirectory);
         if (_cache.TryGetValue(key, out var cached))
@@ -78,13 +103,14 @@ public sealed class ShellIconService
         }
 
         var useFileAttributes = key.StartsWith(ExtensionKeyPrefix, StringComparison.Ordinal);
-        return FetchAndCacheAsync(path, isDirectory, key, useFileAttributes);
+        return FetchAndCacheAsync(path, isDirectory, key, useFileAttributes, cancellationToken);
     }
 
     private async Task<BitmapSource?> FetchAndCacheAsync(
-        string path, bool isDirectory, string key, bool useFileAttributes)
+        string path, bool isDirectory, string key, bool useFileAttributes,
+        CancellationToken cancellationToken)
     {
-        await FetchGate.WaitAsync().ConfigureAwait(false);
+        await _fetchGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             // 같은 key의 앞선 요청이 gate를 기다리는 동안 성공했으면 native 호출을 생략한다.
@@ -94,7 +120,7 @@ public sealed class ShellIconService
             }
 
             var icon = await Task.Run(
-                () => Fetch(path, useFileAttributes, isDirectory)).ConfigureAwait(false);
+                () => _fetch(path, useFileAttributes, isDirectory)).ConfigureAwait(false);
 
             // 실패(null)는 캐시하지 않는다(D74) — 넣으면 확장자 하나가 한 번 헛나갔을 때
             // 그 확장자가 세션 내내 📄 로 굳는다(D73 이 잰 산발 실패의 원인 하나).
@@ -107,7 +133,7 @@ public sealed class ShellIconService
         }
         finally
         {
-            FetchGate.Release();
+            _fetchGate.Release();
         }
     }
 

@@ -1,3 +1,4 @@
+using System.Windows.Media.Imaging;
 using FolderDeck.App.Services;
 
 namespace FolderDeck.App.Tests;
@@ -168,5 +169,52 @@ public sealed class ShellIconTests
 
         Assert.NotNull(icon);
         Assert.True(ShellIconService.ShouldCache(icon));
+    }
+
+    // ── head-of-line blocking 완화(2026-09-18 프로브 §1) — 대기 중 취소 ──
+
+    /// <summary>
+    /// <see cref="ShellThumbnailTests.AQueuedLargeIconRequestCanBeCancelledBeforeItCallsTheShell"/>
+    /// 와 같은 자리 — 게이트를 잡고 있는 첫 요청 뒤에 선 두 번째 요청을 대기 중에 취소하면,
+    /// 그 요청은 네이티브 호출까지 가지 않고 <see cref="OperationCanceledException"/> 으로
+    /// 끝나야 한다(스크롤로 지나간 행이 뒤를 막지 않게 하는 자리).
+    /// </summary>
+    [Fact]
+    public async Task AQueuedRequestCanBeCancelledBeforeItCallsTheShell()
+    {
+        using var releaseFirst = new ManualResetEventSlim();
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fetchCount = 0;
+        using var gate = new SemaphoreSlim(1, 1);
+
+        BitmapSource? BlockingFetch(string path, bool useFileAttributes, bool isDirectory)
+        {
+            Interlocked.Increment(ref fetchCount);
+            firstStarted.TrySetResult();
+            releaseFirst.Wait(TimeSpan.FromSeconds(10));
+            return null;
+        }
+
+        var service = new ShellIconService(gate, BlockingFetch);
+        var firstPath = Path.Combine(@"C:\folder-a", "first.aaa");
+        var secondPath = Path.Combine(@"C:\folder-b", "second.bbb");
+
+        var first = service.GetIconAsync(firstPath, isDirectory: false);
+        await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        using var cts = new CancellationTokenSource();
+        var queued = service.GetIconAsync(secondPath, isDirectory: false, cts.Token);
+        cts.Cancel();
+
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => queued);
+            Assert.Equal(1, Volatile.Read(ref fetchCount));
+        }
+        finally
+        {
+            releaseFirst.Set();
+            await first;
+        }
     }
 }
