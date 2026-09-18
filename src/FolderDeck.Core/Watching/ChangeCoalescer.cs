@@ -168,12 +168,22 @@ public sealed class ChangeCoalescer : IDisposable
     // 나중에 몰아 터뜨리는 통로가 없다.
     private void Fire()
     {
-        if (_suppressed?.Invoke() == true)
+        try
         {
-            return;
-        }
+            if (_suppressed?.Invoke() == true)
+            {
+                return;
+            }
 
-        Due?.Invoke(this, EventArgs.Empty);
+            Due?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception)
+        {
+            // 여기서 삼킨다. Fire() 는 트레일링 타이머(스레드풀) 콜백 안에서도 불리는데,
+            // 스레드풀 콜백의 미처리 예외는 .NET 기본 동작상 프로세스를 즉시 종료시킨다
+            // (검토 회차 발견). 받는 쪽 버그를 숨기는 대가보다 프로세스가 통째로 죽는 쪽이
+            // 훨씬 나쁘다 — 받는 쪽은 여전히 "마샬은 자기 몫"이라는 계약대로 짜여 있어야 한다.
+        }
     }
 }
 

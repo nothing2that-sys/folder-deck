@@ -511,13 +511,16 @@
                               Visibility="{Binding ShowLeftSplitter,
                                            Converter={StaticResource BoolToVisibility}}" />
 
-                <!-- 아래: 대상함 / 매크로 탭 — Phase 1 은 자리만, 동작 없음 (§10.3).
-                     접기 대상이 될 뿐 동작은 뒤 Phase 다. -->
+                <!-- 아래: 목적지 패널 — 대상함(폴더 체크리스트)과 매크로를 하나로 합쳤다
+                     (2026-09-18 대화로 결정, design.md §11). 대상함의 복사/이동 버튼은 사실
+                     매크로 엔진의 특수 케이스(이름 없이, 저장하지 않고 그 자리에서 한 번
+                     실행하는 것)라 탭 둘로 나눌 이유가 없었다 — "저장…" 버튼이 같은 설정에
+                     이름을 붙여 아래 목록에 남긴다. -->
                 <DockPanel Grid.Row="2">
                     <Button DockPanel.Dock="Top" Style="{StaticResource FolderRowButton}"
                             Command="{Binding ToggleLowerCommand}"
-                            ToolTip="대상함/매크로 영역 접기/펴기"
-                            AutomationProperties.Name="대상함 매크로 접기/펴기"
+                            ToolTip="목적지 영역 접기/펴기"
+                            AutomationProperties.Name="목적지 접기/펴기"
                             Margin="6,2,6,2">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock FontSize="10" VerticalAlignment="Center" Margin="0,0,5,0"
@@ -533,146 +536,27 @@
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
-                            <TextBlock Text="대상함 · 매크로" FontWeight="SemiBold" />
+                            <TextBlock Text="목적지" FontWeight="SemiBold" />
                         </StackPanel>
                     </Button>
 
-                    <TabControl Margin="6,0,6,6" BorderThickness="1" BorderBrush="{StaticResource Brush.Border}"
-                                Visibility="{Binding LowerCollapsed,
-                                             Converter={StaticResource InverseBoolToVisibility}}">
-                        <TabItem Header="복사 대상함">
-                            <!-- 체크된 폴더가 목적지다. 다중 체크 = 동시 복사 (§4.2-1). -->
-                            <DockPanel Margin="6">
-                                <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
-                                    <TextBlock Text="{Binding OperationSummary}" FontSize="11"
-                                               TextWrapping="Wrap" Margin="2,0,2,4"
-                                               Foreground="{StaticResource Brush.TextSecondary}" />
+                    <Border Margin="6,0,6,6" BorderThickness="1" BorderBrush="{StaticResource Brush.Border}"
+                            Visibility="{Binding LowerCollapsed,
+                                         Converter={StaticResource InverseBoolToVisibility}}">
+                        <DockPanel Margin="6">
+                            <!-- 저장된 규칙 (§4.7). 대상함·드래그와 같은 엔진에 얹힌다. -->
+                            <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                                <TextBlock Text="저장된 규칙" FontWeight="SemiBold" FontSize="11"
+                                           Margin="2,0,2,4"
+                                           Foreground="{StaticResource Brush.TextSecondary}" />
 
-                                    <!-- 동일 이름 충돌 (§4.3). 평소엔 "물어본다"고만 적혀 있고,
-                                         "다음부터 묻지 않기"를 켠 뒤에는 무엇을 하는지와
-                                         되돌릴 자리가 같이 보인다 — 잊고 조용히 덮어쓰지 않게. -->
-                                    <StackPanel Orientation="Horizontal" Margin="2,0,2,6">
-                                        <TextBlock Text="{Binding ConflictPolicyText}" FontSize="11"
-                                                   VerticalAlignment="Center"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   Foreground="{StaticResource Brush.TextSecondary}" />
-                                        <Button Style="{StaticResource LinkButton}"
-                                                Content="다시 묻기" FontSize="11" Margin="4,0,0,0"
-                                                Command="{Binding RestoreConflictPromptCommand}"
-                                                ToolTip="같은 이름이 있을 때 다시 물어보게 되돌린다"
-                                                Visibility="{Binding CanRestoreConflictPrompt,
-                                                             Converter={StaticResource BoolToVisibility}}">
-                                            <Button.Resources>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Foreground"
-                                                            Value="{StaticResource Brush.Accent}" />
-                                                </Style>
-                                            </Button.Resources>
-                                        </Button>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal">
-                                        <Button Content="복사" Padding="14,4" Margin="0,0,6,0"
-                                                Command="{Binding CopySelectionCommand}"
-                                                ToolTip="고른 파일을 체크된 폴더 전부에 복사한다" />
-                                        <Button Content="이동" Padding="14,4"
-                                                Command="{Binding MoveSelectionCommand}"
-                                                ToolTip="고른 파일을 체크된 폴더로 옮긴다 — 원본이 사라지므로 확인을 받는다" />
-                                    </StackPanel>
-                                </StackPanel>
-
-                                <TextBlock Text="왼쪽 폴더를 우클릭해 &#x27;대상함에 추가&#x27;.&#x0a;여기에 항목을 끌어다 놓으면 그 폴더 하나로만 간다."
-                                           FontSize="11" TextWrapping="Wrap" Margin="2,4"
+                                <TextBlock FontSize="11" TextWrapping="Wrap" Margin="2,0,2,6"
                                            Foreground="{StaticResource Brush.TextSecondary}"
-                                           Visibility="{Binding TrayIsEmpty,
-                                                        Converter={StaticResource BoolToVisibility}}" />
-
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                    <ItemsControl ItemsSource="{Binding Tray}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate DataType="{x:Type vm:TrayEntryViewModel}">
-                                                <!-- 체크(=버튼 실행의 목적지)와 별개로, 여기로 직접
-                                                     끌어다 놓을 수도 있다 (§4.2-2). -->
-                                                <Border Margin="0,1" CornerRadius="3" Padding="2,1"
-                                                        BorderThickness="1"
-                                                        ToolTip="{Binding PathText}"
-                                                        AllowDrop="True"
-                                                        DragEnter="OnFileDropOver"
-                                                        DragOver="OnFileDropOver"
-                                                        DragLeave="OnFileDropLeave"
-                                                        Drop="OnFileDrop">
-                                                    <!-- 색은 스타일에서만 준다. 로컬 값을 주면
-                                                         스타일 트리거를 영구히 이겨 과녁이 켜지지 않는다
-                                                         (실제로 그랬다 — WPF 값 우선순위). -->
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="Transparent" />
-                                                            <Setter Property="BorderBrush" Value="Transparent" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsDropTarget}"
-                                                                             Value="True">
-                                                                    <Setter Property="Background"
-                                                                        Value="{StaticResource Brush.AccentSurface}" />
-                                                                    <Setter Property="BorderBrush"
-                                                                        Value="{StaticResource Brush.Accent}" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <DockPanel>
-                                                        <Button DockPanel.Dock="Right" Content="✕"
-                                                                Style="{StaticResource NavButton}"
-                                                                Command="{Binding RemoveCommand}"
-                                                                AutomationProperties.Name="대상함에서 빼기"
-                                                                ToolTip="대상함에서 뺀다 (폴더는 그대로)" />
-
-                                                        <!-- 드롭 과녁 글귀 (§4.2-2 259행). 색만 바뀌면
-                                                             놓기 전에 이동인지 복사인지 알 수 없다 —
-                                                             폴더 행과 같은 배지를 쓴다.
-                                                             IsHitTestVisible="False" 인 이유는 폴더 행의
-                                                             같은 자리 주석에 있다. -->
-                                                        <Border DockPanel.Dock="Right"
-                                                                Background="{StaticResource Brush.AccentSurface}"
-                                                                CornerRadius="2" Padding="4,0" Margin="4,0,0,0"
-                                                                VerticalAlignment="Center"
-                                                                IsHitTestVisible="False"
-                                                                Visibility="{Binding IsDropTarget,
-                                                                    Converter={StaticResource BoolToVisibility}}">
-                                                            <TextBlock Text="{Binding DropTargetText}"
-                                                                       FontSize="10"
-                                                                       FontWeight="SemiBold"
-                                                                       Foreground="{StaticResource Brush.Accent}" />
-                                                        </Border>
-                                                        <CheckBox IsChecked="{Binding IsChecked}"
-                                                                  VerticalContentAlignment="Center"
-                                                                  Checked="OnTrayCheckChanged"
-                                                                  Unchecked="OnTrayCheckChanged">
-                                                            <TextBlock Text="{Binding DisplayName}"
-                                                                       TextTrimming="CharacterEllipsis" />
-                                                        </CheckBox>
-                                                    </DockPanel>
-                                                </Border>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </ScrollViewer>
-                            </DockPanel>
-                        </TabItem>
-                        <!-- 저장된 규칙 카드 (§4.7). 대상함·드래그와 같은 엔진에 얹힌다. -->
-                        <TabItem Header="매크로">
-                            <DockPanel Margin="6">
-                                <Button DockPanel.Dock="Bottom" Content="지금 설정으로 매크로 만들기"
-                                        Padding="10,5" Margin="0,6,0,0"
-                                        Command="{Binding CreateMacroCommand}"
-                                        ToolTip="지금 고른 것과 대상함 체크 상태를 규칙으로 굳힌다" />
-
-                                <TextBlock DockPanel.Dock="Bottom" FontSize="11" TextWrapping="Wrap"
-                                           Margin="2,6,2,0"
-                                           Foreground="{StaticResource Brush.TextSecondary}"
-                                           Text="그리드에서 파일을 고른 뒤 만들면 지금 상태가 그대로 채워진다."
+                                           Text="그리드에서 파일을 고른 뒤 저장하면 지금 상태가 그대로 채워진다."
                                            Visibility="{Binding MacrosAreEmpty,
                                                         Converter={StaticResource BoolToVisibility}}" />
 
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="180">
                                     <ItemsControl ItemsSource="{Binding Macros}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="{x:Type vm:MacroCardViewModel}">
@@ -688,8 +572,17 @@
                                                                           RelativeSource={RelativeSource
                                                                               AncestorType=Window}}"
                                                                 CommandParameter="{Binding}"
-                                                                AutomationProperties.Name="매크로 지우기"
+                                                                AutomationProperties.Name="규칙 지우기"
                                                                 ToolTip="이 규칙을 지운다 (파일은 그대로)" />
+                                                        <Button DockPanel.Dock="Right" Content="✎"
+                                                                Style="{StaticResource NavButton}"
+                                                                VerticalAlignment="Top"
+                                                                Command="{Binding DataContext.EditMacroCommand,
+                                                                          RelativeSource={RelativeSource
+                                                                              AncestorType=Window}}"
+                                                                CommandParameter="{Binding}"
+                                                                AutomationProperties.Name="규칙 고치기"
+                                                                ToolTip="이 규칙의 값을 고친다" />
                                                         <Button DockPanel.Dock="Right" Content="실행"
                                                                 Padding="10,2" Margin="0,0,4,0"
                                                                 VerticalAlignment="Top"
@@ -718,9 +611,128 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
                                 </ScrollViewer>
-                            </DockPanel>
-                        </TabItem>
-                    </TabControl>
+                            </StackPanel>
+
+                            <!-- 체크된 폴더가 목적지다. 다중 체크 = 동시 복사 (§4.2-1). "저장…"은
+                                 지금 이 설정(고른 파일·체크된 폴더)에 이름을 붙여 위 목록에
+                                 남긴다 — 복사·이동은 하지 않는다. -->
+                            <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                                <TextBlock Text="{Binding OperationSummary}" FontSize="11"
+                                           TextWrapping="Wrap" Margin="2,0,2,4"
+                                           Foreground="{StaticResource Brush.TextSecondary}" />
+
+                                <!-- 동일 이름 충돌 (§4.3). 평소엔 "물어본다"고만 적혀 있고,
+                                     "다음부터 묻지 않기"를 켠 뒤에는 무엇을 하는지와
+                                     되돌릴 자리가 같이 보인다 — 잊고 조용히 덮어쓰지 않게. -->
+                                <StackPanel Orientation="Horizontal" Margin="2,0,2,6">
+                                    <TextBlock Text="{Binding ConflictPolicyText}" FontSize="11"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{StaticResource Brush.TextSecondary}" />
+                                    <Button Style="{StaticResource LinkButton}"
+                                            Content="다시 묻기" FontSize="11" Margin="4,0,0,0"
+                                            Command="{Binding RestoreConflictPromptCommand}"
+                                            ToolTip="같은 이름이 있을 때 다시 물어보게 되돌린다"
+                                            Visibility="{Binding CanRestoreConflictPrompt,
+                                                         Converter={StaticResource BoolToVisibility}}">
+                                        <Button.Resources>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground"
+                                                        Value="{StaticResource Brush.Accent}" />
+                                            </Style>
+                                        </Button.Resources>
+                                    </Button>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="복사" Padding="14,4" Margin="0,0,6,0"
+                                            Command="{Binding CopySelectionCommand}"
+                                            ToolTip="고른 파일을 체크된 폴더 전부에 복사한다" />
+                                    <Button Content="이동" Padding="14,4" Margin="0,0,6,0"
+                                            Command="{Binding MoveSelectionCommand}"
+                                            ToolTip="고른 파일을 체크된 폴더로 옮긴다 — 원본이 사라지므로 확인을 받는다" />
+                                    <Button Content="저장…" Padding="14,4"
+                                            Command="{Binding CreateMacroCommand}"
+                                            ToolTip="지금 고른 파일을 이름 붙여 저장한다(복사·이동은 하지 않는다) — 목적지는 기본적으로 실행할 때의 대상함 체크를 따라간다. 지금 체크를 그대로 고정하려면 저장 창의 고급 옵션에서 고른다" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <TextBlock Text="왼쪽 폴더를 우클릭해 &#x27;대상함에 추가&#x27;.&#x0a;여기에 항목을 끌어다 놓으면 그 폴더 하나로만 간다."
+                                       FontSize="11" TextWrapping="Wrap" Margin="2,4"
+                                       Foreground="{StaticResource Brush.TextSecondary}"
+                                       Visibility="{Binding TrayIsEmpty,
+                                                    Converter={StaticResource BoolToVisibility}}" />
+
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding Tray}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:TrayEntryViewModel}">
+                                            <!-- 체크(=버튼 실행의 목적지)와 별개로, 여기로 직접
+                                                 끌어다 놓을 수도 있다 (§4.2-2). -->
+                                            <Border Margin="0,1" CornerRadius="3" Padding="2,1"
+                                                    BorderThickness="1"
+                                                    ToolTip="{Binding PathText}"
+                                                    AllowDrop="True"
+                                                    DragEnter="OnFileDropOver"
+                                                    DragOver="OnFileDropOver"
+                                                    DragLeave="OnFileDropLeave"
+                                                    Drop="OnFileDrop">
+                                                <!-- 색은 스타일에서만 준다. 로컬 값을 주면
+                                                     스타일 트리거를 영구히 이겨 과녁이 켜지지 않는다
+                                                     (실제로 그랬다 — WPF 값 우선순위). -->
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="Transparent" />
+                                                        <Setter Property="BorderBrush" Value="Transparent" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsDropTarget}"
+                                                                         Value="True">
+                                                                <Setter Property="Background"
+                                                                    Value="{StaticResource Brush.AccentSurface}" />
+                                                                <Setter Property="BorderBrush"
+                                                                    Value="{StaticResource Brush.Accent}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <DockPanel>
+                                                    <Button DockPanel.Dock="Right" Content="✕"
+                                                            Style="{StaticResource NavButton}"
+                                                            Command="{Binding RemoveCommand}"
+                                                            AutomationProperties.Name="대상함에서 빼기"
+                                                            ToolTip="대상함에서 뺀다 (폴더는 그대로)" />
+
+                                                    <!-- 드롭 과녁 글귀 (§4.2-2 259행). 색만 바뀌면
+                                                         놓기 전에 이동인지 복사인지 알 수 없다 —
+                                                         폴더 행과 같은 배지를 쓴다.
+                                                         IsHitTestVisible="False" 인 이유는 폴더 행의
+                                                         같은 자리 주석에 있다. -->
+                                                    <Border DockPanel.Dock="Right"
+                                                            Background="{StaticResource Brush.AccentSurface}"
+                                                            CornerRadius="2" Padding="4,0" Margin="4,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            IsHitTestVisible="False"
+                                                            Visibility="{Binding IsDropTarget,
+                                                                Converter={StaticResource BoolToVisibility}}">
+                                                        <TextBlock Text="{Binding DropTargetText}"
+                                                                   FontSize="10"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource Brush.Accent}" />
+                                                    </Border>
+                                                    <CheckBox IsChecked="{Binding IsChecked}"
+                                                              VerticalContentAlignment="Center"
+                                                              Checked="OnTrayCheckChanged"
+                                                              Unchecked="OnTrayCheckChanged">
+                                                        <TextBlock Text="{Binding DisplayName}"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                    </CheckBox>
+                                                </DockPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
                 </DockPanel>
             </Grid>
 

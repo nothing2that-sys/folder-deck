@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using FolderDeck.Core.Enumeration;
 
 namespace FolderDeck.Core.Tests;
@@ -114,6 +115,68 @@ public sealed class FolderSearchTests : IDisposable
 
         Assert.True(hit.Item.IsDirectory);
         Assert.Null(hit.Item.Size);
+    }
+
+    /// <summary>
+    /// 정션/디렉터리 심볼릭 링크가 자기 조상을 가리키면, 안으로 재귀할 때 취소할 때까지
+    /// 검색이 끝나지 않았다(검토 회차 발견). 링크 자체는 여전히 결과 후보이되 안으로는
+    /// 들어가지 않아야 한다.
+    /// </summary>
+    [Fact]
+    public async Task ASelfReferencingLinkDoesNotMakeTheSearchRunForever()
+    {
+        Write("tree", "loop-marker.txt");
+        var tree = Path.Combine(_root, "tree");
+        var link = Path.Combine(tree, "loop");
+
+        if (!TryCreateJunction(link, tree))
+        {
+            // 이 환경에서 정션을 못 만든다 — 시험할 대상 자체가 없다. 다른 볼륨 시험
+            // (OtherVolumeDir, FileOperationEngineTests)과 같은 결의 환경 의존이다.
+            return;
+        }
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var hits = new List<FolderSearchHit>();
+
+            await foreach (var hit in _enumerator.SearchAsync(_root, "loop", new FolderSearchStats(), cts.Token))
+            {
+                hits.Add(hit);
+            }
+
+            // 안으로 재귀했다면 tree\loop\loop\... 처럼 갈수록 깊어지는 자리에서 같은 이름이
+            // 계속 다시 걸린다(경로 길이 한도에 부딪힐 때까지). 안 들어갔다면 "loop"·
+            // "loop-marker.txt" 는 각각 정확히 한 번씩만 나온다.
+            Assert.Equal(1, hits.Count(h => h.Item.Name == "loop-marker.txt"));
+            Assert.Equal(1, hits.Count(h => h.Item.Name == "loop"));
+        }
+        finally
+        {
+            Directory.Delete(link, recursive: false);
+        }
+    }
+
+    /// <summary>
+    /// Windows 정션을 만든다. <c>Directory.CreateSymbolicLink</c> 와 달리 특별한 권한이나
+    /// 개발자 모드가 필요 없다(이 환경에서 <c>mklink /J</c> 로 실측 확인) — 그래서 검토
+    /// 회차의 순환 방어 시험은 정션으로 짠다.
+    /// </summary>
+    private static bool TryCreateJunction(string linkPath, string targetPath)
+    {
+        var info = new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{linkPath}\" \"{targetPath}\"")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        using var process = Process.Start(info);
+        process?.WaitForExit();
+
+        return process?.ExitCode == 0 && Directory.Exists(linkPath);
     }
 
     [Fact]

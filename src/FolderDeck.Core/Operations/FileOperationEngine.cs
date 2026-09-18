@@ -289,10 +289,68 @@ public sealed class FileOperationEngine(IRecycleBin recycleBin) : IFileOperation
         if (request.Op == FileOperationKind.Move)
         {
             // 다 옮겨 담은 뒤에만 원본을 지운다. 중간에 실패했으면 원본은 남는다.
-            Directory.Delete(source.Path, recursive: true);
+            if (!TryDeleteSourceTree(source.Path, out var deleteError))
+            {
+                // 복사는 이미 끝났다 — 여기서 그냥 던지면 RunUnit 의 바깥 catch 가 "권한이
+                // 없다"로만 접어 사용자가 목적지에 이미 다 들어갔다는 걸 모르게 된다(검토 회차
+                // 발견 — ReadOnly 파일이 섞인 폴더 이동. 이 환경의 .NET 런타임에서는 재현되지
+                // 않았지만 — 손 확인, 아래 참고 — 문서화된 .NET/Win32 동작이라 방어는 남긴다).
+                return fail(
+                    $"복사는 끝났지만 원본을 지우지 못했다 — {deleteError} " +
+                    "(목적지에 이미 있다, 원본도 그대로 남아 있다)",
+                    stats.Overwritten > 0);
+            }
         }
 
         return ok(stats.Overwritten > 0);
+    }
+
+    /// <summary>
+    /// 복사가 끝난 뒤 원본 트리를 지운다. <c>Directory.Delete(recursive:true)</c> 는 내부에
+    /// ReadOnly 속성 파일이 하나라도 있으면 속성을 안 풀고 <see cref="UnauthorizedAccessException"/>
+    /// 을 던지는 것이 .NET/Win32 의 알려진 동작이라(검토 회차 발견), 그 경우만 속성을 지우고
+    /// 한 번 더 시도한다.
+    /// </summary>
+    private static bool TryDeleteSourceTree(string path, out string? error)
+    {
+        try
+        {
+            Directory.Delete(path, recursive: true);
+            error = null;
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            try
+            {
+                ClearReadOnlyRecursive(path);
+                Directory.Delete(path, recursive: true);
+                error = null;
+                return true;
+            }
+            catch (Exception retryEx)
+            {
+                error = Describe(retryEx);
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            error = Describe(ex);
+            return false;
+        }
+    }
+
+    private static void ClearReadOnlyRecursive(string path)
+    {
+        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+        {
+            var attributes = File.GetAttributes(file);
+            if ((attributes & FileAttributes.ReadOnly) != 0)
+            {
+                File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
+            }
+        }
     }
 
     /// <summary>재귀 복사. 개별 파일 충돌은 §4.3 규칙 그대로.</summary>
@@ -306,56 +364,83 @@ public sealed class FileOperationEngine(IRecycleBin recycleBin) : IFileOperation
         var stats = new TreeStats();
         Directory.CreateDirectory(targetDir);
 
-        foreach (var file in Directory.EnumerateFiles(sourceDir))
+        try
         {
-            if (token.IsCancellationRequested)
+            foreach (var file in Directory.EnumerateFiles(sourceDir))
             {
-                return stats;
-            }
-
-            var target = Path.Combine(targetDir, Path.GetFileName(file));
-            var overwriting = File.Exists(target);
-
-            if (overwriting && onConflict == ConflictPolicy.Skip)
-            {
-                continue;
-            }
-
-            if (overwriting && onConflict == ConflictPolicy.Rename)
-            {
-                target = UniqueName(target);
-                overwriting = false;
-            }
-
-            try
-            {
-                walk.Touch(file);
-                File.Copy(file, target, overwrite: true);
-                stats.Copied++;
-                if (overwriting)
+                if (token.IsCancellationRequested)
                 {
-                    stats.Overwritten++;
+                    return stats;
+                }
+
+                var target = Path.Combine(targetDir, Path.GetFileName(file));
+                var overwriting = File.Exists(target);
+
+                if (overwriting && onConflict == ConflictPolicy.Skip)
+                {
+                    continue;
+                }
+
+                if (overwriting && onConflict == ConflictPolicy.Rename)
+                {
+                    target = UniqueName(target);
+                    overwriting = false;
+                }
+
+                try
+                {
+                    walk.Touch(file);
+                    File.Copy(file, target, overwrite: true);
+                    stats.Copied++;
+                    if (overwriting)
+                    {
+                        stats.Overwritten++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    stats.Failures.Add($"{Path.GetFileName(file)}: {Describe(ex)}");
                 }
             }
-            catch (Exception ex)
-            {
-                stats.Failures.Add($"{Path.GetFileName(file)}: {Describe(ex)}");
-            }
+        }
+        catch (Exception ex)
+        {
+            // 열거 자체(권한 변경·네트워크 순단 등)가 중간에 끊기면 이미 옮긴 것은 그대로 살리고
+            // 어디서 멈췄는지만 사유로 남긴다 — 통째로 던지면 §5 "부분 실패가 기본"이 깨진다
+            // (검토 회차 발견).
+            stats.Failures.Add($"(파일 목록을 끝까지 읽지 못했다: {Describe(ex)})");
         }
 
-        foreach (var child in Directory.EnumerateDirectories(sourceDir))
+        try
         {
-            if (token.IsCancellationRequested)
+            foreach (var child in Directory.EnumerateDirectories(sourceDir))
             {
-                return stats;
+                if (token.IsCancellationRequested)
+                {
+                    return stats;
+                }
+
+                if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0)
+                {
+                    // 정션/디렉터리 심볼릭 링크 — 안으로 재귀하면 자기 조상을 가리킬 때 무한
+                    // 재귀(StackOverflowException, catch 로 못 잡고 프로세스가 즉시 종료된다)로
+                    // 이어질 수 있다(검토 회차 발견). 링크를 다시 만들지는 않고 건너뛴 사실만
+                    // 남긴다.
+                    stats.Failures.Add($"{Path.GetFileName(child)}: 정션/링크라 건너뛰었다");
+                    continue;
+                }
+
+                var nested = CopyTree(
+                    child, Path.Combine(targetDir, Path.GetFileName(child)), onConflict, walk, token);
+
+                stats.Copied += nested.Copied;
+                stats.Overwritten += nested.Overwritten;
+                stats.Failures.AddRange(nested.Failures);
             }
-
-            var nested = CopyTree(
-                child, Path.Combine(targetDir, Path.GetFileName(child)), onConflict, walk, token);
-
-            stats.Copied += nested.Copied;
-            stats.Overwritten += nested.Overwritten;
-            stats.Failures.AddRange(nested.Failures);
+        }
+        catch (Exception ex)
+        {
+            stats.Failures.Add($"(하위 폴더 목록을 끝까지 읽지 못했다: {Describe(ex)})");
         }
 
         return stats;

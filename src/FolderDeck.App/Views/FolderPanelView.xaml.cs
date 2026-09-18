@@ -508,6 +508,12 @@ public partial class FolderPanelView : UserControl
             return;
         }
 
+        // 이 시점부터는 "새 요청"이다 — 앞서 도는 ② 단 취득이 있었다면 이 값을 올려 그
+        // 결과가 늦게 도착해도 버리게 한다. 맨 위에서 한 번만 올린다 — 아래 두 조기 반환도
+        // 세대를 안 올리면, 이미 취소된 요청의 ② 단 결과가 나중에 도착해 그대로 그려질 수
+        // 있었다(검토 회차 발견 — 선택을 막 지웠는데 직전 파일의 미리보기가 뒤늦게 뜨는 경로).
+        var generation = ++_previewGeneration;
+
         if (panel.PreviewTarget is not { } target)
         {
             PreviewHost.UnloadPreview();
@@ -526,8 +532,6 @@ public partial class FolderPanelView : UserControl
         PreviewHost.UnloadPreview();
         PreviewHost.Visibility = Visibility.Collapsed;
 
-        var generation = ++_previewGeneration;
-
         var motwBlocked = MotwGuard.ShouldSkipPreviewHandler(target.FullPath);
         PreviewHandlerOutcome? handlerOutcome = null;
 
@@ -541,8 +545,19 @@ public partial class FolderPanelView : UserControl
             }
         }
 
-        var image = await _previewThumbnailService.GetThumbnailAsync(
-            target.FullPath, (int)width, (int)height).ConfigureAwait(true);
+        BitmapSource? image;
+        try
+        {
+            image = await _previewThumbnailService.GetThumbnailAsync(
+                target.FullPath, (int)width, (int)height).ConfigureAwait(true);
+        }
+        catch (Exception)
+        {
+            // 셸 썸네일 취득 실패는 ③ 단 글귀로 떨어뜨린다 — 같은 클래스의 다른 취득 경로
+            // (LoadLargeIconAsync·FileItemViewModel.FetchShellIconAsync)와 같은 관례다
+            // (검토 회차 발견 — 여기만 비어 있었다). async void 라 여기서 던지면 앱이 죽는다.
+            image = null;
+        }
 
         if (generation != _previewGeneration)
         {

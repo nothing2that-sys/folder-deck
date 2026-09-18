@@ -146,6 +146,201 @@ public sealed class MacroTests
         Assert.Null(f.Store.LoadWorkspace(f.Workspace.Id).ValueOrThrow().Macros);
     }
 
+    // ── 고치기 ───────────────────────────────────────────────────────────────
+
+    /// <summary>고치기는 만들기와 달리 지금 고른 것이 없어도 된다.</summary>
+    [Fact]
+    public async Task EditDoesNotRequireASelection()
+    {
+        using var f = await WithMacroAsync(d => d, "Main.cs");
+        f.ViewModel.Panels[0].ClearSelection();
+
+        Assert.True(f.ViewModel.CanEditMacro);
+
+        Accept(f, d => d with { Name = "새 이름" });
+        f.ViewModel.EditMacro(f.ViewModel.Macros[0]);
+
+        Assert.Equal("새 이름", f.ViewModel.Macros[0].Name);
+    }
+
+    /// <summary>지우고 다시 만드는 게 아니라 같은 규칙을 갱신한다.</summary>
+    [Fact]
+    public async Task EditingUpdatesTheExistingRuleInPlace()
+    {
+        using var f = await WithMacroAsync(d => d, "Main.cs");
+        var original = f.ViewModel.Macros[0];
+
+        Accept(f, d => d with { Name = "고친 이름", OnConflict = ConflictPolicy.Skip });
+        f.ViewModel.EditMacro(original);
+
+        var card = Assert.Single(f.ViewModel.Macros);
+        Assert.Same(original, card);
+        Assert.Equal("고친 이름", card.Name);
+        Assert.Equal(ConflictPolicy.Skip, card.Definition.OnConflict);
+    }
+
+    [Fact]
+    public async Task CancelingAnEditLeavesTheRuleUnchanged()
+    {
+        using var f = await WithMacroAsync(d => d with { Name = "원래 이름" }, "Main.cs");
+        f.MacroEditor.Answer = null;
+
+        f.ViewModel.EditMacro(f.ViewModel.Macros[0]);
+
+        Assert.Equal("원래 이름", f.ViewModel.Macros[0].Name);
+    }
+
+    /// <summary>창은 지우고 다시 만드는 게 아니라 있는 규칙의 값 그대로 채워져 뜬다.</summary>
+    [Fact]
+    public async Task EditingPassesTheExistingValuesAsTheSuggestedDraft()
+    {
+        using var f = await WithMacroAsync(
+            d => d with { Name = "문서로 복사", OnConflict = ConflictPolicy.Skip }, "Main.cs");
+        Accept(f);
+
+        f.ViewModel.EditMacro(f.ViewModel.Macros[0]);
+
+        var suggested = f.MacroEditor.Suggested!;
+        Assert.Equal("문서로 복사", suggested.Name);
+        Assert.Equal(ConflictPolicy.Skip, suggested.OnConflict);
+        Assert.True(f.MacroEditor.WasEdit);
+    }
+
+    /// <summary>
+    /// dest 축을 안 건드린 수정(예: 이름만)이 "지금 체크된 폴더로 고정"을 조용히 다시
+    /// 굳히면 안 된다 — 편집 시점의 대상함 체크가 만들 때와 달라도 원래 굳힌 폴더 그대로다.
+    /// </summary>
+    [Fact]
+    public async Task EditingWithoutTouchingDestKeepsThePinnedFolders()
+    {
+        var f = await ReadyAsync();
+        using var _ = f;
+
+        f.ViewModel.AddToTray(f.Row("문서"));
+        Select(f.ViewModel.Panels[0], "Main.cs");
+        f.MacroEditor.Transform = d => d with { DestKind = MacroDestKind.FolderIds };
+        f.ViewModel.CreateMacro();
+        f.MacroEditor.Transform = null;
+
+        // 체크를 바꿔 지금 체크된 것과 굳혀 둔 것이 달라지게 한다.
+        f.ViewModel.Tray[0].IsChecked = false;
+        f.ViewModel.AddToTray(f.Row("산출물"));
+
+        // dest 축은 안 건드리고 이름만 고친다.
+        Accept(f, d => d with { Name = "이름만 고침" });
+        f.ViewModel.EditMacro(f.ViewModel.Macros[0]);
+
+        Select(f.ViewModel.Panels[0], "Main.cs");
+        await f.ViewModel.RunMacroAsync(f.ViewModel.Macros[0]);
+
+        // 원래 굳힌 "문서"로 가야 한다 — 지금 체크된 "산출물"로 새면 안 된다.
+        Assert.True(File.Exists(Path.Combine(f.DocsPath, "Main.cs")));
+        Assert.False(File.Exists(Path.Combine(f.OutputPath, "Main.cs")));
+    }
+
+    /// <summary>고치는 도중 새로 "지금 체크된 폴더로 고정"을 고르면 그 순간 체크를 굳힌다.</summary>
+    [Fact]
+    public async Task SwitchingToPinnedFoldersDuringEditFreezesWhatIsCheckedNow()
+    {
+        using var f = await WithMacroAsync(d => d, "Main.cs");
+        f.ViewModel.AddToTray(f.Row("문서"));
+
+        Accept(f, d => d with { DestKind = MacroDestKind.FolderIds });
+        f.ViewModel.EditMacro(f.ViewModel.Macros[0]);
+
+        // 이후 체크를 바꿔도 고칠 때 굳힌 "문서"를 그대로 써야 한다.
+        f.ViewModel.Tray[0].IsChecked = false;
+        f.ViewModel.AddToTray(f.Row("산출물"));
+        Select(f.ViewModel.Panels[0], "Main.cs");
+
+        await f.ViewModel.RunMacroAsync(f.ViewModel.Macros[0]);
+
+        Assert.True(File.Exists(Path.Combine(f.DocsPath, "Main.cs")));
+        Assert.False(File.Exists(Path.Combine(f.OutputPath, "Main.cs")));
+    }
+
+    /// <summary>이미 고정 경로였던 규칙은 지금 선택이 없어도 그 값 그대로 고칠 수 있다.</summary>
+    [Fact]
+    public async Task EditingAFixedPathRuleWorksWithNothingCurrentlySelected()
+    {
+        using var f = await WithMacroAsync(
+            d => d with { SourceKind = MacroSourceKind.FixedPath }, "Main.cs");
+        f.ViewModel.Panels[0].ClearSelection();
+
+        Accept(f, d => d with { Name = "고정 규칙 고침" });
+        f.ViewModel.EditMacro(f.ViewModel.Macros[0]);
+
+        Assert.True(f.MacroEditor.CanFixPath);
+        Assert.Equal(Path.Combine(f.CodePath, "Main.cs"), f.MacroEditor.Suggested!.FixedPath);
+        Assert.Equal("고정 규칙 고침", f.ViewModel.Macros[0].Name);
+    }
+
+    /// <summary>
+    /// "지금 고른 파일로 다시 고정"을 켜면 실제로 고정 경로가 바뀐다(코덱스 적대적 검증
+    /// 발견 — 예전에는 이 체크박스 자체가 없어서 재지정할 방법이 아예 없었다).
+    /// </summary>
+    [Fact]
+    public async Task RetargetingAFixedPathRuleDuringEditPointsItAtTheNewSelection()
+    {
+        using var f = await WithMacroAsync(
+            d => d with { SourceKind = MacroSourceKind.FixedPath }, "Main.cs");
+
+        // 만들 때와 다른 것을 하나 고르고, 다시 고정을 명시적으로 켠다.
+        Select(f.ViewModel.Panels[0], "Recipe");
+        Accept(f, d => d with { RetargetFixedPath = true });
+        f.ViewModel.EditMacro(f.ViewModel.Macros[0]);
+
+        Assert.Equal(
+            Path.Combine(f.CodePath, "Recipe"),
+            f.ViewModel.Macros[0].Definition.Source!.Path);
+    }
+
+    /// <summary>체크박스를 안 켜면 다른 걸 고르고 있어도 예전 고정 경로를 그대로 지킨다.</summary>
+    [Fact]
+    public async Task NotRetargetingAFixedPathRuleKeepsTheOldPathEvenWithADifferentSelection()
+    {
+        using var f = await WithMacroAsync(
+            d => d with { SourceKind = MacroSourceKind.FixedPath }, "Main.cs");
+        var originalPath = f.ViewModel.Macros[0].Definition.Source!.Path;
+
+        Select(f.ViewModel.Panels[0], "Recipe");
+        Accept(f); // RetargetFixedPath 는 기본값 false
+
+        f.ViewModel.EditMacro(f.ViewModel.Macros[0]);
+
+        Assert.Equal(originalPath, f.ViewModel.Macros[0].Definition.Source!.Path);
+    }
+
+    /// <summary>
+    /// "지금 체크된 폴더로 다시 고정"을 켜면 실제로 목적지가 바뀐다(코덱스 적대적 검증
+    /// 발견 — 예전에는 이 체크박스 자체가 없어서 굳힌 폴더 목록을 갱신할 방법이 없었다).
+    /// </summary>
+    [Fact]
+    public async Task RepinningFolderIdsRuleDuringEditUpdatesTheDestinations()
+    {
+        var f = await ReadyAsync();
+        using var _ = f;
+
+        f.ViewModel.AddToTray(f.Row("문서"));
+        Select(f.ViewModel.Panels[0], "Main.cs");
+        f.MacroEditor.Transform = d => d with { DestKind = MacroDestKind.FolderIds };
+        f.ViewModel.CreateMacro();
+        f.MacroEditor.Transform = null;
+
+        f.ViewModel.Tray[0].IsChecked = false;
+        f.ViewModel.AddToTray(f.Row("산출물"));
+
+        Accept(f, d => d with { RepinFolderIds = true });
+        f.ViewModel.EditMacro(f.ViewModel.Macros[0]);
+
+        Select(f.ViewModel.Panels[0], "Main.cs");
+        await f.ViewModel.RunMacroAsync(f.ViewModel.Macros[0]);
+
+        // 다시 고정을 켰으니 이제는 새로 체크된 "산출물"로 가야 한다.
+        Assert.True(File.Exists(Path.Combine(f.OutputPath, "Main.cs")));
+        Assert.False(File.Exists(Path.Combine(f.DocsPath, "Main.cs")));
+    }
+
     // ── 실행: 대상 풀기 ──────────────────────────────────────────────────────
 
     private static async Task<MainWindowFixture> WithMacroAsync(

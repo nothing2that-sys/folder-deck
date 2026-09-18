@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
 using FolderDeck.App.ViewModels;
 using FolderDeck.Core.Operations;
@@ -55,12 +56,23 @@ public static class DropRouter
             return DropRoute.None;
         }
 
-        if (data.GetDataPresent(FolderPanelView.FileDragFormat))
+        try
         {
-            return DropRoute.Internal;
-        }
+            if (data.GetDataPresent(FolderPanelView.FileDragFormat))
+            {
+                return DropRoute.Internal;
+            }
 
-        return data.GetDataPresent(DataFormats.FileDrop) ? DropRoute.Shell : DropRoute.None;
+            return data.GetDataPresent(DataFormats.FileDrop) ? DropRoute.Shell : DropRoute.None;
+        }
+        catch (COMException)
+        {
+            // 드래그 소스 프로세스가 놓는 순간 이미 죽어 있으면 OLE 데이터 개체 마샬링이
+            // 여기서 실패할 수 있다(검토 회차 발견) — 받을 게 없던 것으로 접는다. 이 메서드는
+            // async void 드롭 핸들러 셋(MainWindow·FolderPanelView·TileGridView)이 전부
+            // 거치는 유일한 자리라 여기 하나만 감싸면 셋 다 방어된다.
+            return DropRoute.None;
+        }
     }
 
     /// <summary>
@@ -73,10 +85,20 @@ public static class DropRouter
     /// 끌고 다녀도 버벅임이 없다는 것을 손으로 확인했고(Stage 1 손 확인 7c), 재 보지 않은
     /// 최적화를 남기지 않는다.
     /// </remarks>
-    public static IReadOnlyList<OperationItem> ShellItems(IDataObject data) =>
-        data.GetData(DataFormats.FileDrop) is string[] paths
-            ? [.. paths.Select(p => new OperationItem(p, IoDirectory.Exists(p)))]
-            : [];
+    public static IReadOnlyList<OperationItem> ShellItems(IDataObject data)
+    {
+        try
+        {
+            return data.GetData(DataFormats.FileDrop) is string[] paths
+                ? [.. paths.Select(p => new OperationItem(p, IoDirectory.Exists(p)))]
+                : [];
+        }
+        catch (COMException)
+        {
+            // Route() 와 같은 이유(검토 회차 발견) — 드래그 소스가 이미 죽어 있으면 빈 목록.
+            return [];
+        }
+    }
 
     /// <summary>
     /// 셸 드롭의 수정키 — <b>기본 복사, <c>Shift</c> 를 누르면 이동</b> (§4.9).
@@ -167,11 +189,19 @@ public static class DropRouter
                 // 앱 안에서 시작한 드래그 — 사설 포맷에는 글자가 실린다(Phase 14 D77-b).
                 // 프로세스 경계를 넘어도 글자는 마샬링되므로 못 풀면(Unpack null) 셸로
                 // 내려가지 않고 거절한다(§4.9) — Route 가 이미 Internal 로 확정했다.
-                return data!.GetData(FolderPanelView.FileDragFormat) is string packed
-                    && DragPayloadCodec.Unpack(packed) is { } payload
-                    ? (payload.Items,
-                        InternalDropCopies(keys, AllOnSameVolume(payload.Items, destination)))
-                    : null;
+                try
+                {
+                    return data!.GetData(FolderPanelView.FileDragFormat) is string packed
+                        && DragPayloadCodec.Unpack(packed) is { } payload
+                        ? (payload.Items,
+                            InternalDropCopies(keys, AllOnSameVolume(payload.Items, destination)))
+                        : null;
+                }
+                catch (COMException)
+                {
+                    // Route() 와 같은 이유(검토 회차 발견) — 드래그 소스가 죽어 있으면 거절.
+                    return null;
+                }
 
             case DropRoute.Shell:
                 return (ShellItems(data!), ShellDropCopies(keys));

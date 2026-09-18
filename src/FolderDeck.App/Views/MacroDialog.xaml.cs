@@ -7,9 +7,19 @@ namespace FolderDeck.App.Views;
 /// <summary>매크로 규칙 편집 창 (§4.7 · Phase 3 Stage 5).</summary>
 public partial class MacroDialog : Window
 {
-    public MacroDialog(MacroDraft draft, bool canFixPath)
+    private readonly bool _isEdit;
+
+    public MacroDialog(MacroDraft draft, bool canFixPath, bool isEdit)
     {
         InitializeComponent();
+
+        _isEdit = isEdit;
+
+        Title = isEdit ? "규칙 고치기" : "규칙 만들기";
+        AcceptButton.Content = "저장";
+
+        // 고치기는 지금 값이 뭔지부터 보여야 한다 — 만들기는 대개 이름만 쓰면 되니 접어 둔다.
+        AdvancedExpander.IsExpanded = isEdit;
 
         NameBox.Text = draft.Name;
 
@@ -22,10 +32,12 @@ public partial class MacroDialog : Window
         FixedPathText.Text = canFixPath ? draft.FixedPath : "(대상이 하나일 때만 고를 수 있다)";
         SourceFixed.IsChecked = canFixPath && draft.SourceKind == MacroSourceKind.FixedPath;
         SourceSelection.IsChecked = SourceFixed.IsChecked != true;
+        RetargetFixedPathBox.IsChecked = draft.RetargetFixedPath;
 
         DestTray.IsChecked = draft.DestKind == MacroDestKind.Tray;
         DestFolders.IsChecked = draft.DestKind == MacroDestKind.FolderIds;
         DestVisible.IsChecked = draft.DestKind == MacroDestKind.AllVisible;
+        RepinFolderIdsBox.IsChecked = draft.RepinFolderIds;
 
         ConflictOverwrite.IsChecked = draft.OnConflict == ConflictPolicy.Overwrite;
         ConflictSkip.IsChecked = draft.OnConflict == ConflictPolicy.Skip;
@@ -34,6 +46,8 @@ public partial class MacroDialog : Window
         ConfirmBox.IsChecked = draft.Confirm;
 
         ApplyOpRules();
+        ApplySourceRules();
+        ApplyDestRules();
 
         Loaded += (_, _) =>
         {
@@ -66,12 +80,50 @@ public partial class MacroDialog : Window
         ConfirmNote.Visibility = forced ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    /// <summary>
+    /// "지금 고른 파일로 다시 고정"은 고치기 중이면서 이미 고정 경로를 쓸 때만 뜻이 있다
+    /// (코덱스 적대적 검증 발견 — 예전에는 고정 경로를 다시 지정할 방법이 아예 없었다).
+    /// </summary>
+    private void ApplySourceRules()
+    {
+        RetargetFixedPathBox.Visibility = _isEdit && SourceFixed.IsChecked == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// "지금 체크된 폴더로 다시 고정"도 같은 이유로 고치기 중일 때만 보인다
+    /// (코덱스 적대적 검증 발견 — 예전에는 굳힌 폴더 목록을 갱신할 방법이 없었다).
+    /// </summary>
+    private void ApplyDestRules()
+    {
+        RepinFolderIdsBox.Visibility = _isEdit && DestFolders.IsChecked == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
     private void OnOpChanged(object sender, RoutedEventArgs e)
     {
         // 생성자에서 IsChecked 를 세울 때도 불린다 — 아직 만들어지지 않은 칸이 있을 수 있다.
         if (IsInitialized)
         {
             ApplyOpRules();
+        }
+    }
+
+    private void OnSourceChanged(object sender, RoutedEventArgs e)
+    {
+        if (IsInitialized)
+        {
+            ApplySourceRules();
+        }
+    }
+
+    private void OnDestChanged(object sender, RoutedEventArgs e)
+    {
+        if (IsInitialized)
+        {
+            ApplyDestRules();
         }
     }
 
@@ -99,7 +151,9 @@ public partial class MacroDialog : Window
             ConflictSkip.IsChecked == true ? ConflictPolicy.Skip
                 : ConflictRename.IsChecked == true ? ConflictPolicy.Rename
                 : ConflictPolicy.Overwrite,
-            ConfirmBox.IsChecked == true);
+            ConfirmBox.IsChecked == true,
+            RetargetFixedPath: RetargetFixedPathBox.IsChecked == true,
+            RepinFolderIds: RepinFolderIdsBox.IsChecked == true);
 
         DialogResult = true;
     }
@@ -108,9 +162,9 @@ public partial class MacroDialog : Window
 /// <inheritdoc/>
 public sealed class MacroEditor : IMacroEditor
 {
-    public MacroDraft? Edit(MacroDraft draft, bool canFixPath)
+    public MacroDraft? Edit(MacroDraft draft, bool canFixPath, bool isEdit)
     {
-        var dialog = new MacroDialog(draft, canFixPath)
+        var dialog = new MacroDialog(draft, canFixPath, isEdit)
         {
             Owner = Application.Current?.MainWindow is { IsLoaded: true } owner ? owner : null,
         };

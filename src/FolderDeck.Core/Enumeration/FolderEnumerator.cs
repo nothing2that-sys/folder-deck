@@ -130,7 +130,10 @@ public sealed class FolderEnumerator : IFolderEnumerator
                     continue;
                 }
 
-                if (isDirectory)
+                // 정션/디렉터리 심볼릭 링크는 안으로 안 들어간다 — 조상 폴더를 가리키면
+                // 취소할 때까지 검색이 끝나지 않는다(검토 회차 발견). 링크 자신은 그대로
+                // 검색 결과 후보다(위 이름 비교에 그대로 걸린다) — 안으로 재귀만 안 한다.
+                if (isDirectory && (info.Attributes & FileAttributes.ReparsePoint) == 0)
                 {
                     pending.Push(info.FullName);
                 }

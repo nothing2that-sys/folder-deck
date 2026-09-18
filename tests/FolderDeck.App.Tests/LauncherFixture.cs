@@ -128,16 +128,20 @@ internal sealed class FakeMacroEditor : IMacroEditor
 
     public bool? CanFixPath { get; private set; }
 
+    /// <summary>마지막 호출이 고치기였는가(만들기가 아니라) — §4.7 통합 이후.</summary>
+    public bool? WasEdit { get; private set; }
+
     public int CallCount { get; private set; }
 
     /// <summary>들어온 제안을 그대로 받아들이게 한다(이름만 바꾸는 흔한 경우).</summary>
     public Func<MacroDraft, MacroDraft>? Transform { get; set; }
 
-    public MacroDraft? Edit(MacroDraft draft, bool canFixPath)
+    public MacroDraft? Edit(MacroDraft draft, bool canFixPath, bool isEdit)
     {
         CallCount++;
         Suggested = draft;
         CanFixPath = canFixPath;
+        WasEdit = isEdit;
 
         return Transform is not null ? Transform(draft) : Answer;
     }

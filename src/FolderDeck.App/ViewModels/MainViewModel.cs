@@ -624,9 +624,21 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     [RelayCommand]
     public void RemoveTile(TileViewModel? tile)
     {
-        if (tile is null || !Tiles.Contains(tile))
+        // MoveTile·ResizeTile·PlaceFolderInCellAsync 와 같은 가드다(검토 회차 발견) — 지금
+        // 유일한 호출부(TileGridView 의 편집모드 전용 컨텍스트 메뉴)는 이미 편집모드에서만
+        // 뜨므로 실질 동작은 안 바뀐다. 방어만 두껍게 한다.
+        if (tile is null || !Tiles.Contains(tile) || !IsEditingLayout)
         {
             return;
+        }
+
+        // 확장된 타일 자신을 지우는 경우 — 지우기 전에 푼다(RemoveFolder 와 같은 이유,
+        // D117 A7-2 · D118 W3, 검토 회차 발견). 위 IsEditingLayout 가드가 View 층의
+        // 상호배타(편집 중엔 확장 불가)와 겹쳐 지금은 도달하지 않지만, 이 메서드가 다른
+        // 진입점에서 직접 불릴 가능성에 대비한다.
+        if (ReferenceEquals(ExpandedTile, tile))
+        {
+            ExpandedTile = null;
         }
 
         var removedIndex = tile.IsRotating ? tile.RotationIndex : null;
@@ -971,6 +983,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         MoveSelectionCommand.NotifyCanExecuteChanged();
         TrashSelectionCommand.NotifyCanExecuteChanged();
         CreateMacroCommand.NotifyCanExecuteChanged();
+        EditMacroCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>패널이 선택을 얻거나 잃었다. 선택은 한 타일에만 남긴다 (§4.8).</summary>
@@ -1074,20 +1087,35 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     {
         var verb = verbOverride ?? (op == FileOperationKind.Copy ? "복사" : "이동");
 
-        // 겹치는 건수는 <b>정책과 무관하게</b> 세야 한다. 엔진은 덮어쓰기일 때만 세므로
-        // (건너뛰기·이름바꾸기는 덮어쓰지 않으니까) 여기서는 항상 덮어쓰기로 훑는다.
-        var preview = await _engine
-            .PreviewAsync(new FileOperationRequest(op, items, destinations, ConflictPolicy.Overwrite))
-            .ConfigureAwait(true);
+        // 미리보기 단계부터 잠근다 — 그 사이(await, 특히 네트워크 목적지면 창이 넓어진다)
+        // 다른 조작이 같은 IsOperationRunning 가드를 통과해 겹칠 수 있었다(검토 회차 발견).
+        IsOperationRunning = true;
+
+        FileOperationPreview preview;
+        try
+        {
+            // 겹치는 건수는 <b>정책과 무관하게</b> 세야 한다. 엔진은 덮어쓰기일 때만 세므로
+            // (건너뛰기·이름바꾸기는 덮어쓰지 않으니까) 여기서는 항상 덮어쓰기로 훑는다.
+            preview = await _engine
+                .PreviewAsync(new FileOperationRequest(op, items, destinations, ConflictPolicy.Overwrite))
+                .ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            // Preview() 자체는 대부분 안전한 Exists() 호출이지만 예외 없음을 보장하지 않는다
+            // (검토 회차 발견) — async void 호출부까지 뚫리게 두지 않는다.
+            IsOperationRunning = false;
+            Warn($"{verb} 준비 중 오류가 났다: {ex.Message}");
+            return;
+        }
 
         if (preview.TotalItemCount == 0)
         {
             // 대상함 버튼과 드롭이 함께 쓰는 문구다 — "체크한 목적지"라고 하면 드롭에는 거짓말이 된다.
+            IsOperationRunning = false;
             Warn($"{verb}할 곳이 없다 — 목적지에 닿지 못했다.");
             return;
         }
-
-        IsOperationRunning = true;
 
         var policy = ConflictPolicy;
 
@@ -1177,7 +1205,15 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             // 진행 줄은 결과를 알리기 <b>전에</b> 접는다 — 부분 실패 대화상자 뒤에 다 끝난
             // 진행 막대가 남아 있으면 아직 도는 중인지 끝난 건지 알 수 없다.
             _progressRevealPending = false;
-            _operationCts = null;
+
+            // 이 cts 가 지금 필드가 가리키는 것일 때만 지운다(검토 회차 발견 — 방어적 이중
+            // 안전망). 위 IsOperationRunning 조기 잠금으로 두 조작이 겹치는 경로는 사실상
+            // 막혔지만, 그래도 남이 세운 손잡이를 내가 지우는 사고는 원천 차단해 둔다.
+            if (ReferenceEquals(_operationCts, cts))
+            {
+                _operationCts = null;
+            }
+
             IsProgressVisible = false;
         }
 
@@ -1222,7 +1258,7 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             OnConflict: ConflictPolicy,
             Confirm: true);
 
-        if (_macroEditor.Edit(suggested, canFixPath: selection.Count == 1) is not { } draft)
+        if (_macroEditor.Edit(suggested, canFixPath: selection.Count == 1, isEdit: false) is not { } draft)
         {
             return;
         }
@@ -1264,6 +1300,95 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         NotifyMacros();
         Save();
         Inform($"매크로를 만들었다: {definition.Name}");
+    }
+
+    /// <summary>실행 중이 아니면 언제든 고칠 수 있다 — 만들기와 달리 지금 고른 것이 없어도 된다.</summary>
+    public bool CanEditMacro => !IsOperationRunning;
+
+    /// <summary>
+    /// 있는 규칙 하나를 값 그대로 채워 다시 연다. 창이 돌려준 값으로 <b>같은 규칙을 갱신</b>한다
+    /// — 지우고 다시 만들 필요가 없다.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanEditMacro))]
+    public void EditMacro(MacroCardViewModel? card)
+    {
+        if (card is null || !Macros.Contains(card))
+        {
+            return;
+        }
+
+        var definition = card.Definition;
+        var selection = Selection;
+
+        // 이미 고정 경로면(과거에 굳힌 값) 지금 뭘 골랐든 그대로 보여준다 — 마침 하나를
+        // 고른 상태가 아니라고 해서 이미 유효했던 값을 잠가 버리면 안 된다.
+        var hasFixedPath = definition.Source?.Kind == MacroSourceKind.FixedPath;
+        var canFixPath = hasFixedPath || selection.Count == 1;
+        var fixedPath = hasFixedPath
+            ? definition.Source!.Path
+            : selection.Count == 1 ? selection[0].FullPath : null;
+
+        var originalDestKind = definition.Dest?.Kind;
+
+        var draft = new MacroDraft(
+            Name: definition.Name ?? string.Empty,
+            Op: definition.Op,
+            SourceKind: definition.Source?.Kind ?? MacroSourceKind.Selection,
+            FixedPath: fixedPath,
+            DestKind: originalDestKind ?? MacroDestKind.Tray,
+            OnConflict: definition.OnConflict,
+            Confirm: definition.Confirm);
+
+        if (_macroEditor.Edit(draft, canFixPath, isEdit: true) is not { } updated)
+        {
+            return;
+        }
+
+        // 이미 고정 경로였는데 사용자가 "지금 고른 파일로 다시 고정"을 켜지 않았으면 예전
+        // 경로를 그대로 지킨다(코덱스 적대적 검증 발견 — 예전에는 다이얼로그가 이 값을
+        // 그대로 되돌려주기만 해서 재지정 자체가 불가능했다). 새로 고정 경로로 바꿔 들어온
+        // 경우는 지금 고른 것으로 굳힌다 — 만들기와 같은 규칙이다.
+        var resolvedFixedPath = updated.SourceKind != MacroSourceKind.FixedPath
+            ? null
+            : hasFixedPath && !updated.RetargetFixedPath
+                ? definition.Source!.Path
+                : selection.Count == 1 ? selection[0].FullPath : definition.Source?.Path;
+
+        definition.Name = updated.Name;
+        definition.Op = updated.Op;
+        definition.Source = new MacroSource
+        {
+            Kind = updated.SourceKind,
+            Path = resolvedFixedPath,
+        };
+        definition.OnConflict = updated.OnConflict;
+        definition.Confirm = updated.Confirm || updated.Op != FileOperationKind.Copy;
+
+        if (updated.Op != FileOperationKind.Trash)
+        {
+            // "지금 체크된 폴더로 고정"이 이미 그 상태였는데 사용자가 "지금 체크된 폴더로
+            // 다시 고정"을 켜지 않았으면 예전에 굳힌 목록을 그대로 둔다 — 이름만 고치는 등
+            // 관계없는 수정에서 대상함 체크가 지금 다르다는 이유로 목적지가 조용히 바뀌면
+            // 안 된다. 새로 이 상태로 바꿔 들어왔거나 다시 고정을 명시적으로 켰을 때만
+            // 지금 체크로 다시 굳힌다(코덱스 적대적 검증 발견 — 예전에는 후자를 할 방법이
+            // 없었다).
+            var folderIds = updated.DestKind == MacroDestKind.FolderIds
+                ? (originalDestKind == MacroDestKind.FolderIds && !updated.RepinFolderIds
+                    ? definition.Dest!.FolderIds
+                    : [.. CheckedDestinations.Select(t => t.Entry.Id)])
+                : null;
+
+            definition.Dest = new MacroDest { Kind = updated.DestKind, FolderIds = folderIds };
+        }
+        else
+        {
+            definition.Dest = null;
+        }
+
+        card.NotifyChanged();
+        NotifyMacros();
+        Save();
+        Inform($"매크로를 고쳤다: {definition.Name}");
     }
 
     [RelayCommand]
@@ -1329,19 +1454,32 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             return;
         }
 
-        // 겹치는 건수는 정책과 무관하게 세야 하므로 항상 덮어쓰기로 훑는다.
-        var preview = await _engine
-            .PreviewAsync(new FileOperationRequest(
-                macro.Op, items, destinations, ConflictPolicy.Overwrite))
-            .ConfigureAwait(true);
+        // 미리보기 단계부터 잠근다 — StartOperationAsync 와 같은 이유(검토 회차 발견,
+        // TOCTOU: await 도는 사이 다른 조작이 같은 가드를 통과해 겹칠 수 있었다).
+        IsOperationRunning = true;
 
-        if (preview.TotalItemCount == 0)
+        FileOperationPreview preview;
+        try
         {
-            Warn($"'{card.Name}' — {verb}할 곳이 없다. 목적지에 닿지 못했다.");
+            // 겹치는 건수는 정책과 무관하게 세야 하므로 항상 덮어쓰기로 훑는다.
+            preview = await _engine
+                .PreviewAsync(new FileOperationRequest(
+                    macro.Op, items, destinations, ConflictPolicy.Overwrite))
+                .ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            IsOperationRunning = false;
+            Warn($"'{card.Name}' — 미리보기 중 오류가 났다: {ex.Message}");
             return;
         }
 
-        IsOperationRunning = true;
+        if (preview.TotalItemCount == 0)
+        {
+            IsOperationRunning = false;
+            Warn($"'{card.Name}' — {verb}할 곳이 없다. 목적지에 닿지 못했다.");
+            return;
+        }
 
         // 실행 전 미리보기가 기본이다 (§4.7). move·trash 는 끄지 못한다.
         if ((macro.Confirm || macro.Op != FileOperationKind.Copy)
@@ -3294,9 +3432,16 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             row.IsShowingInRotating = rotating is not null;
             row.LocationHint = panel?.LocationHint;
 
-            if (panel?.Failure is not null)
+            // panel 이 있을 때만(=이 폴더가 지금 어딘가에 떠 있을 때만) 양방향으로 반영한다
+            // (검토 회차 발견). 예전에는 true 방향만 있어, 한 번 접근불가로 뜬 뒤 경로가
+            // 복구돼도(FolderWatcher 되살리기 등) 다음 F5·창 재활성화 전까지 계속 회색으로
+            // 굳었다 — FolderRowViewModel 주석의 "경로가 복구되면 다시 조회된다"는 의도와
+            // 어긋났다. panel 이 null 인 행(지금 어디에도 안 뜬 폴더)은 손대지 않는다 —
+            // 마지막으로 안 상태를 여기서 지우면 ProbeRowAsync 의 실제 조회 없이 "괜찮다"는
+            // 인상을 줄 수 있다.
+            if (panel is not null)
             {
-                row.IsInaccessible = true;
+                row.IsInaccessible = panel.Failure is not null;
             }
         }
     }

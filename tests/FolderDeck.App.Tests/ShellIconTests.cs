@@ -153,8 +153,15 @@ public sealed class ShellIconTests
             isDirectory: true, useFileAttributes: false, iconWasReturned: true));
     }
 
+    /// <summary>
+    /// 이름 정정(검토 회차 발견) — 예전 이름 <c>ANonNullImageIsCached</c> 는 실제로 캐시에
+    /// 들어갔는지가 아니라 <see cref="ShellIconService.ShouldCache"/> 판정 함수 하나만
+    /// 확인하고 있었다. 실제 캐시 적중은 <see cref="AskingTheSameKeyTwiceHitsTheCache"/> 가
+    /// 검증한다 — 이 시험은 그 판정 함수가 실제로 얻은 이미지를 앞에 두고도 옳게 동작하는지만
+    /// 본다.
+    /// </summary>
     [Fact]
-    public async Task ANonNullImageIsCached()
+    public async Task ANonNullImageSatisfiesTheCachePredicate()
     {
         var missing = MissingTxtPath();
         var icon = await _service.GetIconAsync(missing, isDirectory: false);

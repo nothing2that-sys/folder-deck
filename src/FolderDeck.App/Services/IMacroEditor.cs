@@ -13,7 +13,14 @@ public sealed record MacroDraft(
     string? FixedPath,
     MacroDestKind DestKind,
     ConflictPolicy OnConflict,
-    bool Confirm);
+    bool Confirm,
+
+    // 고치기 전용(코덱스 적대적 검증 발견, 2026-09-18) — 둘 다 기본은 꺼짐(=예전 값 유지).
+    // 고정 경로·고정 폴더는 이미 굳어 있으면 지금 선택/체크가 달라도 조용히 새지 않아야
+    // 한다(§ EditingWithoutTouchingDestKeepsThePinnedFolders). 그런데 그렇게만 하면 사용자가
+    // "진짜로 다시 고정하고 싶다"는 뜻을 전할 방법이 없어졌다 — 이 두 플래그가 그 뜻이다.
+    bool RetargetFixedPath = false,
+    bool RepinFolderIds = false);
 
 /// <summary>
 /// 매크로 만들기·고치기 창 (§4.7). 테스트에서 갈아끼우기 위해 인터페이스로 둔다.
@@ -31,5 +38,9 @@ public interface IMacroEditor
     /// "이 경로로 고정"을 고를 수 있는가. 대상이 <b>하나</b>일 때만 가능하다 —
     /// <c>source.path</c> 는 §4.7 에서 경로 하나다.
     /// </param>
-    MacroDraft? Edit(MacroDraft draft, bool canFixPath);
+    /// <param name="isEdit">
+    /// 있는 규칙을 고치는 것인가(만드는 것이 아니라). 창 제목·버튼 글씨와, 나머지 축을
+    /// 접어 둘지(만들기는 접음, 고치기는 지금 값을 보여야 하니 편다)를 가른다.
+    /// </param>
+    MacroDraft? Edit(MacroDraft draft, bool canFixPath, bool isEdit);
 }

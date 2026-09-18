@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using System.Windows;
 using FolderDeck.App.Services;
 using FolderDeck.App.ViewModels;
@@ -38,6 +39,24 @@ public partial class App : Application, IWorkspaceHost
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // 전역 안전망(검토 회차 발견) — 이 앱에는 지금까지 미처리 예외 핸들러도 파일
+        // 로깅도 전혀 없었다. 여기서 하는 일은 로그를 남기는 것뿐이고, 크래시 자체를
+        // 막거나 계속 돌리려 하지 않는다 — 상태가 어디까지 깨졌는지 모르는 채로 앱을
+        // 계속 돌리는 쪽이 조용히 죽는 것보다 나쁠 수 있다(CrashLogger 주석 참고).
+        DispatcherUnhandledException += (_, args) =>
+            CrashLogger.TryWrite("DispatcherUnhandledException", args.Exception);
+
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception ex)
+            {
+                CrashLogger.TryWrite("AppDomain.UnhandledException", ex);
+            }
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+            CrashLogger.TryWrite("TaskScheduler.UnobservedTaskException", args.Exception);
 
         var options = CommandLineOptions.Parse(e.Args);
 

@@ -123,10 +123,12 @@ internal class PreviewHandlerHost : HwndHost
     {
         if (_handlerObj is not IInitializeWithItem initItem)
             return false;
+
+        object? shellItemObj = null;
         try
         {
             var iid = typeof(IShellItem).GUID;
-            int hr = ShellItemNative.SHCreateItemFromParsingName(filePath, IntPtr.Zero, ref iid, out var shellItemObj);
+            int hr = ShellItemNative.SHCreateItemFromParsingName(filePath, IntPtr.Zero, ref iid, out shellItemObj);
             if (hr != 0 || shellItemObj is not IShellItem shellItem)
                 return false;
             initItem.Initialize(shellItem, 0 /* STGM_READ */);
@@ -135,6 +137,15 @@ internal class PreviewHandlerHost : HwndHost
         catch
         {
             return false;
+        }
+        finally
+        {
+            // ShellThumbnailService.Fetch 와 같은 이유로 우리가 얻은 IShellItem 은 우리가
+            // 놓는다(검토 회차 발견 — 지금까지는 해제 없이 GC 에 미뤄져 있었다).
+            if (shellItemObj != null)
+            {
+                try { Marshal.ReleaseComObject(shellItemObj); } catch { }
+            }
         }
     }
 
@@ -157,9 +168,17 @@ internal class PreviewHandlerHost : HwndHost
     {
         if (_handler != null)
         {
-            try { _handler.Unload(); } catch { }
+            // 확장의 Unload() 도 서드파티 코드다 — FpuGuard 로 감싼다(검토 회차 발견,
+            // ShellContextMenu 와 같은 관례). 이 메서드는 LoadPreview 진입부(72행)처럼
+            // 바깥 FpuGuard 스코프 밖에서도 불리므로 여기서 직접 감싼다.
+            using (FpuGuard.Enter("IPreviewHandler.Unload"))
+            {
+                try { _handler.Unload(); } catch { }
+            }
+
             _handler = null;
         }
+
         ReleaseHandlerObj();
     }
 
@@ -167,7 +186,13 @@ internal class PreviewHandlerHost : HwndHost
     {
         if (_handlerObj != null)
         {
-            try { Marshal.ReleaseComObject(_handlerObj); } catch { }
+            // Release 다 — 그 안에서 확장의 정리 코드가 돈다(ShellContextMenu.Dispose 와
+            // 같은 이유, 검토 회차 발견).
+            using (FpuGuard.Enter("IPreviewHandler.Release"))
+            {
+                try { Marshal.ReleaseComObject(_handlerObj); } catch { }
+            }
+
             _handlerObj = null;
         }
     }
@@ -189,7 +214,12 @@ internal class PreviewHandlerHost : HwndHost
             Right = (int)Math.Max(sizeInfo.NewSize.Width, 1),
             Bottom = (int)Math.Max(sizeInfo.NewSize.Height, 1),
         };
-        try { _handler.SetRect(ref rect); } catch { }
+
+        // 서드파티 확장 코드가 도는 자리라 FpuGuard 로 감싼다(검토 회차 발견).
+        using (FpuGuard.Enter("IPreviewHandler.SetRect"))
+        {
+            try { _handler.SetRect(ref rect); } catch { }
+        }
     }
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]

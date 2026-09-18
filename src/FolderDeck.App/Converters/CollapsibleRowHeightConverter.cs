@@ -23,10 +23,22 @@ public sealed class CollapsibleRowHeightConverter : IValueConverter
             return GridLength.Auto;
         }
 
-        if (parameter is string text
-            && LengthConverter.ConvertFromString(text) is GridLength expanded)
+        if (parameter is string text)
         {
-            return expanded;
+            try
+            {
+                // InvariantCulture 를 명시한다 — WiderThanConverter 와 같은 이유(검토 회차
+                // 발견). 지금은 이 파라미터가 XAML 리터럴로 고정돼 있어 실제로는 안 터지지만,
+                // 바인딩 컨버터는 던지지 않는 편이 안전하다.
+                if (LengthConverter.ConvertFrom(null, CultureInfo.InvariantCulture, text) is GridLength expanded)
+                {
+                    return expanded;
+                }
+            }
+            catch (NotSupportedException)
+            {
+                // 형식이 안 맞으면 아래 기본값(1*)으로 떨어진다.
+            }
         }
 
         return new GridLength(1, GridUnitType.Star);

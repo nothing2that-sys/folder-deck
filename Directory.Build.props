@@ -4,7 +4,7 @@
        설치 프로그램은 MSBuild 를 거치지 않으므로 installer/FolderDeck.iss 의 AppVersion 은
        손으로 같이 고친다 — 판을 올릴 때 손댈 자리는 이 파일과 .iss 둘이다(§12.2). -->
   <PropertyGroup>
-    <Version>1.5.0</Version>
+    <Version>1.6.0</Version>
   </PropertyGroup>
 
 </Project>

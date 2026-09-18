@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using FolderDeck.Core.Models;
 using FolderDeck.Core.Operations;
 
@@ -664,6 +665,104 @@ public sealed class FileOperationEngineTests : IDisposable
 
         // 20개를 하나씩 만지지 않았다 — 폴더 자체를 한 번 건드렸을 뿐이다.
         Assert.Equal(1, reports[^1].CompletedEntries);
+    }
+
+    // ── 정션/링크 순환 방어 (검토 회차 발견) ────────────────────────────────
+
+    /// <summary>
+    /// 정션/디렉터리 심볼릭 링크가 자기 조상을 가리키면, 안으로 그대로 재귀할 때
+    /// <see cref="StackOverflowException"/>(catch 로 못 잡고 프로세스가 즉시 종료된다)로
+    /// 이어질 수 있었다. 링크는 복사하지 않고 건너뛴 사실만 남겨야 한다.
+    /// </summary>
+    [Fact]
+    public async Task CopyingAFolderContainingASelfReferencingLinkDoesNotRecurseForever()
+    {
+        var tree = Dir("tree");
+        File_("tree/a.txt", "A");
+        var link = Path.Combine(tree, "loop");
+
+        if (!TryCreateJunction(link, tree))
+        {
+            // 이 환경에서 정션을 못 만든다 — 시험할 대상 자체가 없다. 다른 볼륨 시험
+            // (OtherVolumeDir)과 같은 결의 환경 의존이다.
+            return;
+        }
+
+        try
+        {
+            var one = Dir("one");
+            var report = await Run(FileOperationKind.Copy, [tree], [one]);
+
+            // 진짜 파일은 그대로 복사됐다.
+            Assert.Equal("A", File.ReadAllText(Path.Combine(one, "tree", "a.txt")));
+
+            // 링크 안으로는 들어가지 않았다 — 들어갔으면 무한 재귀로 여기 닿지 못했을 것이다.
+            Assert.False(Directory.Exists(Path.Combine(one, "tree", "loop", "a.txt")));
+
+            // 건너뛴 사실은 사유에 남는다 — 조용히 사라지지 않는다(§5).
+            var result = Assert.Single(report.Results);
+            Assert.Equal(OperationItemStatus.Failed, result.Status);
+            Assert.Contains("정션/링크라 건너뛰었다", result.Reason);
+        }
+        finally
+        {
+            Directory.Delete(link, recursive: false);
+        }
+    }
+
+    /// <summary>
+    /// Windows 정션을 만든다. <c>Directory.CreateSymbolicLink</c> 와 달리 특별한 권한이나
+    /// 개발자 모드가 필요 없다(이 환경에서 <c>mklink /J</c> 로 실측 확인) — 그래서 검토
+    /// 회차의 순환 방어 시험은 정션으로 짠다.
+    /// </summary>
+    private static bool TryCreateJunction(string linkPath, string targetPath)
+    {
+        var info = new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{linkPath}\" \"{targetPath}\"")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        using var process = Process.Start(info);
+        process?.WaitForExit();
+
+        return process?.ExitCode == 0 && Directory.Exists(linkPath);
+    }
+
+    // ── ReadOnly 파일이 섞인 폴더 이동 (검토 회차 발견) ─────────────────────
+
+    /// <summary>
+    /// <c>Directory.Delete(recursive:true)</c> 는 ReadOnly 속성 파일이 하나라도 있으면
+    /// 속성을 안 풀고 예외를 던진다(.NET/Win32 공지 동작). 복사는 이미 끝났으므로, 속성을
+    /// 지우고 한 번 더 시도해 원본을 마저 지운다.
+    /// </summary>
+    [Fact]
+    public async Task MovingAFolderWithAReadOnlyFileStillRemovesTheOriginal()
+    {
+        var a = File_("src/tree/a.txt", "A");
+        File.SetAttributes(a, File.GetAttributes(a) | FileAttributes.ReadOnly);
+        var tree = Path.Combine(_root, "src", "tree");
+        var one = Dir("one");
+
+        try
+        {
+            var report = await Run(FileOperationKind.Move, [tree], [one]);
+
+            Assert.Equal(OperationItemStatus.Succeeded, Assert.Single(report.Results).Status);
+            Assert.False(Directory.Exists(tree));
+            Assert.Equal("A", File.ReadAllText(Path.Combine(one, "tree", "a.txt")));
+        }
+        finally
+        {
+            // 정리 — 목적지에 남은 ReadOnly 사본도 지울 수 있어야 Dispose 가 안 걸린다.
+            var copied = Path.Combine(one, "tree", "a.txt");
+            if (File.Exists(copied))
+            {
+                File.SetAttributes(copied, File.GetAttributes(copied) & ~FileAttributes.ReadOnly);
+            }
+        }
     }
 
     // ── 진행 보고 ────────────────────────────────────────────────────────────
