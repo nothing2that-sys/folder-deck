@@ -28,13 +28,16 @@ internal static class ShellItemMenu
     /// <param name="source">메뉴의 owner 이자 메시지 훅이 붙을 창.</param>
     /// <param name="paths">대상 경로들. 다중 선택은 그대로 넘긴다.</param>
     /// <param name="isDirectory">우클릭한 항목이 폴더인가 — 폴더 전용 앱 항목 둘의 조건이다.</param>
+    /// <param name="canCompareContent">「내용 비교」를 끼울지 (기능 후보 ①의 연장) — 자세한
+    /// 조건은 <see cref="ShellMenuPolicy.AppItems"/> 참고.</param>
     /// <param name="screenX">화면 좌표 x.</param>
     /// <param name="screenY">화면 좌표 y.</param>
     /// <remarks>
     /// 예외를 삼키지 않는다 — 부르는 쪽이 잡아 상태 바에 올린다(§5 · 팝업이 아니다).
     /// </remarks>
     public static ShellMenuOutcome Show(
-        HwndSource source, IReadOnlyList<string> paths, bool isDirectory, int screenX, int screenY)
+        HwndSource source, IReadOnlyList<string> paths, bool isDirectory, bool canCompareContent,
+        int screenX, int screenY)
     {
         using var scm = ShellContextMenu.Acquire(paths, source.Handle);
 
@@ -47,7 +50,7 @@ internal static class ShellItemMenu
         try
         {
             // 앱 항목이 먼저다 — 셸은 그 뒤부터 채운다. 구분선 하나로 갈라 둔다.
-            foreach (var item in ShellMenuPolicy.AppItems(isDirectory))
+            foreach (var item in ShellMenuPolicy.AppItems(isDirectory, canCompareContent))
             {
                 ShellNative.AppendMenuW(hMenu, ShellNative.MF_STRING, (UIntPtr)(uint)item.Command, item.Text);
             }

@@ -14,6 +14,7 @@ using System.Windows.Threading;
 using FolderDeck.App.Interop;
 using FolderDeck.App.Services;
 using FolderDeck.App.ViewModels;
+using FolderDeck.Core.Comparison;
 using FolderDeck.Core.Models;
 using FolderDeck.Core.Operations;
 
@@ -1374,9 +1375,16 @@ public partial class FolderPanelView : UserControl
 
         var screen = PointToScreen(e.GetPosition(this));
 
+        // 「내용 비교」는 타일 비교(기능 후보 ①)가 이 행을 [다름]으로 표시했을 때만 뜬다 —
+        // 우클릭한 게 하나뿐이고 파일일 때만 뜻이 있다(여럿 고른 채 우클릭했으면 셋 다 아니다).
+        var canCompareContent = chosen.Count == 1
+            && !item.IsDirectory
+            && item.CompareStatus == CompareStatus.Different;
+
         try
         {
-            var outcome = ShellItemMenu.Show(source, paths, item.IsDirectory, (int)screen.X, (int)screen.Y);
+            var outcome = ShellItemMenu.Show(
+                source, paths, item.IsDirectory, canCompareContent, (int)screen.X, (int)screen.Y);
 
             if (outcome.ShellHr != 0)
             {
@@ -1393,12 +1401,13 @@ public partial class FolderPanelView : UserControl
     }
 
     /// <summary>
-    /// 셸 메뉴에 끼워 둔 앱 항목 다섯을 <b>기존 커맨드</b>로 잇는다 (§4.6 · D34).
+    /// 셸 메뉴에 끼워 둔 앱 항목을 <b>기존 커맨드</b>로 잇는다 (§4.6 · D34, 「내용 비교」는
+    /// 2026-09-18 기능 후보 ①의 연장으로 추가).
     /// </summary>
     /// <remarks>
-    /// 새 커맨드를 만들지 않는다 — 옛 <c>ItemMenu</c> 가 바인딩으로 부르던 그 커맨드 그대로다.
-    /// 대상도 그때와 같다: 넷은 우클릭한 항목 하나, 「휴지통으로 삭제」만 <b>고른 것 전부</b>라
-    /// 인자가 없다.
+    /// 새 커맨드를 만들지 않는다 — 옛 <c>ItemMenu</c> 가 바인딩으로 부르던 그 커맨드 그대로다
+    /// (「내용 비교」만 이번에 새로 생긴 커맨드다). 대상도 그때와 같다: 「휴지통으로 삭제」만
+    /// <b>고른 것 전부</b>라 인자가 없고, 나머지는 우클릭한 항목 하나다.
     /// <para>
     /// <c>TrashSelectionCommand</c>·<c>RegisterFolderCommand</c> 는 패널이 아니라 타일이 걸어
     /// 주는 통로라 <c>null</c> 일 수 있다 — 안 걸렸으면 조용히 지난다(옛 메뉴도 그랬다).
@@ -1427,6 +1436,10 @@ public partial class FolderPanelView : UserControl
 
             case ShellMenuAppCommand.Trash:
                 panel.TrashSelectionCommand?.Execute(null);
+                break;
+
+            case ShellMenuAppCommand.CompareContent:
+                panel.CompareContentCommand.Execute(item);
                 break;
         }
     }

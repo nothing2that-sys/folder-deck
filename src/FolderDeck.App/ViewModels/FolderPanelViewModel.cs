@@ -617,6 +617,15 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public Func<FolderPanelViewModel, Task>? BatchRenameRequested { get; set; }
 
     /// <summary>
+    /// 우클릭 메뉴의 「내용 비교」(기능 후보 ①의 연장, 2026-09-18) — 이 항목이 닿을 통로.
+    /// <see cref="CompareRequested"/> 와 같은 결로 패널 자신과 항목만 넘긴다 — 상대 타일
+    /// 찾기·파일 읽기·diff 계산·창 띄우기는 전부 통로 너머(<see cref="MainViewModel"/>)에서
+    /// 일어난다. 셸 메뉴가 <c>ShellMenuPolicy.AppItems</c> 에서 이미 [다름]인 행에만 이
+    /// 항목을 끼우므로, 여기서 다시 <c>CompareStatus</c> 를 확인하지 않는다.
+    /// </summary>
+    public Action<FolderPanelViewModel, FileItemViewModel>? CompareContentRequested { get; set; }
+
+    /// <summary>
     /// 붙여넣기가 닿을 통로 (§4.6 310행 · 330~336행 · A군 ③ C-2). 인자는 <b>붙여넣을 목적지</b>다.
     /// </summary>
     /// <remarks>
@@ -1683,6 +1692,13 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// </summary>
     [RelayCommand]
     private void StartCompare() => CompareRequested?.Invoke(this);
+
+    /// <summary>
+    /// 우클릭 「내용 비교」(기능 후보 ①의 연장) — 셸 메뉴가 이 커맨드를 [다름]으로 표시된
+    /// 행에만 붙인다(<c>FolderPanelView</c> 우클릭 핸들러).
+    /// </summary>
+    [RelayCommand]
+    private void CompareContent(FileItemViewModel item) => CompareContentRequested?.Invoke(this, item);
 
     /// <summary>
     /// <c>Ctrl+F2</c> — 지금 고른 항목들의 이름을 규칙으로 한꺼번에 바꾼다(기능 후보 ③).

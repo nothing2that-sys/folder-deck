@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\FolderDeck.Core\FolderDeck.Core.csproj" />
@@ -6,6 +6,10 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- 내용 비교(기능 후보 ①의 연장, 2026-09-18)가 CP949(한국어 레거시 텍스트) 코드페이지를
+         읽으려면 필요하다 — .NET Core 는 기본으로 UTF 계열만 안다. FileContentReader 가
+         정적 생성자에서 등록한다. -->
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.11" />
   </ItemGroup>
 
   <!-- FpuGuard(F-1)는 Interop/ 의 관례대로 internal 이다. 시험이 그 스코프를 열고 닫아
@@ -43,6 +47,11 @@
 
     <!-- DPI 인식을 프로세스 시작 시점에 확정한다 (§6.1 · Stage 2 §3.1). 이유는 파일 안 주석. -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- NU1510 은 System.Text.Encoding.CodePages 가 "안 써도 될 것 같다"고 하지만 틀렸다 —
+         CodePagesEncodingProvider 타입 자체가 이 패키지에만 있고(내용 비교의 CP949 폴백,
+         FileContentReader), 셰어드 프레임워크에 포함돼 있지 않다. -->
+    <NoWarn>$(NoWarn);NU1510</NoWarn>
   </PropertyGroup>
 
 </Project>

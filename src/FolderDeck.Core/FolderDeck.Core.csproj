@@ -6,4 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- 파일 내용 비교(기능 후보 ①의 연장, 2026-09-18) — 순수 텍스트 diff, 의존성 0개,
+         Apache License 2.0. THIRD-PARTY-NOTICES.txt 에 고지 추가함. -->
+    <PackageReference Include="DiffPlex" Version="1.9.0" />
+  </ItemGroup>
+
 </Project>

@@ -18,6 +18,9 @@ public enum ShellMenuAppCommand : uint
     SetAnchor = 0x13,
     RegisterFolder = 0x14,
     Trash = 0x15,
+
+    /// <summary>내용 비교(기능 후보 ①의 연장, 2026-09-18) — 타일 비교 중 [다름] 표시된 파일에만.</summary>
+    CompareContent = 0x16,
 }
 
 /// <summary>메뉴에 넣을 앱 항목 하나 — 보이는 글자와 그 id.</summary>
@@ -93,8 +96,15 @@ public static class ShellMenuPolicy
             : ShellMenuAppCommand.None;
 
     /// <summary>
-    /// 셸 항목 <b>앞에</b> 넣을 앱 항목들 (§4.6 · D34 — 다섯).
+    /// 셸 항목 <b>앞에</b> 넣을 앱 항목들 (§4.6 · D34 — 기본 다섯/셋, 내용 비교가 걸리면 하나 더).
     /// </summary>
+    /// <param name="isDirectory">우클릭한 항목이 폴더인가.</param>
+    /// <param name="canCompareContent">
+    /// 「내용 비교」를 끼울지 — 타일 비교(기능 후보 ①)가 켜져 있고 <b>이 항목이 [다름]으로
+    /// 표시됐을 때만</b> 호출부(<c>FolderPanelView</c> 우클릭 핸들러)가 <c>true</c>
+    /// 를 준다. 폴더에는 뜻이 없으므로 <paramref name="isDirectory"/> 가 참이면 이 값과
+    /// 무관하게 넣지 않는다.
+    /// </param>
     /// <remarks>
     /// 겹치는 넷(열기 <c>open</c> · 복사 <c>copy</c> · 경로 복사 <c>copyaspath</c> ·
     /// 속성 <c>properties</c>)은 넣지 않는다 — 셸 것을 쓴다. 커맨드는 그대로 살아 있다
@@ -102,20 +112,26 @@ public static class ShellMenuPolicy
     /// <para>
     /// 「이 폴더를 앵커로 지정」·「새 폴더로 등록」은 폴더에만 뜻이 있어 파일에는 넣지 않는다 —
     /// 눌러도 아무 일 없는 항목을 남기지 않는다(옛 <c>ItemMenu</c> 가 <c>Visibility</c> 로
-    /// 하던 것과 같은 규칙이다).
+    /// 하던 것과 같은 규칙이다). 「내용 비교」도 같은 규칙이다 — 항상 뜨는 항목이 아니라
+    /// 조건이 맞을 때만 나타난다.
     /// </para>
     /// <para>
     /// 단축키 글자는 <c>\t</c> 뒤에 붙는다 — 메뉴가 오른쪽에 정렬해 그린다. 둘 다 실물이다:
     /// <c>F2</c> 는 패널이, <c>Del</c> 은 창이 실제로 물고 있다.
     /// </para>
     /// </remarks>
-    public static IReadOnlyList<ShellMenuAppItem> AppItems(bool isDirectory)
+    public static IReadOnlyList<ShellMenuAppItem> AppItems(bool isDirectory, bool canCompareContent = false)
     {
-        var items = new List<ShellMenuAppItem>(5)
+        var items = new List<ShellMenuAppItem>(6)
         {
             new(ShellMenuAppCommand.RevealInExplorer, "탐색기에서 열기"),
             new(ShellMenuAppCommand.Rename, "이름 바꾸기\tF2"),
         };
+
+        if (!isDirectory && canCompareContent)
+        {
+            items.Add(new(ShellMenuAppCommand.CompareContent, "내용 비교"));
+        }
 
         if (isDirectory)
         {

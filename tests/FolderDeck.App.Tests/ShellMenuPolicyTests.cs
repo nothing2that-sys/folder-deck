@@ -101,11 +101,15 @@ public sealed class ShellMenuPolicyTests
         Assert.Equal(ShellMenuAppCommand.None, ShellMenuPolicy.ToAppCommand(0));
     }
 
-    /// <summary>대역 안이어도 우리가 넣지 않은 id 면 아무 커맨드도 부르지 않는다.</summary>
+    /// <summary>
+    /// 대역 안이어도 우리가 넣지 않은 id 면 아무 커맨드도 부르지 않는다. <c>0x16</c> 은
+    /// 예전에는 이 셋에 있었다 — <see cref="ShellMenuAppCommand.CompareContent"/> 로 배정된
+    /// 뒤(2026-09-18) <c>0x17</c> 로 옮겼다, 더는 "안 쓰는 id"가 아니라서.
+    /// </summary>
     [Theory]
     [InlineData(0x01u)]
     [InlineData(0x10u)]
-    [InlineData(0x16u)]
+    [InlineData(0x17u)]
     [InlineData(0x0FFFu)]
     public void UnknownAppBandIdRunsNothing(uint id)
     {
@@ -147,6 +151,55 @@ public sealed class ShellMenuPolicyTests
                 ShellMenuAppCommand.Trash,
             ],
             items.Select(i => i.Command));
+    }
+
+    // ── 내용 비교(기능 후보 ①의 연장, 2026-09-18) — canCompareContent ────────────
+
+    /// <summary>
+    /// 파일이고 비교 중 [다름]으로 표시됐을 때만(<c>canCompareContent: true</c>) 「내용
+    /// 비교」가 「이름 바꾸기」뒤·「휴지통으로 삭제」앞에 끼어든다.
+    /// </summary>
+    [Fact]
+    public void FileGetsCompareContentItemWhenRequested()
+    {
+        var items = ShellMenuPolicy.AppItems(isDirectory: false, canCompareContent: true);
+
+        Assert.Equal(
+            [
+                ShellMenuAppCommand.RevealInExplorer,
+                ShellMenuAppCommand.Rename,
+                ShellMenuAppCommand.CompareContent,
+                ShellMenuAppCommand.Trash,
+            ],
+            items.Select(i => i.Command));
+    }
+
+    /// <summary>기본값(canCompareContent 생략)은 지금까지와 같다 — 기존 호출부를 깨지 않는다.</summary>
+    [Fact]
+    public void CompareContentDefaultsToOff()
+    {
+        var items = ShellMenuPolicy.AppItems(isDirectory: false);
+
+        Assert.DoesNotContain(items, i => i.Command == ShellMenuAppCommand.CompareContent);
+    }
+
+    /// <summary>폴더에는 뜻이 없다 — canCompareContent 를 true 로 줘도 넣지 않는다.</summary>
+    [Fact]
+    public void DirectoryNeverGetsCompareContentEvenWhenRequested()
+    {
+        var items = ShellMenuPolicy.AppItems(isDirectory: true, canCompareContent: true);
+
+        Assert.DoesNotContain(items, i => i.Command == ShellMenuAppCommand.CompareContent);
+    }
+
+    /// <summary>새 항목의 id 도 셸 대역 아래다.</summary>
+    [Fact]
+    public void CompareContentIdIsAlsoBelowTheShellBand()
+    {
+        var item = ShellMenuPolicy.AppItems(isDirectory: false, canCompareContent: true)
+            .Single(i => i.Command == ShellMenuAppCommand.CompareContent);
+
+        Assert.Equal(item.Command, ShellMenuPolicy.ToAppCommand((uint)item.Command));
     }
 
     /// <summary>

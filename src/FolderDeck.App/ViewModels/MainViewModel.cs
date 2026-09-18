@@ -3106,6 +3106,64 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         ComparePeerB = null;
     }
 
+    /// <summary>
+    /// 비교 중인 <paramref name="item"/>의 상대 타일에서 같은 이름의 파일을 찾는다 — 우클릭
+    /// 「내용 비교」(기능 후보 ①의 연장)가 쓴다. 파일 읽기·diff 계산·창 띄우기는 안 한다 —
+    /// 순수 조회만 떼어 시험 가능하게 뒀다(<see cref="FindDuplicateGroups"/>와 같은 이유).
+    /// 비교가 안 걸려 있거나, <paramref name="panel"/>이 비교 어느 쪽도 아니거나, 상대에
+    /// 같은 이름의 파일이 없으면 <c>null</c>이다.
+    /// </summary>
+    public FileItemViewModel? FindCompareCounterpart(FolderPanelViewModel panel, FileItemViewModel item)
+    {
+        var tile = Tiles.FirstOrDefault(t => ReferenceEquals(t.Panel, panel));
+        if (tile is null)
+        {
+            return null;
+        }
+
+        var peer = ReferenceEquals(tile, ComparePeerA) ? ComparePeerB
+            : ReferenceEquals(tile, ComparePeerB) ? ComparePeerA
+            : null;
+
+        return peer?.Panel.Items.FirstOrDefault(i =>
+            !i.IsDirectory && string.Equals(i.Name, item.Name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary><see cref="FolderPanelViewModel.CompareContentRequested"/> 통로 — 우클릭 「내용 비교」.</summary>
+    private void OnCompareContentRequested(FolderPanelViewModel panel, FileItemViewModel item)
+    {
+        var counterpart = FindCompareCounterpart(panel, item);
+        if (counterpart is null)
+        {
+            Inform("상대 타일에서 같은 이름의 파일을 더는 못 찾았다 — 비교가 갱신됐을 수 있다");
+            return;
+        }
+
+        var (leftText, leftError) = FileContentReader.TryReadText(item.FullPath);
+        if (leftError is not null)
+        {
+            Inform(leftError);
+            return;
+        }
+
+        var (rightText, rightError) = FileContentReader.TryReadText(counterpart.FullPath);
+        if (rightError is not null)
+        {
+            Inform(rightError);
+            return;
+        }
+
+        var tile = Tiles.FirstOrDefault(t => ReferenceEquals(t.Panel, panel));
+        var peerTile = ReferenceEquals(tile, ComparePeerA) ? ComparePeerB : ComparePeerA;
+
+        var diff = FileContentDiffer.Diff(leftText!, rightText!);
+        var window = new ContentDiffWindow(item.Name, tile?.EditLabel ?? "?", peerTile?.EditLabel ?? "?", diff)
+        {
+            Owner = Application.Current?.MainWindow is { IsLoaded: true } owner ? owner : null,
+        };
+        window.Show();
+    }
+
     // ── 워크스페이스 내 중복 파일 찾기(기능 후보 ②, 2026-09-18 설계,
     // doc/FeatureCandidates_2026-09-18_design.md §②) ────────────────────────
 
@@ -3453,6 +3511,11 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             // Ctrl+D 타일 비교가 닿을 통로(기능 후보 ①, 2026-09-18 설계). 패널은 자기가
             // 어느 타일인지, 다른 타일이 뭐가 있는지 모른다 — 여기서 Tiles 를 뒤져 찾는다.
             CompareRequested = OnCompareRequested,
+
+            // 우클릭 「내용 비교」가 닿을 통로(기능 후보 ①의 연장, 2026-09-18). 셸 메뉴가
+            // 이미 [다름]으로 표시된 행에만 이 항목을 끼우므로(ShellMenuPolicy.AppItems),
+            // 여기서 다시 CompareStatus 를 확인하지 않는다.
+            CompareContentRequested = OnCompareContentRequested,
 
             // Ctrl+F2 배치 리네임이 닿을 통로(기능 후보 ③, 2026-09-18 설계). 규칙 계산·
             // 미리보기·실행·새로고침이 전부 여기 너머에서 일어난다 — 패널은 자기 선택만 안다.

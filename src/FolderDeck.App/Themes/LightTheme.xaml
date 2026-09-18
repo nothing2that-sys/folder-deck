@@ -58,6 +58,13 @@
     <SolidColorBrush x:Key="Brush.Danger" Color="#C62828" />
     <SolidColorBrush x:Key="Brush.DangerSurface" Color="#FDECEA" />
 
+    <!-- ── 내용 비교(기능 후보 ①의 연장, 2026-09-18) — 추가/변경 표시.
+         삭제는 위 DangerSurface 를 그대로 쓴다(새 키를 안 만든다). WarningSurface 는 위
+         PinnedSurface(#FFF6E0)와 색이 거의 같아 보이지만 우연이다 — 둘 다 "황토색 계열
+         옅은 배경"일 뿐 뜻은 다르다(하나는 타일 고정, 하나는 줄 변경), 그래서 별개 키다. -->
+    <SolidColorBrush x:Key="Brush.SuccessSurface" Color="#E6F4EA" />
+    <SolidColorBrush x:Key="Brush.WarningSurface" Color="#FFF3CD" />
+
     <!-- ── 상호작용 ──
              RowActive 는 위 RotatingSurface 와 값이 같지만 별개 키다(위 주석 참고). -->
     <SolidColorBrush x:Key="Brush.RowHover" Color="#EAF1FB" />
