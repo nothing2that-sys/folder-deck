@@ -1,5 +1,6 @@
 using FolderDeck.App.Services;
 using FolderDeck.Core.Models;
+using FolderDeck.Core.Renaming;
 using FolderDeck.Core.Storage;
 
 namespace FolderDeck.App.Tests;
@@ -78,6 +79,36 @@ internal sealed class FakeUserPrompt : IUserPrompt
         NamesAsked.Add(current);
         AcceptButtonTextsAsked.Add(acceptButtonText);
         return NameAnswer;
+    }
+
+    // ── 여럿 중 하나 고르기(기능 후보 ① 타일 비교, 2026-09-18) ─────────────────
+
+    /// <summary>창이 돌려줄 자리. <b>null 이면 취소</b> — 기본은 취소다(위 NameAnswer 와 같은 이유).</summary>
+    public int? PickAnswer { get; set; }
+
+    /// <summary>창이 뜰 때마다 받은 옵션 목록 — 무엇 중에서 고르라고 물었는지 확인용.</summary>
+    public List<IReadOnlyList<string>> PickOptionsAsked { get; } = [];
+
+    public int? PickOne(string title, string message, IReadOnlyList<string> options)
+    {
+        PickOptionsAsked.Add(options);
+        return PickAnswer;
+    }
+
+    // ── 배치 리네임(기능 후보 ③, 2026-09-18) ────────────────────────────────
+
+    /// <summary>창이 돌려줄 계획. <b>null 이면 취소</b> — 기본은 취소다.</summary>
+    public IReadOnlyList<RenamePreviewRow>? BatchRenameAnswer { get; set; }
+
+    /// <summary>창이 뜰 때마다 받은 (원래 이름들, 배치 밖 다른 이름들) — 무엇을 물었는지 확인용.</summary>
+    public List<(IReadOnlyList<string> OriginalNames, IReadOnlyCollection<string> OtherExistingNames)>
+        BatchRenameAsked { get; } = [];
+
+    public IReadOnlyList<RenamePreviewRow>? PlanBatchRename(
+        IReadOnlyList<string> originalNames, IReadOnlyCollection<string> otherExistingNames)
+    {
+        BatchRenameAsked.Add((originalNames, otherExistingNames));
+        return BatchRenameAnswer;
     }
 }
 

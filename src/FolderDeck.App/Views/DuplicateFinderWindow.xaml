@@ -1,0 +1,29 @@
+<Window x:Class="FolderDeck.App.Views.DuplicateFinderWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="중복 파일 찾기"
+        Width="640" Height="480"
+        Background="{StaticResource Brush.Chrome}"
+        FontFamily="Segoe UI" FontSize="12"
+        Foreground="{StaticResource Brush.TextPrimary}">
+
+    <!--
+        워크스페이스 내 중복 파일 찾기(기능 후보 ②, 2026-09-18 설계,
+        doc/FeatureCandidates_2026-09-18_design.md §②). 비모달이다 — 결과를 보면서 타일도
+        계속 써야 한다(RenameDialog·ConflictDialog·BatchRenameDialog 와 달리 Owner 를
+        blocking 하지 않는다, ShowDialog 가 아니라 Show 로 연다).
+
+        그룹핑은 전부 순수 함수(FolderDeck.Core.Comparison.DuplicateFinder)가 한다 — 이
+        창은 결과를 보여주고, 항목을 더블클릭하면 탐색기로 여는 것(기존
+        IShellLauncher.RevealInExplorer 재사용)까지만 한다. 실제 삭제·정리는 V1 비목표라
+        — 사용자가 탐색기에서 직접 하거나 이 앱의 기존 파일 조작으로 한다.
+    -->
+    <DockPanel Margin="14">
+        <TextBlock x:Name="SummaryText" DockPanel.Dock="Top" Margin="0,0,0,10"
+                   TextWrapping="Wrap" Foreground="{StaticResource Brush.TextSecondary}" />
+        <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap"
+                   FontSize="11" Foreground="{StaticResource Brush.TextSecondary}"
+                   Text="더블클릭하면 탐색기에서 그 파일을 연다. 이름+크기만 본 후보다 — 내용까지 같은지는 안 쟀다." />
+        <TreeView x:Name="ResultTree" />
+    </DockPanel>
+</Window>

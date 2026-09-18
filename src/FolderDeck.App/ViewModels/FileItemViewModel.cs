@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using FolderDeck.App.Services;
+using FolderDeck.Core.Comparison;
 using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Models;
 
@@ -203,6 +204,15 @@ public sealed partial class FileItemViewModel(
             return TryGetCustomGlyph(out var glyph) ? glyph : "📄";
         }
     }
+
+    /// <summary>
+    /// 타일 간 비교(기능 후보 ①, 2026-09-18 설계)의 판정. 비교가 안 걸려 있으면
+    /// <see cref="CompareStatus.Unset"/>(기본값) — 배지를 그리는 쪽이 이 값으로 표시 여부를
+    /// 정한다. <see cref="MainViewModel"/> 이 비교를 걸거나 풀 때만 바뀐다 — 이 항목 자체는
+    /// 자기가 비교 중인지 모른다.
+    /// </summary>
+    [ObservableProperty]
+    private CompareStatus compareStatus = CompareStatus.Unset;
 
     /// <summary>폴더는 비워 둔다 — 재귀 계산하지 않는다.</summary>
     public string SizeText => Item.IsDirectory ? string.Empty : Humanize(Item.Size);

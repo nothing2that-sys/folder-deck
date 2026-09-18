@@ -8,12 +8,15 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FolderDeck.App.Interop;
 using FolderDeck.App.Services;
+using FolderDeck.App.Views;
 using FolderDeck.App.Watching;
+using FolderDeck.Core.Comparison;
 using FolderDeck.Core.Enumeration;
 using FolderDeck.Core.Layout;
 using FolderDeck.Core.Models;
 using FolderDeck.Core.Operations;
 using FolderDeck.Core.Paths;
+using FolderDeck.Core.Renaming;
 using FolderDeck.Core.Storage;
 
 namespace FolderDeck.App.ViewModels;
@@ -647,6 +650,13 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         Tiles.Remove(tile);
         tile.Panel.Clear();
         DetachWatcher(tile);
+
+        // 비교 중이던 타일이 사라지면 비교를 통째로 푼다 — 남은 쪽에 낡은 배지도, 사라진
+        // 타일을 가리키는 참조도 남기지 않는다(기능 후보 ①).
+        if (ReferenceEquals(tile, ComparePeerA) || ReferenceEquals(tile, ComparePeerB))
+        {
+            ClearCompare();
+        }
 
         var orphans = removedIndex is null ? 0 : DemoteFoldersTo(removedIndex.Value, 1);
 
@@ -2968,6 +2978,168 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     private string? PromptNewFolderName(string suggested) =>
         _prompt.AskName("새 폴더 만들기", "새 폴더의 이름을 적어라.", suggested, "만들기");
 
+    // ── 타일 간 비교(기능 후보 ①, 2026-09-18 설계,
+    // doc/FeatureCandidates_2026-09-18_design.md §①) ────────────────────────
+    //
+    // 비교 대상 지정은 SelectionOwner(§4.8, 위)와 완전히 별개 축이다 — 파일 선택은 복사/이동
+    // 파이프라인이 유일한 소스로 읽는 안전 불변이라(§905 Selection), 여기에 얹으면 그 불변이
+    // 깨진다. 실시간 자동 갱신은 없다(설계 문서 비목표) — 대신 어느 한쪽 패널이 다시 읽히면
+    // (LoadCompleted) 낡은 배지를 남기지 않고 비교를 통째로 푼다.
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsComparing))]
+    private TileViewModel? comparePeerA;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsComparing))]
+    private TileViewModel? comparePeerB;
+
+    public bool IsComparing => ComparePeerA is not null && ComparePeerB is not null;
+
+    private EventHandler? _compareInvalidationHandler;
+
+    /// <summary><see cref="FolderPanelViewModel.CompareRequested"/> 통로 — Ctrl+D.</summary>
+    private void OnCompareRequested(FolderPanelViewModel panel)
+    {
+        var tile = Tiles.FirstOrDefault(t => ReferenceEquals(t.Panel, panel));
+        if (tile is null)
+        {
+            return;
+        }
+
+        if (tile.IsSearch)
+        {
+            Warn("검색 타일은 비교 대상이 아니다 — 폴더 하나가 아니다.", transient: true);
+            return;
+        }
+
+        // 이미 이 타일이 낀 비교라면 다시 누른 것은 "끄기"다 — 토글.
+        if (IsComparing && (ReferenceEquals(tile, ComparePeerA) || ReferenceEquals(tile, ComparePeerB)))
+        {
+            ClearCompare();
+            return;
+        }
+
+        var candidates = Tiles
+            .Where(t => !ReferenceEquals(t, tile) && !t.IsSearch && t.Panel.CurrentPath is not null)
+            .ToList();
+
+        if (candidates.Count == 0)
+        {
+            Warn("비교할 다른 타일이 없다 — 폴더가 열린 타일이 이것 하나뿐이다.", transient: true);
+            return;
+        }
+
+        var picked = _prompt.PickOne(
+            "타일 비교", "어느 타일과 비교할까?", candidates.Select(t => t.EditLabel).ToList());
+
+        if (picked is { } index)
+        {
+            RunCompare(tile, candidates[index]);
+        }
+    }
+
+    private void RunCompare(TileViewModel a, TileViewModel b)
+    {
+        ClearCompare();
+
+        var (leftEntries, rightEntries) = TileComparer.Compare(
+            [.. a.Panel.Items.Select(i => i.Item)],
+            [.. b.Panel.Items.Select(i => i.Item)]);
+        ApplyCompareBadges(a.Panel.Items, leftEntries);
+        ApplyCompareBadges(b.Panel.Items, rightEntries);
+
+        ComparePeerA = a;
+        ComparePeerB = b;
+
+        _compareInvalidationHandler = (_, _) => ClearCompare();
+        a.Panel.LoadCompleted += _compareInvalidationHandler;
+        b.Panel.LoadCompleted += _compareInvalidationHandler;
+
+        Inform($"비교 시작 — {a.EditLabel} ↔ {b.EditLabel}");
+    }
+
+    private static void ApplyCompareBadges(
+        IReadOnlyList<FileItemViewModel> items, IReadOnlyList<CompareEntry> entries)
+    {
+        var statusByPath = entries.ToDictionary(
+            entry => entry.Item.FullPath, entry => entry.Status, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in items)
+        {
+            item.CompareStatus = statusByPath.GetValueOrDefault(item.FullPath, CompareStatus.Unset);
+        }
+    }
+
+    /// <summary>비교를 풀고 양쪽 배지를 지운다. 둘 중 하나가 다시 읽히면(낡은 배지 방지) 자동으로도 불린다.</summary>
+    [RelayCommand]
+    private void ClearCompare()
+    {
+        if (ComparePeerA is not null)
+        {
+            foreach (var item in ComparePeerA.Panel.Items)
+            {
+                item.CompareStatus = CompareStatus.Unset;
+            }
+
+            if (_compareInvalidationHandler is not null)
+            {
+                ComparePeerA.Panel.LoadCompleted -= _compareInvalidationHandler;
+            }
+        }
+
+        if (ComparePeerB is not null)
+        {
+            foreach (var item in ComparePeerB.Panel.Items)
+            {
+                item.CompareStatus = CompareStatus.Unset;
+            }
+
+            if (_compareInvalidationHandler is not null)
+            {
+                ComparePeerB.Panel.LoadCompleted -= _compareInvalidationHandler;
+            }
+        }
+
+        _compareInvalidationHandler = null;
+        ComparePeerA = null;
+        ComparePeerB = null;
+    }
+
+    // ── 워크스페이스 내 중복 파일 찾기(기능 후보 ②, 2026-09-18 설계,
+    // doc/FeatureCandidates_2026-09-18_design.md §②) ────────────────────────
+
+    /// <summary>
+    /// 지금 열린 모든 타일에서 이름+크기가 같은 후보 중복을 찾는다. 순수 계산만 떼어
+    /// 시험 가능하게 뒀다 — 실제 창을 여는 것은 <see cref="FindDuplicates"/> 몫이다.
+    /// </summary>
+    public IReadOnlyList<DuplicateGroup> FindDuplicateGroups()
+    {
+        var entries = Panels.SelectMany(panel =>
+        {
+            var label = Tiles.FirstOrDefault(t => ReferenceEquals(t.Panel, panel))?.EditLabel ?? "?";
+            return panel.Items.Select(item => (TileLabel: label, item.Item));
+        });
+
+        return DuplicateFinder.FindGroups(entries);
+    }
+
+    /// <summary>
+    /// 툴바 「중복 찾기」가 닿을 통로. 비모달 창을 연다 — 결과를 보면서 타일도 계속 써야
+    /// 한다(§②). 항목 더블클릭이 쓰는 <see cref="IShellLauncher.RevealInExplorer"/> 는
+    /// 「탐색기에서 열기」와 같은 기존 통로다.
+    /// </summary>
+    [RelayCommand]
+    private void FindDuplicates()
+    {
+        var groups = FindDuplicateGroups();
+        var window = new DuplicateFinderWindow(groups, path => _shell.RevealInExplorer(path, isDirectory: false))
+        {
+            Owner = Application.Current?.MainWindow is { IsLoaded: true } owner ? owner : null,
+        };
+        window.Show();
+    }
+
     private string? RenameFromItem(FileItemViewModel item)
     {
         var oldPath = FolderPathRules.Normalize(item.FullPath);
@@ -2992,6 +3164,23 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             return null;
         }
 
+        return TryRenameLeafOnDisk(item, oldPath, parent, oldLeaf, typed).NewPath;
+    }
+
+    /// <summary>
+    /// 이름 하나를 실제로 바꾸는 바닥짐 — 검증(<see cref="FolderPathRules"/>)·제자리 판정·
+    /// 겹침 확인·<c>Directory</c>/<c>File.Move</c>·앵커 갱신까지. 대화상자에서 받은 이름이든
+    /// (<see cref="RenameFromItem"/>) 배치 규칙이 계산한 이름이든
+    /// (<see cref="ExecuteBatchRename"/>, 기능 후보 ③) 여기 하나로 모인다 — 검증·실행 로직이
+    /// 두 곳으로 갈라지면 조용히 어긋난다(D4 와 같은 이유).
+    /// </summary>
+    /// <returns>
+    /// 성공하면 <c>(새 경로, null)</c>. 실패(제자리 포함)면 <c>(null, 이유)</c> — 제자리는
+    /// 실패가 아니라 <c>이유</c> 도 <c>null</c> 이다.
+    /// </returns>
+    private (string? NewPath, string? FailureReason) TryRenameLeafOnDisk(
+        FileItemViewModel item, string oldPath, string parent, string oldLeaf, string typed)
+    {
         // 끝 공백은 Windows 가 말없이 깎으므로 먼저 깎아 판정에 올린다 — 공백만 적은 것은
         // 그 결과 "빈 이름"으로 거절된다.
         var leaf = typed.Trim();
@@ -2999,14 +3188,14 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         if (FolderPathRules.RejectLeafName(leaf) is { } reason)
         {
             Warn($"이름을 바꾸지 못했다 — {reason}", transient: true);
-            return null;
+            return (null, reason);
         }
 
         // 제자리 이름은 할 일이 없다. 대소문자만 바꾸는 것(a → A)은 여기를 지나 Move 로 간다 —
         // 같은 파일이므로 아래 "이미 있다" 검사도 PathsEqual 로 비켜 준다.
         if (string.Equals(leaf, oldLeaf, StringComparison.Ordinal))
         {
-            return null;
+            return (null, null);
         }
 
         var newPath = System.IO.Path.Combine(parent, leaf);
@@ -3014,8 +3203,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         if (!PathsEqual(oldPath, newPath)
             && (System.IO.Directory.Exists(newPath) || System.IO.File.Exists(newPath)))
         {
-            Warn($"이름을 바꾸지 못했다 — 같은 이름이 이미 있다: {leaf}", transient: true);
-            return null;
+            var conflictReason = $"같은 이름이 이미 있다: {leaf}";
+            Warn($"이름을 바꾸지 못했다 — {conflictReason}", transient: true);
+            return (null, conflictReason);
         }
 
         try
@@ -3035,11 +3225,92 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         {
             // 삼키지 않는다. 실패는 <b>남는</b> 경고다 — 화면이 스스로 답을 보여 주지 않는다.
             Warn($"이름을 바꾸지 못했다: {oldLeaf} — {ex.Message}");
-            return null;
+            return (null, ex.Message);
         }
 
         UpdateAnchorAfterRename(oldPath, newPath, leaf, oldLeaf);
-        return newPath;
+        return (newPath, null);
+    }
+
+    // ── 배치 리네임(기능 후보 ③, 2026-09-18 설계,
+    // doc/FeatureCandidates_2026-09-18_design.md §③) ────────────────────────
+
+    /// <summary><see cref="FolderPanelViewModel.BatchRenameRequested"/> 통로 — Ctrl+F2.</summary>
+    private async Task OnBatchRenameRequestedAsync(FolderPanelViewModel panel)
+    {
+        var selected = panel.SelectedItems;
+        if (selected.Count == 0)
+        {
+            return;
+        }
+
+        var selectedNames = new HashSet<string>(
+            selected.Select(i => i.Name), StringComparer.OrdinalIgnoreCase);
+        var otherNames = panel.Items
+            .Select(i => i.Name)
+            .Where(name => !selectedNames.Contains(name))
+            .ToList();
+
+        if (_prompt.PlanBatchRename(selected.Select(i => i.Name).ToList(), otherNames) is not { } rows)
+        {
+            return;
+        }
+
+        ExecuteBatchRename(selected, rows);
+        await panel.RefreshAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 항목별로 <see cref="TryRenameLeafOnDisk"/> 를 반복 호출한다 — 부분 실패가 기본이다
+    /// (<see cref="IFileOperationEngine"/> 과 같은 관례, <c>doc/
+    /// FeatureCandidates_2026-09-18_design.md</c> §③). 하나 실패해도 나머지는 계속한다.
+    /// </summary>
+    private void ExecuteBatchRename(
+        IReadOnlyList<FileItemViewModel> selected, IReadOnlyList<RenamePreviewRow> rows)
+    {
+        var succeeded = 0;
+        var failures = new List<string>();
+
+        for (var index = 0; index < selected.Count; index++)
+        {
+            var row = rows[index];
+            if (row.IsUnchanged)
+            {
+                continue;
+            }
+
+            var item = selected[index];
+            var oldPath = FolderPathRules.Normalize(item.FullPath);
+            var oldLeaf = FolderPathRules.LeafName(oldPath);
+
+            if (System.IO.Path.GetDirectoryName(oldPath) is not { Length: > 0 } parent)
+            {
+                failures.Add($"{oldLeaf} — 드라이브 루트라 이름을 바꿀 수 없다");
+                continue;
+            }
+
+            var (newPath, failureReason) = TryRenameLeafOnDisk(item, oldPath, parent, oldLeaf, row.NewName);
+            if (newPath is not null)
+            {
+                succeeded++;
+            }
+            else if (failureReason is not null)
+            {
+                failures.Add($"{oldLeaf} — {failureReason}");
+            }
+        }
+
+        if (failures.Count == 0)
+        {
+            Inform($"일괄 이름 바꾸기 — {succeeded}개 바꿨다.");
+        }
+        else
+        {
+            // 부분 실패 내역은 상태 바 한 줄에 못 담는다 — Report 로(§5 와 같은 이유).
+            _prompt.Report(
+                "일괄 이름 바꾸기 결과",
+                $"{succeeded}개 바꿨다, {failures.Count}개 실패:\n" + string.Join("\n", failures));
+        }
     }
 
     /// <summary>
@@ -3178,6 +3449,14 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             // 항목 우클릭 「이름 바꾸기」와 F2 가 닿을 통로 (§4.6 309행 · D12~D15). 확인창과
             // folders[] 를 아는 쪽이 여기다 — 패널은 둘 다 모른다.
             RenameOnDisk = RenameFromItem,
+
+            // Ctrl+D 타일 비교가 닿을 통로(기능 후보 ①, 2026-09-18 설계). 패널은 자기가
+            // 어느 타일인지, 다른 타일이 뭐가 있는지 모른다 — 여기서 Tiles 를 뒤져 찾는다.
+            CompareRequested = OnCompareRequested,
+
+            // Ctrl+F2 배치 리네임이 닿을 통로(기능 후보 ③, 2026-09-18 설계). 규칙 계산·
+            // 미리보기·실행·새로고침이 전부 여기 너머에서 일어난다 — 패널은 자기 선택만 안다.
+            BatchRenameRequested = OnBatchRenameRequestedAsync,
 
             // 붙여넣기(Ctrl+V · breadcrumb 우클릭)가 닿을 통로 (§4.6 330~336행 · A군 ③ C-2).
             // 클립보드를 읽고 판정하고 엔진에 얹는 일은 전부 이쪽이다 — 패널은 목적지만 안다.

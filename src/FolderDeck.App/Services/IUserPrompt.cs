@@ -1,6 +1,7 @@
 using System.Windows;
 using FolderDeck.App.Views;
 using FolderDeck.Core.Models;
+using FolderDeck.Core.Renaming;
 
 namespace FolderDeck.App.Services;
 
@@ -50,6 +51,29 @@ public interface IUserPrompt
     /// <param name="current">미리 채워 둘 지금 이름.</param>
     /// <param name="acceptButtonText">확인 버튼에 그릴 문구(예: "바꾸기"·"만들기").</param>
     string? AskName(string title, string message, string current, string acceptButtonText);
+
+    /// <summary>
+    /// 여럿 중 하나를 고르게 한다(기능 후보 ① 타일 비교, 2026-09-18 설계). <b>취소면
+    /// <c>null</c></b>, 고르면 <paramref name="options"/> 의 자리(0부터)를 돌려준다.
+    /// </summary>
+    /// <remarks>
+    /// 무엇을 고르는지는 부르는 쪽이 안다 — 이 메서드는 글자 목록만 본다. 고른 자리로
+    /// 실제 대상을 찾는 것은 <paramref name="options"/> 를 만든 쪽
+    /// (<see cref="FolderDeck.App.ViewModels.MainViewModel"/>)의 몫이다 — <c>ViewModels</c>
+    /// 층의 타입(<c>TileViewModel</c> 등)을 이 인터페이스가 몰라도 되게 한다.
+    /// </remarks>
+    int? PickOne(string title, string message, IReadOnlyList<string> options);
+
+    /// <summary>
+    /// 배치 리네임 규칙을 고르고 미리보기를 확정 짓는다(기능 후보 ③, 2026-09-18 설계).
+    /// <b>취소하거나 충돌·무효한 이름이 남은 채로는 확정할 수 없다</b> — 실행 가능한 계획만
+    /// 돌아온다. 실제 이름 변환 계산은 <see cref="BatchRenamePlanner"/>(순수 함수)가 하고,
+    /// 이 메서드는 그 결과를 보여주고 확정만 받는다.
+    /// </summary>
+    /// <param name="originalNames">바꿀 항목들의 지금 이름.</param>
+    /// <param name="otherExistingNames">같은 폴더의 배치에 안 낀 다른 항목 이름들(충돌 판정용).</param>
+    IReadOnlyList<RenamePreviewRow>? PlanBatchRename(
+        IReadOnlyList<string> originalNames, IReadOnlyCollection<string> otherExistingNames);
 }
 
 /// <inheritdoc/>
@@ -87,6 +111,39 @@ public sealed class UserPrompt : IUserPrompt
     public string? AskName(string title, string message, string current, string acceptButtonText)
     {
         var dialog = new RenameDialog(title, message, current, acceptButtonText)
+        {
+            Owner = Application.Current?.MainWindow is { IsLoaded: true } owner ? owner : null,
+        };
+
+        if (dialog.Owner is null)
+        {
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
+
+        return dialog.ShowDialog() == true ? dialog.Result : null;
+    }
+
+    /// <inheritdoc/>
+    public int? PickOne(string title, string message, IReadOnlyList<string> options)
+    {
+        var dialog = new PickOneDialog(title, message, options)
+        {
+            Owner = Application.Current?.MainWindow is { IsLoaded: true } owner ? owner : null,
+        };
+
+        if (dialog.Owner is null)
+        {
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
+
+        return dialog.ShowDialog() == true ? dialog.PickedIndex : null;
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<RenamePreviewRow>? PlanBatchRename(
+        IReadOnlyList<string> originalNames, IReadOnlyCollection<string> otherExistingNames)
+    {
+        var dialog = new BatchRenameDialog(originalNames, otherExistingNames)
         {
             Owner = Application.Current?.MainWindow is { IsLoaded: true } owner ? owner : null,
         };

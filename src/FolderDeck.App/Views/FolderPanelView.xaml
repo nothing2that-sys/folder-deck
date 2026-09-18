@@ -5,6 +5,7 @@
              xmlns:v="clr-namespace:FolderDeck.App.Views"
              xmlns:interop="clr-namespace:FolderDeck.App.Interop"
              xmlns:models="clr-namespace:FolderDeck.Core.Models;assembly=FolderDeck.Core"
+             xmlns:comparison="clr-namespace:FolderDeck.Core.Comparison;assembly=FolderDeck.Core"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -33,6 +34,17 @@
              인자를 안 받는 RenameSelectionCommand 가 선택에서 대상을 뽑아 메뉴와 같은 경로로
              들어간다 — KeyBinding 에는 넘길 항목이 없다. -->
         <KeyBinding Key="F2" Command="{Binding RenameSelectionCommand}" />
+        <!-- 타일 비교 Ctrl+D (기능 후보 ①, 2026-09-18 설계). 헤더에 늘 보이는 아이콘을 더
+             넣지 않는다 — 290px 이상에서는 이미 꽉 찬 아이콘 열(WideOnlyNavButton, D117–D120
+             에서 다툰 자리)에 하나를 더 얹어야 하고 그 아래서는 "⋯" 메뉴(NarrowOnlyNavButton)
+             에 항목을 새로 넣어야 한다 — 어느 쪽 폭이든 항상 보이는 자리를 늘리는 셈이라,
+             F2/F5/Delete 처럼 키 바인딩만으로 둔다. -->
+        <KeyBinding Modifiers="Ctrl" Key="D" Command="{Binding StartCompareCommand}" />
+        <!-- 배치 이름 바꾸기 Ctrl+F2 (기능 후보 ③, 2026-09-18 설계). F2(RenameSelectionCommand)
+             는 여럿 고르면 거절하는 게 의도된 동작이라(위 RenameSelectionAsync) 그 경로를
+             안 건드리고 별도 커맨드로 둔다 — 위 비교와 같은 이유로 헤더 아이콘 없이 키
+             바인딩만. -->
+        <KeyBinding Modifiers="Ctrl" Key="F2" Command="{Binding BatchRenameSelectionCommand}" />
         <!-- 복사 Ctrl+C (§4.6 310행 · A군 ③ C-1). F2 와 같은 이유로 창이 아니라 여기다:
              대상이 "이 패널에서 고른 항목"이라 창에 물리면 어느 패널의 선택인지 가릴 수 없다.
              「경로 복사」(글자)와 다른 커맨드다 — 이쪽은 셸 파일 포맷을 싣는다. -->
@@ -214,6 +226,33 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
+        <!-- 타일 비교 배지(기능 후보 ①, 2026-09-18 설계). 같다(Same)·비교 안 걸림(Unset)은
+             아무것도 안 그린다 — "표시할 것 없음"이 자연스럽다. 목록/자세히 보기에서만
+             붙인다(이번 범위 — 큰 아이콘류는 안 건드림, 팔로업 보고서 §손 확인 참고). -->
+        <DataTemplate x:Key="CompareBadge">
+            <TextBlock Margin="6,0,0,0" FontWeight="Bold">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CompareStatus}"
+                                         Value="{x:Static comparison:CompareStatus.OnlyHere}">
+                                <Setter Property="Text" Value="[여기만]" />
+                                <Setter Property="Foreground" Value="{StaticResource Brush.Accent}" />
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding CompareStatus}"
+                                         Value="{x:Static comparison:CompareStatus.Different}">
+                                <Setter Property="Text" Value="[다름]" />
+                                <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </DataTemplate>
+
         <!-- 정렬되는 컬럼 머리 (Phase 8-B 1).
 
              GridViewColumn 은 시각 트리 밖이라 DataContext 를 물려받지 않는다 — 그래서
@@ -269,6 +308,7 @@
                         <StackPanel Orientation="Horizontal">
                             <ContentControl ContentTemplate="{StaticResource ItemIcon}" Content="{Binding}" />
                             <TextBlock Text="{Binding Name}" />
+                            <ContentControl ContentTemplate="{StaticResource CompareBadge}" Content="{Binding}" />
                         </StackPanel>
                     </DataTemplate>
                 </GridViewColumn.CellTemplate>
@@ -318,6 +358,7 @@
                         <StackPanel Orientation="Horizontal">
                             <ContentControl ContentTemplate="{StaticResource ItemIcon}" Content="{Binding}" />
                             <TextBlock Text="{Binding Name}" />
+                            <ContentControl ContentTemplate="{StaticResource CompareBadge}" Content="{Binding}" />
                         </StackPanel>
                     </DataTemplate>
                 </GridViewColumn.CellTemplate>

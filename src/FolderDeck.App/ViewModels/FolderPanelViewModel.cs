@@ -599,6 +599,24 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public Func<FileItemViewModel, string?>? RenameOnDisk { get; set; }
 
     /// <summary>
+    /// 타일 간 비교(기능 후보 ①, 2026-09-18 설계) — <c>Ctrl+D</c>가 닿을 통로. 패널은 다른
+    /// 타일이 뭐가 있는지, 지금 비교 중인지 모른다 — <see cref="RenameOnDisk"/> 와 같은 결로
+    /// 타일을 만들 때 걸어 준다. 인자는 <b>요청한 패널 자신</b>이다 — 어느 타일인지는
+    /// <see cref="MainViewModel"/> 이 <c>Tiles</c> 에서 찾는다(앵커 지정과 달리 패널 쪽에서
+    /// 자기 타일을 모른다).
+    /// </summary>
+    public Action<FolderPanelViewModel>? CompareRequested { get; set; }
+
+    /// <summary>
+    /// 배치 리네임(기능 후보 ③, 2026-09-18 설계) — <c>Ctrl+F2</c>가 닿을 통로. 대상은
+    /// <see cref="SelectedItems"/>(이 패널이 이미 안다) — <see cref="CompareRequested"/> 와
+    /// 달리 패널 자신을 넘길 필요만 있다(어느 항목을 바꿀지는 통로 너머가 <c>panel.SelectedItems</c>
+    /// 로 다시 읽는다). 실제 이름 변환 계산·<c>Move</c>·목록 새로고침은 전부 통로 너머
+    /// (<see cref="MainViewModel"/>)에서 일어난다 — <see cref="RenameOnDisk"/> 와 같은 결이다.
+    /// </summary>
+    public Func<FolderPanelViewModel, Task>? BatchRenameRequested { get; set; }
+
+    /// <summary>
     /// 붙여넣기가 닿을 통로 (§4.6 310행 · 330~336행 · A군 ③ C-2). 인자는 <b>붙여넣을 목적지</b>다.
     /// </summary>
     /// <remarks>
@@ -1656,6 +1674,31 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// <c>Ctrl+D</c> — 이 타일을 다른 타일과 비교한다(기능 후보 ①). 실제 판정·짝짓기는
+    /// <see cref="CompareRequested"/> 너머(<see cref="MainViewModel"/>)에서 일어난다 —
+    /// 이 패널은 자기가 어느 타일인지, 다른 타일이 뭐가 있는지 모른다.
+    /// </summary>
+    [RelayCommand]
+    private void StartCompare() => CompareRequested?.Invoke(this);
+
+    /// <summary>
+    /// <c>Ctrl+F2</c> — 지금 고른 항목들의 이름을 규칙으로 한꺼번에 바꾼다(기능 후보 ③).
+    /// F2(<see cref="RenameSelectionAsync"/>)와 달리 여럿을 요구한다 — 하지만 하나만 골라도
+    /// 거절하지 않는다(미리보기 표가 한 줄뿐일 때 실행해도 해될 게 없다). 아무것도 안
+    /// 고르면 F2 처럼 조용히 지난다.
+    /// </summary>
+    [RelayCommand]
+    private Task BatchRenameSelection()
+    {
+        if (SelectedItems.Count == 0 || BatchRenameRequested is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return BatchRenameRequested(this);
     }
 
     // ── 클립보드로 복사 (§4.6 310행 · A군 ③ C-1) ─────────────────────────────
