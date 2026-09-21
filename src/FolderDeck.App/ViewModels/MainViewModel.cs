@@ -3186,7 +3186,12 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         var peerTile = ReferenceEquals(tile, ComparePeerA) ? ComparePeerB : ComparePeerA;
 
         var diff = FileContentDiffer.Diff(leftText!, rightText!);
-        var window = new ContentDiffWindow(item.Name, tile?.EditLabel ?? "?", peerTile?.EditLabel ?? "?", diff)
+        var window = new ContentDiffWindow(
+            item.Name,
+            tile?.EditLabel ?? "?", item.FullPath,
+            peerTile?.EditLabel ?? "?", counterpart.FullPath,
+            diff,
+            path => _shell.Open(path))
         {
             Owner = Application.Current?.MainWindow is { IsLoaded: true } owner ? owner : null,
         };

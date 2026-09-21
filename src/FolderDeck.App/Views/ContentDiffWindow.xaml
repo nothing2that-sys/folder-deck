@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="내용 비교"
-        Width="900" Height="600"
+        Width="1000" Height="620"
         Background="{StaticResource Brush.Chrome}"
         FontFamily="Segoe UI" FontSize="12"
         Foreground="{StaticResource Brush.TextPrimary}">
@@ -16,99 +16,166 @@
         FileContentDiffer, DiffPlex 를 감싼다)가 하고, 이 창은 결과(Left/Right, 이미 같은
         길이로 정렬됨)를 나란히 그리기만 한다.
 
-        나란히(사이드바이사이드) 표시로 정했다(2026-09-18 대화) — WinMerge 스타일 2단, 왼쪽=
-        우클릭한 항목이 있는 타일, 오른쪽=비교 상대 타일.
+        2026-09-21 JH 재지적으로 다시 짰다 — "창이 두 개여야 할듯. 왼쪽/오른쪽이 각자
+        가로 스크롤, 세로는 공유. 위에 경로 표시. 창 크기에 맞춰 두 창 크기 조절되게.
+        전체 창엔 가로 스크롤 안 생기게." 그래서:
+        - 왼쪽·오른쪽은 각자 ScrollViewer(LeftScroll/RightScroll) — 가로는 독립.
+        - 세로는 code-behind(OnLeftScrollChanged/OnRightScrollChanged)가 서로 맞춘다 —
+          하나가 세로로 움직이면 반대쪽도 같은 오프셋으로 맞추고, 가로 오프셋은 안 건드린다.
+          세로 막대는 어차피 같이 움직이므로 왼쪽 것 하나만 보인다(JH 재지적, 09-21 —
+          "이럴거면 스크롤바는 하나만 두는 게 낫지 않나, 가운데 하나만") — 오른쪽은
+          VerticalScrollBarVisibility="Hidden" 이라 막대만 없고 휠 스크롤은 그대로 된다.
+          왼쪽 막대가 스플리터 바로 옆이라 시각적으로 두 판 "가운데"에 선다.
+        - 가운데 GridSplitter 로 폭을 조절한다. 이 Grid 하나에 헤더 행·본문 행이 같은
+          ColumnDefinitions 를 쓰므로 스플리터를 끌면 헤더도 같이 따라간다.
+        - 바깥 Window/DockPanel 은 어디에도 가로 스크롤이 없다 — 왼쪽·오른쪽 열은 둘 다
+          `*` 폭이라 창 폭에 맞춰 나뉘고, 넘치는 내용은 각자 안쪽 ScrollViewer 가 맡는다.
 
-        바뀐(Modified) 줄은 줄 전체를 노랗게 칠하지 않는다(2026-09-21 JH 지적 — "노란색으로만
+        바뀐(Modified) 줄은 줄 전체를 노랗게 칠하지 않는다(JH 지적 — "노란색으로만
         표시되면 뭐가 다른지 확인이 안 된다") — DiffPlex 의 단어 단위 하위 diff(SubPieces)를
         받아 실제로 바뀐 단어 토막만 노랗게 칠한다(FolderDeck.Core.Comparison.ContentDiffSpan,
-        ContentDiffWindow.xaml.cs 의 SpansFor). 완전히 지워지거나(Deleted)/생긴(Inserted) 줄은
-        토막을 안 나누고 줄 전체를 칠한다 — 그 둘은 줄 전체가 그 뜻이다.
+        ContentDiffWindow.xaml.cs 의 SpansFor). 완전히 지워지거나(Deleted)/생긴(Inserted)
+        줄은 토막을 안 나누고 줄 전체를 칠한다 — 그 둘은 줄 전체가 그 뜻이다.
     -->
     <DockPanel Margin="14">
         <TextBlock x:Name="SummaryText" DockPanel.Dock="Top" Margin="0,0,0,8"
                    TextWrapping="Wrap" Foreground="{StaticResource Brush.TextSecondary}" />
-
-        <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="4" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <TextBlock x:Name="LeftHeaderText" Grid.Column="0" FontWeight="SemiBold" />
-            <TextBlock x:Name="RightHeaderText" Grid.Column="2" FontWeight="SemiBold" />
-        </Grid>
+        <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap"
+                   FontSize="11" Foreground="{StaticResource Brush.TextSecondary}"
+                   Text="줄마다 옆에 나란히 놓았다 — 왼쪽/오른쪽은 각자 가로로 스크롤된다(위아래는 같이 움직인다). 이름+크기만 본 후보다 — 내용까지 같은지는 안 쟀다." />
 
         <Border BorderBrush="{StaticResource Brush.Border}" BorderThickness="1">
-            <ListView x:Name="RowList" BorderThickness="0" Background="Transparent"
-                      ScrollViewer.HorizontalScrollBarVisibility="Auto">
-                <ListView.ItemContainerStyle>
-                    <Style TargetType="ListViewItem">
-                        <Setter Property="Padding" Value="0" />
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                        <Setter Property="Focusable" Value="False" />
-                    </Style>
-                </ListView.ItemContainerStyle>
-                <ListView.ItemTemplate>
-                    <DataTemplate>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="4" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="120" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="*" MinWidth="120" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-                            <Border Grid.Column="0" Background="{Binding LeftLineBackground}">
-                                <DockPanel Margin="4,1">
-                                    <TextBlock DockPanel.Dock="Left" Text="{Binding LeftNumber}"
-                                               Width="40" TextAlignment="Right" Margin="0,0,8,0"
-                                               FontFamily="Consolas" FontSize="11"
-                                               Foreground="{StaticResource Brush.TextSecondary}" />
-                                    <ItemsControl ItemsSource="{Binding LeftSpans}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <StackPanel Orientation="Horizontal" />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Text}"
-                                                           Background="{Binding Background}"
-                                                           FontFamily="Consolas" FontSize="12"
-                                                           TextWrapping="NoWrap" />
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </DockPanel>
-                            </Border>
+                <!-- 경로 헤더 둘 — 스크롤과 무관하게 늘 보인다(본문과 다른 행이라). 누르면
+                     그 파일이 OS 기본 프로그램으로 열린다(2026-09-21 JH 요청) — 커서를
+                     손 모양으로, 마우스를 올리면 밑줄이 붙어 누를 수 있는 자리임을 알린다. -->
+                <Border Grid.Row="0" Grid.Column="0" Background="{StaticResource Brush.GridCellSurface}"
+                        Padding="6,4">
+                    <TextBlock x:Name="LeftHeaderText" FontWeight="SemiBold" Cursor="Hand"
+                               TextTrimming="CharacterEllipsis"
+                               MouseLeftButtonUp="OnLeftHeaderClick">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="TextDecorations" Value="Underline" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Border>
+                <Border Grid.Row="0" Grid.Column="2" Background="{StaticResource Brush.GridCellSurface}"
+                        Padding="6,4">
+                    <TextBlock x:Name="RightHeaderText" FontWeight="SemiBold" Cursor="Hand"
+                               TextTrimming="CharacterEllipsis"
+                               MouseLeftButtonUp="OnRightHeaderClick">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="TextDecorations" Value="Underline" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Border>
 
-                            <Border Grid.Column="2" Background="{Binding RightLineBackground}">
-                                <DockPanel Margin="4,1">
-                                    <TextBlock DockPanel.Dock="Left" Text="{Binding RightNumber}"
-                                               Width="40" TextAlignment="Right" Margin="0,0,8,0"
-                                               FontFamily="Consolas" FontSize="11"
-                                               Foreground="{StaticResource Brush.TextSecondary}" />
-                                    <ItemsControl ItemsSource="{Binding RightSpans}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <StackPanel Orientation="Horizontal" />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Text}"
-                                                           Background="{Binding Background}"
-                                                           FontFamily="Consolas" FontSize="12"
-                                                           TextWrapping="NoWrap" />
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </DockPanel>
-                            </Border>
-                        </Grid>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+                <!-- 폭 조절 — 헤더·본문이 같은 ColumnDefinitions 를 쓰므로 끌면 둘 다 따라간다. -->
+                <GridSplitter Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                              Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                              Background="{StaticResource Brush.Border}"
+                              ResizeBehavior="PreviousAndNext" ShowsPreview="False" />
+
+                <!-- 세로 스크롤바는 여기 하나만 보인다(2026-09-21 JH 지적 — "어차피 같이
+                     움직이는데 두 개는 왜 두나"). 왼쪽 판이 스플리터와 바로 붙어 있어서
+                     이 하나가 시각적으로 두 판 "가운데"에 선다. 오른쪽 것은 숨기되
+                     (VerticalScrollBarVisibility="Hidden") 휠 스크롤 자체는 죽이지
+                     않는다 — Hidden 은 막대만 감추지 스크롤 기능은 그대로다, 오른쪽
+                     위에서 휠을 굴려도 OnRightScrollChanged 가 그대로 잡아 왼쪽과 맞춘다. -->
+                <ScrollViewer x:Name="LeftScroll" Grid.Row="1" Grid.Column="0"
+                              HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                              ScrollChanged="OnLeftScrollChanged">
+                    <ItemsControl x:Name="LeftList" ItemsSource="{Binding}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding LeftLineBackground}"
+                                        MinWidth="{Binding ViewportWidth,
+                                                   RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
+                                    <DockPanel Margin="4,1">
+                                        <TextBlock DockPanel.Dock="Left" Text="{Binding LeftNumber}"
+                                                   Width="40" TextAlignment="Right" Margin="0,0,8,0"
+                                                   FontFamily="Consolas" FontSize="11"
+                                                   Foreground="{StaticResource Brush.TextSecondary}" />
+                                        <ItemsControl ItemsSource="{Binding LeftSpans}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Text}"
+                                                               Background="{Binding Background}"
+                                                               FontFamily="Consolas" FontSize="12"
+                                                               TextWrapping="NoWrap" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </DockPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <ScrollViewer x:Name="RightScroll" Grid.Row="1" Grid.Column="2"
+                              HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Hidden"
+                              ScrollChanged="OnRightScrollChanged">
+                    <ItemsControl x:Name="RightList" ItemsSource="{Binding}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding RightLineBackground}"
+                                        MinWidth="{Binding ViewportWidth,
+                                                   RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
+                                    <DockPanel Margin="4,1">
+                                        <TextBlock DockPanel.Dock="Left" Text="{Binding RightNumber}"
+                                                   Width="40" TextAlignment="Right" Margin="0,0,8,0"
+                                                   FontFamily="Consolas" FontSize="11"
+                                                   Foreground="{StaticResource Brush.TextSecondary}" />
+                                        <ItemsControl ItemsSource="{Binding RightSpans}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Text}"
+                                                               Background="{Binding Background}"
+                                                               FontFamily="Consolas" FontSize="12"
+                                                               TextWrapping="NoWrap" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </DockPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
         </Border>
     </DockPanel>
 </Window>
