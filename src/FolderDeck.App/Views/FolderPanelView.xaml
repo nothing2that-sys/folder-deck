@@ -226,13 +226,20 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
-        <!-- 타일 비교 배지(기능 후보 ①, 2026-09-18 설계). 같다(Same)·비교 안 걸림(Unset)은
-             아무것도 안 그린다 — "표시할 것 없음"이 자연스럽다. 목록/자세히 보기에서만
-             붙인다(이번 범위 — 큰 아이콘류는 안 건드림, 팔로업 보고서 §손 확인 참고). -->
+        <!-- 타일 비교 배지(기능 후보 ①, 2026-09-18 설계). 비교 안 걸림(Unset)만 아무것도 안
+             그린다 — 그건 "이 비교와 무관하다"는 뜻이라 표시할 것이 없다. 같다(Same)는
+             2026-09-20 JH 지적으로 추가했다: 전에는 Unset 과 똑같이 아무것도 안 그려서,
+             비교가 실제로 이 항목까지 훑었는지(그래서 "같다"고 확인됐는지) 아니면 그냥
+             비교 밖인지 화면에서 구분이 안 됐다 — 조용한 것과 "확인해보니 같다"는 다른
+             뜻이라 배지를 갈랐다. 옅게(굵지 않게, 무채색) 그려서 [여기만]/[다름] 만큼
+             눈에 튀지는 않는다 — 그 둘이 "봐야 할 것"이고 이건 "확인 끝났다"는 낮은
+             우선순위 정보다. 목록/자세히 보기에서만 붙인다(이번 범위 — 큰 아이콘류는 안
+             건드림, 팔로업 보고서 §손 확인 참고). -->
         <DataTemplate x:Key="CompareBadge">
-            <TextBlock Margin="6,0,0,0" FontWeight="Bold">
+            <TextBlock Margin="6,0,0,0">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
+                        <Setter Property="FontWeight" Value="Bold" />
                         <Setter Property="Visibility" Value="Collapsed" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding CompareStatus}"
@@ -245,6 +252,13 @@
                                          Value="{x:Static comparison:CompareStatus.Different}">
                                 <Setter Property="Text" Value="[다름]" />
                                 <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding CompareStatus}"
+                                         Value="{x:Static comparison:CompareStatus.Same}">
+                                <Setter Property="Text" Value="[같음]" />
+                                <Setter Property="Foreground" Value="{StaticResource Brush.TextSecondary}" />
+                                <Setter Property="FontWeight" Value="Normal" />
                                 <Setter Property="Visibility" Value="Visible" />
                             </DataTrigger>
                         </Style.Triggers>
@@ -1111,6 +1125,11 @@
                                            Visibility="{Binding HasRelativeFolder,
                                                                 Converter={StaticResource BoolToVisibility}}" />
                                 <TextBlock Text="{Binding Name}" />
+                                <!-- 타일 비교 배지 — 여기 빠져 있었다(2026-09-18 손 확인에서 발견).
+                                     기본 보기가 바로 이 list 뷰라서(FolderEntry.ViewMode 기본값 =
+                                     List), details/검색 GridView 에만 넣고 이걸 빠뜨리면 실제로는
+                                     "아무 데도 안 뜨는" 것과 같았다. -->
+                                <ContentControl ContentTemplate="{StaticResource CompareBadge}" Content="{Binding}" />
                             </StackPanel>
                         </DataTemplate>
                     </ListView.ItemTemplate>

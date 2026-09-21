@@ -149,7 +149,10 @@ public partial class MainWindow : Window
 
         // 파일 조작 중이면 건너뛴다 — 확인·결과 대화상자가 이 활성화를 일으키는데,
         // 조작이 끝나고 스스로 한 번 읽으므로 여기서 또 읽으면 열거가 겹친다.
-        if (ViewModel.IsOperationRunning)
+        // 타일 비교 상대를 고르는 PickOneDialog 도 같은 이유로 건너뛴다(2026-09-21 실측
+        // 손 확인 — 대화상자가 닫히며 이 활성화가 걸리고, 그 재조회가 RunCompare 가 막
+        // 걸어 둔 비교를 LoadCompleted 로 곧바로 지워서 배지가 하나도 안 보였다).
+        if (ViewModel.IsOperationRunning || ViewModel.IsShowingComparePicker)
         {
             return;
         }

@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="중복 파일 찾기"
-        Width="640" Height="480"
+        Width="720" Height="520"
         Background="{StaticResource Brush.Chrome}"
         FontFamily="Segoe UI" FontSize="12"
         Foreground="{StaticResource Brush.TextPrimary}">
@@ -17,6 +17,12 @@
         창은 결과를 보여주고, 항목을 더블클릭하면 탐색기로 여는 것(기존
         IShellLauncher.RevealInExplorer 재사용)까지만 한다. 실제 삭제·정리는 V1 비목표라
         — 사용자가 탐색기에서 직접 하거나 이 앱의 기존 파일 조작으로 한다.
+
+        2026-09-18 손 확인에서 JH 가 "직관적이지도 않고 어렵다"고 지적해 TreeView(들여쓰기+
+        전체 경로 텍스트뿐, 이 앱 어디에도 없는 스타일)를 걷어내고 표(GridView)로 다시 짰다
+        — 이 앱의 다른 화면(파일 목록·배치 리네임 미리보기)과 같은 어휘. 파일명·크기는 그룹
+        머리글 하나에만 나온다(그룹 안 모든 행이 같은 값이라 반복할 필요가 없다) — 행마다는
+        "이 사본이 어디 있는가"(위치·경로·수정일)만 다르게 보여준다.
     -->
     <DockPanel Margin="14">
         <TextBlock x:Name="SummaryText" DockPanel.Dock="Top" Margin="0,0,0,10"
@@ -24,6 +30,36 @@
         <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap"
                    FontSize="11" Foreground="{StaticResource Brush.TextSecondary}"
                    Text="더블클릭하면 탐색기에서 그 파일을 연다. 이름+크기만 본 후보다 — 내용까지 같은지는 안 쟀다." />
-        <TreeView x:Name="ResultTree" />
+
+        <!-- 더블클릭 처리는 code-behind 생성자가 ResultList.MouseDoubleClick 에 직접 건다 —
+             OriginalSource 의 DataContext 가 DuplicateRow 일 때만 반응하므로 ItemContainerStyle/
+             EventSetter 가 따로 안 필요하다. 빈 자리는 DataContext 가 아예 다른 것(리스트
+             자신 등)이라 걸러진다. 아래 그룹 머리글도 마찬가지로 걸러지는데 — 그건 그 Border/
+             TextBlock 의 DataContext 가 DuplicateRow 가 아니라 CollectionViewGroup 이기
+             때문이다(그룹 값 자체는 DuplicateGroupHeading, 아래 참고). 둘 다 "DuplicateRow가
+             아니면 반응 안 함"이라는 같은 조건에서 나오는 결과이지 머리글을 따로 가려낸 게
+             아니다. -->
+        <ListView x:Name="ResultList" BorderThickness="1" BorderBrush="{StaticResource Brush.Border}"
+                  Background="Transparent">
+            <ListView.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate>
+                            <Border Background="{StaticResource Brush.GridCellSurface}"
+                                    Padding="6,4" Margin="0,4,0,0">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                            </Border>
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </ListView.GroupStyle>
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="위치" Width="110" DisplayMemberBinding="{Binding TileLabel}" />
+                    <GridViewColumn Header="경로" Width="360" DisplayMemberBinding="{Binding FolderPath}" />
+                    <GridViewColumn Header="수정" Width="130" DisplayMemberBinding="{Binding ModifiedText}" />
+                </GridView>
+            </ListView.View>
+        </ListView>
     </DockPanel>
 </Window>

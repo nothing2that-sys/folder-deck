@@ -89,9 +89,17 @@ internal sealed class FakeUserPrompt : IUserPrompt
     /// <summary>창이 뜰 때마다 받은 옵션 목록 — 무엇 중에서 고르라고 물었는지 확인용.</summary>
     public List<IReadOnlyList<string>> PickOptionsAsked { get; } = [];
 
+    /// <summary>
+    /// 창이 실제로 떠 있는 동안(=이 안에서) 부르는 쪽 상태가 어떤지 시험이 들여다볼 자리 —
+    /// 2026-09-21 실측 손 확인: <c>MainViewModel.IsShowingComparePicker</c>가 이 호출
+    /// 동안만 <c>true</c>여야 <c>MainWindow.OnActivated</c>의 재조회 건너뛰기가 걸린다.
+    /// </summary>
+    public Action? OnPickOneCalled { get; set; }
+
     public int? PickOne(string title, string message, IReadOnlyList<string> options)
     {
         PickOptionsAsked.Add(options);
+        OnPickOneCalled?.Invoke();
         return PickAnswer;
     }
 

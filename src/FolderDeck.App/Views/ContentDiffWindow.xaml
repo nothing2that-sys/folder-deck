@@ -17,8 +17,13 @@
         길이로 정렬됨)를 나란히 그리기만 한다.
 
         나란히(사이드바이사이드) 표시로 정했다(2026-09-18 대화) — WinMerge 스타일 2단, 왼쪽=
-        우클릭한 항목이 있는 타일, 오른쪽=비교 상대 타일. 단어 단위 하이라이트(DiffPlex 의
-        SubPieces)는 V1 에서 안 쓴다 — 줄 단위 색만 칠한다.
+        우클릭한 항목이 있는 타일, 오른쪽=비교 상대 타일.
+
+        바뀐(Modified) 줄은 줄 전체를 노랗게 칠하지 않는다(2026-09-21 JH 지적 — "노란색으로만
+        표시되면 뭐가 다른지 확인이 안 된다") — DiffPlex 의 단어 단위 하위 diff(SubPieces)를
+        받아 실제로 바뀐 단어 토막만 노랗게 칠한다(FolderDeck.Core.Comparison.ContentDiffSpan,
+        ContentDiffWindow.xaml.cs 의 SpansFor). 완전히 지워지거나(Deleted)/생긴(Inserted) 줄은
+        토막을 안 나누고 줄 전체를 칠한다 — 그 둘은 줄 전체가 그 뜻이다.
     -->
     <DockPanel Margin="14">
         <TextBlock x:Name="SummaryText" DockPanel.Dock="Top" Margin="0,0,0,8"
@@ -53,25 +58,51 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
 
-                            <Border Grid.Column="0" Background="{Binding LeftBackground}">
+                            <Border Grid.Column="0" Background="{Binding LeftLineBackground}">
                                 <DockPanel Margin="4,1">
                                     <TextBlock DockPanel.Dock="Left" Text="{Binding LeftNumber}"
                                                Width="40" TextAlignment="Right" Margin="0,0,8,0"
                                                FontFamily="Consolas" FontSize="11"
                                                Foreground="{StaticResource Brush.TextSecondary}" />
-                                    <TextBlock Text="{Binding LeftText}" FontFamily="Consolas"
-                                               FontSize="12" TextWrapping="NoWrap" />
+                                    <ItemsControl ItemsSource="{Binding LeftSpans}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Text}"
+                                                           Background="{Binding Background}"
+                                                           FontFamily="Consolas" FontSize="12"
+                                                           TextWrapping="NoWrap" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </DockPanel>
                             </Border>
 
-                            <Border Grid.Column="2" Background="{Binding RightBackground}">
+                            <Border Grid.Column="2" Background="{Binding RightLineBackground}">
                                 <DockPanel Margin="4,1">
                                     <TextBlock DockPanel.Dock="Left" Text="{Binding RightNumber}"
                                                Width="40" TextAlignment="Right" Margin="0,0,8,0"
                                                FontFamily="Consolas" FontSize="11"
                                                Foreground="{StaticResource Brush.TextSecondary}" />
-                                    <TextBlock Text="{Binding RightText}" FontFamily="Consolas"
-                                               FontSize="12" TextWrapping="NoWrap" />
+                                    <ItemsControl ItemsSource="{Binding RightSpans}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Text}"
+                                                           Background="{Binding Background}"
+                                                           FontFamily="Consolas" FontSize="12"
+                                                           TextWrapping="NoWrap" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </DockPanel>
                             </Border>
                         </Grid>

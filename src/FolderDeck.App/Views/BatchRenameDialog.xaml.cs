@@ -16,11 +16,17 @@ public partial class BatchRenameDialog : Window
         _originalNames = originalNames;
         _otherExistingNames = otherExistingNames;
 
-        // 코드로 기본 선택을 켠다 — XAML 의 IsChecked="True" 는 InitializeComponent 도중,
-        // 아직 Grid.Row="1"/"2" 요소가 안 붙었을 때 Checked 이벤트를 먼저 쏴서 Recompute 가
-        // null 참조로 죽는다. 여기서 켜면 모든 이름 붙은 요소가 이미 준비된 뒤다.
+        // 코드로 기본 선택·기본값을 채운다 — XAML 의 IsChecked="True"/Text="..." 는
+        // InitializeComponent 도중, 아직 위 필드 대입 전에(생성자의 첫 줄이
+        // InitializeComponent 라서) Checked/TextChanged 이벤트를 먼저 쏴서 Recompute 가
+        // _originalNames == null 로 죽는다(2026-09-18 손 확인에서 실제로 재현 — 파일을
+        // 골라 Ctrl+F2 만 눌러도 매번 터졌다, StartBox/PaddingBox 의 XAML 기본값
+        // Text="1"/"3" 때문). 여기서 채우면 필드도 다 찼고 모든 이름 붙은 요소도 이미
+        // 준비된 뒤라 안전하다.
         FindReplaceRadio.IsChecked = true;
         UpperRadio.IsChecked = true;
+        StartBox.Text = "1";
+        PaddingBox.Text = "3";
     }
 
     /// <summary>확정된 계획. 취소면 <c>null</c>.</summary>

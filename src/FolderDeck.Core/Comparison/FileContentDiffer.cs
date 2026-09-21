@@ -25,8 +25,20 @@ public enum ContentDiffLineKind
     Imaginary,
 }
 
-/// <summary>왼쪽 또는 오른쪽 한쪽의 줄 하나.</summary>
-public sealed record ContentDiffLine(int? LineNumber, string? Text, ContentDiffLineKind Kind);
+/// <summary>
+/// <see cref="ContentDiffLineKind.Modified"/> 줄 안의 한 토막 — 단어 단위(DiffPlex 의
+/// <c>WordChunker</c>)로, 이 토막이 상대와 다른지만 담는다. 순서대로 이어 붙이면 원래
+/// 줄 전체가 나온다.
+/// </summary>
+public sealed record ContentDiffSpan(string Text, bool IsChanged);
+
+/// <summary>
+/// 왼쪽 또는 오른쪽 한쪽의 줄 하나. <see cref="Spans"/>는 <see cref="Kind"/>가
+/// <see cref="ContentDiffLineKind.Modified"/>일 때만 채워진다 — 줄 전체가 아니라 실제로
+/// 달라진 단어만 집어 표시하기 위한 것이다. 다른 종류(그냥 같음·완전히 지워짐/생김)는
+/// 줄 전체가 그 뜻이라 토막으로 나눌 필요가 없어 <c>null</c>이다.
+/// </summary>
+public sealed record ContentDiffLine(int? LineNumber, string? Text, ContentDiffLineKind Kind, IReadOnlyList<ContentDiffSpan>? Spans = null);
 
 /// <summary>
 /// 두 파일 내용 비교 결과 — 왼쪽·오른쪽 줄 목록. <b>두 목록은 항상 길이가 같다</b>(DiffPlex
@@ -40,10 +52,9 @@ public sealed record ContentDiffResult(IReadOnlyList<ContentDiffLine> Left, IRea
 /// </summary>
 /// <remarks>
 /// DiffPlex 타입을 밖으로 내보내지 않는다 — <see cref="ContentDiffLine"/>·
-/// <see cref="ContentDiffLineKind"/>로만 결과를 낸다, 이 저장소의 다른 경계(예:
-/// <c>EverythingNative</c>)가 서드파티 구체 타입을 감싸는 것과 같은 이유다. 줄 단위 비교만
-/// 한다 — 바뀐 줄 안에서 단어 단위까지 더 쪼개는 것(DiffPlex의 <c>SubPieces</c>)은 V1
-/// 화면이 쓰지 않는다.
+/// <see cref="ContentDiffLineKind"/>·<see cref="ContentDiffSpan"/>으로만 결과를 낸다, 이
+/// 저장소의 다른 경계(예: <c>EverythingNative</c>)가 서드파티 구체 타입을 감싸는 것과
+/// 같은 이유다.
 /// </remarks>
 public static class FileContentDiffer
 {
@@ -58,7 +69,20 @@ public static class FileContentDiffer
     }
 
     private static IReadOnlyList<ContentDiffLine> Convert(List<DiffPiece> pieces) =>
-        pieces.Select(p => new ContentDiffLine(p.Position, p.Text, ToKind(p.Type))).ToList();
+        pieces.Select(p => new ContentDiffLine(p.Position, p.Text, ToKind(p.Type), ConvertSpans(p))).ToList();
+
+    private static IReadOnlyList<ContentDiffSpan>? ConvertSpans(DiffPiece piece)
+    {
+        if (piece.Type != ChangeType.Modified || piece.SubPieces.Count == 0)
+        {
+            return null;
+        }
+
+        return piece.SubPieces
+            .Where(sub => sub.Type != ChangeType.Imaginary)
+            .Select(sub => new ContentDiffSpan(sub.Text ?? string.Empty, sub.Type != ChangeType.Unchanged))
+            .ToList();
+    }
 
     private static ContentDiffLineKind ToKind(ChangeType type) => type switch
     {

@@ -47,10 +47,12 @@
                 <TextBox x:Name="PrefixBox" Width="100" Margin="6,0,16,0" Padding="4,2"
                          TextChanged="OnInputChanged" />
                 <TextBlock Text="시작 번호" VerticalAlignment="Center" />
-                <TextBox x:Name="StartBox" Width="50" Margin="6,0,16,0" Padding="4,2" Text="1"
+                <!-- 기본값(1)은 XAML 이 아니라 code-behind 생성자에서 준다 — 아래 참고. -->
+                <TextBox x:Name="StartBox" Width="50" Margin="6,0,16,0" Padding="4,2"
                          TextChanged="OnInputChanged" />
                 <TextBlock Text="자릿수" VerticalAlignment="Center" />
-                <TextBox x:Name="PaddingBox" Width="50" Margin="6,0,0,0" Padding="4,2" Text="3"
+                <!-- 기본값(3)도 마찬가지로 code-behind 에서 준다. -->
+                <TextBox x:Name="PaddingBox" Width="50" Margin="6,0,0,0" Padding="4,2"
                          TextChanged="OnInputChanged" />
             </StackPanel>
             <StackPanel x:Name="CasePanel" Orientation="Horizontal" Visibility="Collapsed">

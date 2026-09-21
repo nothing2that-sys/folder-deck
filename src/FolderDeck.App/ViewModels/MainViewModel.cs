@@ -2998,6 +2998,18 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
     private EventHandler? _compareInvalidationHandler;
 
+    /// <summary>
+    /// 상대 타일을 고르는 <c>PickOneDialog</c>가 떠 있는 동안 <c>true</c>다(2026-09-21 실측
+    /// 손 확인으로 확정). <c>MainWindow.OnActivated</c>가 이 값을 읽고
+    /// "창 활성화 시 재조회"를 건너뛴다 — <see cref="IsOperationRunning"/>이 파일 조작용
+    /// 확인·결과 대화상자에 거는 것과 정확히 같은 이유·같은 자리다: 모달 대화상자가 닫히며
+    /// 주 창을 다시 활성화하면 그 재조회가 걸리는데, 여기서는 그게 <c>RunCompare</c>가 막
+    /// 걸어 둔 비교를 <c>LoadCompleted</c>로 곧바로 지워 버린다 — 상태 바에 "비교 시작"
+    /// 안내만 남고 배지는 하나도 안 보이는 것으로 나타났다(재현: 픽커를 실제로 띄운
+    /// 것처럼 흉내낼 방법이 자동 시험엔 없어 손 확인으로만 잡혔다).
+    /// </summary>
+    public bool IsShowingComparePicker { get; private set; }
+
     /// <summary><see cref="FolderPanelViewModel.CompareRequested"/> 통로 — Ctrl+D.</summary>
     private void OnCompareRequested(FolderPanelViewModel panel)
     {
@@ -3030,12 +3042,29 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             return;
         }
 
-        var picked = _prompt.PickOne(
-            "타일 비교", "어느 타일과 비교할까?", candidates.Select(t => t.EditLabel).ToList());
+        int? picked;
+        IsShowingComparePicker = true;
+        try
+        {
+            picked = _prompt.PickOne(
+                "타일 비교", "어느 타일과 비교할까?", candidates.Select(t => t.EditLabel).ToList());
+        }
+        finally
+        {
+            IsShowingComparePicker = false;
+        }
 
         if (picked is { } index)
         {
             RunCompare(tile, candidates[index]);
+        }
+        else
+        {
+            // 위 세 갈래(검색 타일·이미 비교 중·후보 없음)는 다 Warn 으로 뭔가 남긴다 —
+            // 여기만 말없이 돌아가면 "코드가 안 탔다"와 "취소했다"가 화면에서 똑같이
+            // 보인다(2026-09-21 JH 보고 "이렇다 할 이벤트조차 없음" — 실제 원인은
+            // PickOneDialog 쪽이었지만, 취소했을 때도 원래 이렇게 조용했다).
+            Inform("비교를 취소했다");
         }
     }
 

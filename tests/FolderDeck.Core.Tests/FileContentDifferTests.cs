@@ -81,4 +81,49 @@ public sealed class FileContentDifferTests
         Assert.Empty(result.Left);
         Assert.Empty(result.Right);
     }
+
+    /// <summary>
+    /// JH 지적(2026-09-21): 줄 전체를 "다르다"로 뭉뚱그리면 실제로 어디가 다른지 눈으로
+    /// 찾아야 한다 — 단어 단위로 어디가 바뀌었는지 짚어 줘야 한다. DiffPlex 의
+    /// <c>SubPieces</c>(단어 단위 하위 diff)를 <see cref="ContentDiffSpan"/>으로 낸다.
+    /// </summary>
+    [Fact]
+    public void ModifiedLineCarriesWordLevelSpansPinpointingTheChange()
+    {
+        var result = FileContentDiffer.Diff("the quick fox", "the slow fox");
+
+        var left = result.Left[0];
+        var right = result.Right[0];
+        Assert.Equal(ContentDiffLineKind.Modified, left.Kind);
+        Assert.NotNull(left.Spans);
+        Assert.NotNull(right.Spans);
+
+        Assert.Contains(left.Spans!, s => s.IsChanged && s.Text.Contains("quick"));
+        Assert.Contains(right.Spans!, s => s.IsChanged && s.Text.Contains("slow"));
+
+        // 안 바뀐 부분("the "· " fox")은 안 바뀐 토막으로 남아야 한다 — 줄 전체를
+        // "바뀜"으로 뭉개면 안 된다.
+        Assert.Contains(left.Spans!, s => !s.IsChanged);
+        Assert.Contains(right.Spans!, s => !s.IsChanged);
+    }
+
+    /// <summary>토막을 순서대로 이으면 원래 줄 그대로 나와야 한다 — 화면이 이걸 나란히
+    /// 이어 그리는 게 전부라, 이 불변이 깨지면 글자가 빠지거나 겹쳐 보인다.</summary>
+    [Fact]
+    public void ConcatenatingSpansReconstructsTheOriginalLineText()
+    {
+        var result = FileContentDiffer.Diff("the quick brown fox", "the slow brown dog");
+
+        Assert.Equal("the quick brown fox", string.Concat(result.Left[0].Spans!.Select(s => s.Text)));
+        Assert.Equal("the slow brown dog", string.Concat(result.Right[0].Spans!.Select(s => s.Text)));
+    }
+
+    [Fact]
+    public void NonModifiedLinesHaveNoSpans()
+    {
+        var result = FileContentDiffer.Diff("a\nb", "a\nb\nc");
+
+        Assert.All(result.Left, l => Assert.Null(l.Spans));
+        Assert.All(result.Right, l => Assert.Null(l.Spans));
+    }
 }
