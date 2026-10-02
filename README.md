@@ -34,7 +34,7 @@ Get-FileHash .\FolderDeck-Setup.exe -Algorithm SHA256
 v1.7.0 설치본 SHA256:
 
 ```text
-1392ABFB80AB544DAB76626F0CAF33E96A47FF1F77CE90753B5D5EB042008637
+AD848E736BC72E4B60E9F0027A12D98576E3B34CA7D57E66C3B5D9E85A4393D3
 ```
 
 ## 실제 앱 화면
@@ -99,4 +99,4 @@ Everything 전역 검색에는 Everything 프로그램을 별도로 설치하고
 
 Everything SDK의 라이선스와 고지는 [THIRD-PARTY-NOTICES.txt](src/FolderDeck.App/Native/THIRD-PARTY-NOTICES.txt)에 포함되어 있습니다. NuGet 의존성은 각 프로젝트의 `PackageReference`에서 확인할 수 있으며 각 패키지의 라이선스가 적용됩니다.
 
-이 프로젝트 자체의 재사용·재배포 라이선스는 아직 지정하지 않았습니다. 공개 소스 열람과 라이선스에 따른 재사용 허가는 별개입니다.
+Folder Deck는 [MIT License](LICENSE)로 배포합니다. 저작권 및 라이선스 고지를 유지하면 사용·수정·재배포·상업적 사용이 가능합니다. 외부 구성 요소에는 각자의 라이선스가 적용됩니다.
