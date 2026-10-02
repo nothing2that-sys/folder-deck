@@ -1,0 +1,106 @@
+<Window x:Class="FolderDeck.App.Views.IconSettingsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:FolderDeck.App.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:IconSettingsViewModel}"
+        Title="설정"
+        Width="420" Height="480"
+        MinWidth="360" MinHeight="280"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource Brush.Chrome}"
+        FontSize="12"
+        Foreground="{StaticResource Brush.TextPrimary}">
+
+
+    <DockPanel Margin="14">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="저장" Padding="16,5" Margin="0,0,8,0" IsDefault="True"
+                    Click="OnAccept" />
+            <Button Content="취소" Padding="16,5" IsCancel="True" />
+        </StackPanel>
+
+        <TabControl>
+            <TabItem Header="아이콘">
+                <DockPanel Margin="10">
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,8"
+                               FontSize="11" Foreground="{StaticResource Brush.TextSecondary}"
+                               Text="확장자에 글리프 한 글자를 매핑한다. 비워 두면 지금과 같다 — 매핑에 없는 확장자는 그대로 📄 다. 폴더는 이 매핑과 무관하게 늘 📁 다." />
+
+                    <CheckBox DockPanel.Dock="Top" Margin="0,0,0,8"
+                              Content="파일 형식별 시스템 아이콘 보이기 — 끄면 📁/📄 글자만 쓴다"
+                              IsChecked="{Binding ShowShellIcons}"
+                              AutomationProperties.Name="셸 아이콘 보이기" />
+
+                    <Button DockPanel.Dock="Bottom" Content="＋ 행 추가" Padding="10,4"
+                            HorizontalAlignment="Left" Margin="0,8,0,0"
+                            Command="{Binding AddRowCommand}"
+                            AutomationProperties.Name="행 추가"
+                            ToolTip="빈 행을 하나 더한다 — 확장자와 글리프를 채워 넣는다." />
+
+                    <Border BorderBrush="{StaticResource Brush.BorderSubtle}" BorderThickness="1"
+                            CornerRadius="3">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Rows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:IconMappingRowViewModel}">
+                                        <DockPanel Margin="4">
+                                            <Button DockPanel.Dock="Right" Content="✕" Padding="6,0"
+                                                    Style="{StaticResource LinkButton}"
+                                                    ToolTip="이 행을 지운다"
+                                                    Command="{Binding DataContext.RemoveRowCommand,
+                                                                      RelativeSource={RelativeSource
+                                                                          AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" />
+
+
+                                            <TextBlock DockPanel.Dock="Right" Width="28"
+                                                       Margin="6,0" FontSize="16"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       Text="{Binding Glyph}"
+                                                       ToolTip="미리보기 — 입력한 글자가 그대로 보인다" />
+
+                                            <TextBox Width="90" Padding="4,3" Margin="0,0,6,0"
+                                                     Text="{Binding Extension,
+                                                            UpdateSourceTrigger=PropertyChanged}"
+                                                     AutomationProperties.Name="확장자"
+                                                     ToolTip="예: .pdf — 점·대소문자는 안 가린다" />
+
+                                            <TextBox Padding="4,3"
+                                                     Text="{Binding Glyph,
+                                                            UpdateSourceTrigger=PropertyChanged}"
+                                                     AutomationProperties.Name="글리프"
+                                                     ToolTip="글자 하나(이모지도 된다)" />
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                </DockPanel>
+            </TabItem>
+
+
+            <TabItem Header="검색">
+                <StackPanel x:Name="EverythingTabContent" Margin="10">
+                    <TextBlock TextWrapping="Wrap" Text="{Binding StatusText}" Margin="0,0,0,12" />
+
+                    <TextBlock Text="검색 결과 상한" FontSize="11"
+                               Foreground="{StaticResource Brush.TextSecondary}" Margin="0,0,0,4" />
+                    <ComboBox ItemsSource="{Binding MaxResultsChoices}"
+                              SelectedItem="{Binding EverythingMaxResults}"
+                              HorizontalAlignment="Left" Width="120"
+                              AutomationProperties.Name="검색 결과 상한" />
+                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" FontSize="11"
+                               Foreground="{StaticResource Brush.TextSecondary}"
+                               Text="한 번의 질의가 돌려줄 결과 개수의 최대값이다. 크게 잡을수록 늦게 뜬다." />
+                </StackPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

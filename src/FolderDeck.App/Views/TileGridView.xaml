@@ -1,0 +1,326 @@
+<UserControl x:Class="FolderDeck.App.Views.TileGridView"
+             x:Name="Root"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:FolderDeck.App.Views"
+             xmlns:vm="clr-namespace:FolderDeck.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:MainViewModel}">
+
+
+    <Grid x:Name="Host" Focusable="True" ClipToBounds="True"
+          MouseMove="OnHostMouseMove"
+          MouseLeftButtonUp="OnHostMouseUp"
+          LostMouseCapture="OnHostLostCapture"
+          KeyDown="OnHostKeyDown">
+
+
+        <ItemsControl ItemsSource="{Binding Cells}">
+            <ItemsControl.Style>
+                <Style TargetType="ItemsControl">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsEditingLayout}" Value="True" />
+                                <Condition Binding="{Binding IsAnyTileExpanded}" Value="False" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Visibility" Value="Visible" />
+                        </MultiDataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ItemsControl.Style>
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition /><ColumnDefinition /><ColumnDefinition /><ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                        </Grid.RowDefinitions>
+                    </Grid>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemContainerStyle>
+                <Style TargetType="ContentPresenter">
+                    <Setter Property="Grid.Column" Value="{Binding X}" />
+                    <Setter Property="Grid.Row" Value="{Binding Y}" />
+                </Style>
+            </ItemsControl.ItemContainerStyle>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:GridCellViewModel}">
+
+                    <Border CornerRadius="3" BorderThickness="1"
+                            Margin="{Binding DataContext.TileGap, ElementName=Root,
+                                     Converter={StaticResource TileMargin}}"
+                            Background="Transparent"
+                            AllowDrop="True"
+                            DragOver="OnCellDragOver"
+                            DragLeave="OnCellDragLeave"
+                            Drop="OnCellDrop"
+                            MouseLeftButtonUp="OnCellClick">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="BorderBrush" Value="{StaticResource Brush.GridLine}" />
+                                <Setter Property="IsHitTestVisible" Value="False" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsFree}" Value="True">
+                                        <Setter Property="IsHitTestVisible" Value="True" />
+                                        <Setter Property="Background"
+                                                Value="{StaticResource Brush.GridCellSurface}" />
+                                        <Setter Property="Cursor" Value="Hand" />
+                                        <Setter Property="ToolTip"
+                                                Value="클릭해서 폴더를 넣거나, 왼쪽 목록에서 폴더를 끌어다 놓는다" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                                        <Setter Property="Background"
+                                                Value="{StaticResource Brush.AccentSurface}" />
+                                        <Setter Property="BorderBrush"
+                                                Value="{StaticResource Brush.Accent}" />
+                                        <Setter Property="BorderThickness" Value="2" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+
+                        <TextBlock Text="＋" FontSize="16" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource Brush.TextSecondary}"
+                                   Visibility="{Binding IsFree, Converter={StaticResource BoolToVisibility}}" />
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+
+        <ItemsControl ItemsSource="{Binding Tiles}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition /><ColumnDefinition /><ColumnDefinition /><ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                        </Grid.RowDefinitions>
+                    </Grid>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemContainerStyle>
+
+                <Style TargetType="ContentPresenter">
+                    <Setter Property="Grid.Column" Value="{Binding EffectiveCellX}" />
+                    <Setter Property="Grid.Row" Value="{Binding EffectiveCellY}" />
+                    <Setter Property="Grid.ColumnSpan" Value="{Binding EffectiveSpanX}" />
+                    <Setter Property="Grid.RowSpan" Value="{Binding EffectiveSpanY}" />
+
+                    <Setter Property="Visibility"
+                            Value="{Binding IsHiddenByExpansion, Converter={StaticResource InverseBoolToVisibility}}" />
+                </Style>
+            </ItemsControl.ItemContainerStyle>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:TileViewModel}">
+                    <Grid x:Name="TileRoot">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Style.Triggers>
+
+                                    <DataTrigger Binding="{Binding IsDragging}" Value="True">
+                                        <Setter Property="Opacity" Value="0.4" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+
+
+                        <views:FolderPanelView DataContext="{Binding Panel}"
+                                               Margin="{Binding DataContext.TileGap,
+                                                        ElementName=Root,
+                                                        Converter={StaticResource TileMargin}}"
+                                               IsHitTestVisible="{Binding DataContext.IsViewMode,
+                                                                  ElementName=TileRoot}" />
+
+
+                        <Border Background="{StaticResource Brush.EditOverlay}"
+                                CornerRadius="4" Cursor="SizeAll"
+                                Tag="{Binding}"
+                                Margin="{Binding DataContext.TileGap, ElementName=Root,
+                                         Converter={StaticResource TileMargin}}"
+                                MouseLeftButtonDown="OnTileMouseDown"
+                                Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}">
+
+                            <Border.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="상시 ↔ 순환 바꾸기" Click="OnToggleKindClick"
+                                              Visibility="{Binding PlacementTarget.Tag.IsSearch,
+                                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                           Converter={StaticResource InverseBoolToVisibility}}" />
+                                    <MenuItem Header="이 타일 빼기 (폴더 등록은 남는다)"
+                                              Click="OnRemoveTileClick" />
+                                </ContextMenu>
+                            </Border.ContextMenu>
+
+                            <Grid Margin="6">
+
+                                <Border HorizontalAlignment="Left" VerticalAlignment="Top"
+                                        CornerRadius="3" Padding="6,2" BorderThickness="1.5">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background"
+                                                    Value="{StaticResource Brush.PinnedSurface}" />
+                                            <Setter Property="BorderBrush"
+                                                    Value="{StaticResource Brush.Pinned}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsRotating}" Value="True">
+                                                    <Setter Property="Background"
+                                                            Value="{StaticResource Brush.RotatingSurface}" />
+                                                    <Setter Property="BorderBrush"
+                                                            Value="{StaticResource Brush.Rotating}" />
+                                                </DataTrigger>
+
+                                                <DataTrigger Binding="{Binding IsSearch}" Value="True">
+                                                    <Setter Property="Background"
+                                                            Value="{StaticResource Brush.SearchSurface}" />
+                                                    <Setter Property="BorderBrush"
+                                                            Value="{StaticResource Brush.Search}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Margin="0,0,5,0"
+                                                   Foreground="{StaticResource Brush.TextSecondary}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="⠿" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsSearch}" Value="True">
+                                                            <Setter Property="Text" Value="🔍" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding EditLabel}" FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding SizeText}" Margin="6,0,0,0"
+                                                   Foreground="{StaticResource Brush.TextSecondary}" />
+                                    </StackPanel>
+                                </Border>
+
+                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           FontSize="11" TextAlignment="Center" TextWrapping="Wrap"
+                                           Foreground="{StaticResource Brush.TextSecondary}"
+                                           Text="끌어서 이동 · 모서리로 크기 · 우클릭으로 성격/제거" />
+
+
+                                <Border Width="36" Height="36" Margin="0,0,-6,-6"
+                                        HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                        Background="Transparent" Cursor="SizeNWSE"
+                                        ToolTip="끌어서 크기 조절"
+                                        MouseLeftButtonDown="OnGripMouseDown">
+                                    <Border Width="18" Height="18" Margin="0,0,6,6"
+                                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                            Background="{StaticResource Brush.EditChrome}"
+                                            CornerRadius="3" IsHitTestVisible="False">
+                                        <TextBlock Text="◢" FontSize="10"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource Brush.EditChromeText}" />
+                                    </Border>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+
+        <Grid x:Name="PreviewLayer" IsHitTestVisible="False" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition /><ColumnDefinition /><ColumnDefinition /><ColumnDefinition />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+            </Grid.RowDefinitions>
+
+            <Border x:Name="PreviewBox" CornerRadius="4" BorderThickness="2"
+                    Margin="{Binding DataContext.TileGap, ElementName=Root,
+                             Converter={StaticResource TileMargin}}"
+                    BorderBrush="{StaticResource Brush.Accent}"
+                    Background="{StaticResource Brush.AccentSurface}">
+                <TextBlock x:Name="PreviewText" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontWeight="SemiBold" Foreground="{StaticResource Brush.EditChromeText}" />
+            </Border>
+        </Grid>
+
+
+        <Popup x:Name="FolderPicker" StaysOpen="False" AllowsTransparency="True"
+               Placement="Bottom" PopupAnimation="Fade"
+               IsOpen="{Binding IsFolderPickerOpen, Mode=TwoWay}"
+               Closed="OnFolderPickerClosed">
+            <Border Background="{StaticResource Brush.Surface}" CornerRadius="4"
+                    BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
+                    Padding="6" MinWidth="220">
+                <StackPanel>
+                    <TextBlock Text="이 칸에 넣을 것" FontWeight="SemiBold" Margin="4,2,4,6" />
+
+                    <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Rows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:FolderRowViewModel}">
+
+                                    <Button Style="{StaticResource FolderRowButton}"
+                                            Padding="6,4"
+                                            IsEnabled="{Binding CanPlaceInGrid}"
+                                            ToolTip="{Binding PathText}"
+                                            Command="{Binding DataContext.PlaceFolderCommand,
+                                                              ElementName=Root}"
+                                            CommandParameter="{Binding}">
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Right" Text="이미 상시 칸"
+                                                       FontSize="10" Margin="8,0,0,0"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{StaticResource Brush.TextSecondary}"
+                                                       Visibility="{Binding HasPinnedTile,
+                                                            Converter={StaticResource BoolToVisibility}}" />
+                                            <TextBlock Text="{Binding DisplayName}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </DockPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <Separator Margin="0,4" />
+
+                    <Button Style="{StaticResource FolderRowButton}" Padding="6,4"
+                            ToolTip="폴더를 못박지 않는 칸. 왼쪽 리스트에서 이 번호를 지정한 폴더가 여기에 뜬다."
+                            Command="{Binding DataContext.PlaceRotatingCommand, ElementName=Root}">
+                        <TextBlock Text="빈 순환 칸 만들기" FontStyle="Italic" />
+                    </Button>
+
+
+                    <Button Style="{StaticResource FolderRowButton}" Padding="6,4" Margin="0,2,0,0"
+                            IsEnabled="{Binding DataContext.HasSearchTile, ElementName=Root,
+                                        Converter={StaticResource InverseBool}}"
+                            ToolTip="이 워크스페이스 전체에서 파일을 찾는 칸. Everything(voidtools) 이 설치·실행 중이어야 한다."
+                            Command="{Binding DataContext.PlaceSearchCommand, ElementName=Root}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Text="이미 있다"
+                                       FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"
+                                       Foreground="{StaticResource Brush.TextSecondary}"
+                                       Visibility="{Binding DataContext.HasSearchTile, ElementName=Root,
+                                            Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Text="전역 검색" FontStyle="Italic" />
+                        </DockPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

@@ -1,0 +1,16 @@
+[Bb]in/
+[Oo]bj/
+.vs/
+.idea/
+.vscode/
+.claude/
+.codex/
+*.user
+*.suo
+*.pdb
+*.log
+TestResults/
+artifacts/
+Everything-SDK/
+.env
+.env.*

@@ -1,0 +1,36 @@
+<Window x:Class="FolderDeck.App.Views.ConflictDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="같은 이름이 있다"
+        Width="480" SizeToContent="Height"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource Brush.Chrome}"
+        FontFamily="Segoe UI" FontSize="12"
+        Foreground="{StaticResource Brush.TextPrimary}">
+
+    <StackPanel Margin="18,16">
+        <TextBlock x:Name="HeadlineText" FontWeight="SemiBold" TextWrapping="Wrap"
+                   Margin="0,0,0,8" />
+
+        <TextBlock x:Name="MessageText" TextWrapping="Wrap"
+                   Foreground="{StaticResource Brush.TextSecondary}" Margin="0,0,0,14" />
+
+        <CheckBox x:Name="RememberBox" Margin="0,0,0,16"
+                  Content="이 작업 관리에서는 다음부터 묻지 않기" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="OverwriteButton" Content="덮어쓰기" Padding="14,5" Margin="0,0,6,0"
+                    Click="OnOverwrite"
+                    ToolTip="기존 파일을 새 것으로 바꾼다" />
+            <Button x:Name="SkipButton" Content="건너뛰기" Padding="14,5" Margin="0,0,6,0"
+                    Click="OnSkip"
+                    ToolTip="같은 이름은 손대지 않고 넘어간다 (결과에 '건너뜀'으로 잡힌다)" />
+            <Button x:Name="RenameButton" Content="둘 다 두기" Padding="14,5" Margin="0,0,12,0"
+                    Click="OnRename"
+                    ToolTip="a.txt 옆에 a (2).txt 로 넣어 둘 다 남긴다" />
+            <Button Content="취소" Padding="14,5" IsCancel="True"
+                    ToolTip="아무것도 하지 않는다" />
+        </StackPanel>
+    </StackPanel>
+</Window>

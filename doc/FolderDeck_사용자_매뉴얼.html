@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Folder Deck 사용자 매뉴얼</title>
+<style>
+:root{color-scheme:light;--ink:#202b40;--muted:#627086;--accent:#315ee7;--line:#dfe6f1}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--ink);background:#f5f7fb;font:16px/1.8 'Segoe UI','Malgun Gothic',sans-serif}
+nav{position:fixed;width:280px;height:100vh;padding:32px 22px;background:#fff;border-right:1px solid var(--line);overflow:auto}
+nav strong{display:block;font-size:22px;margin-bottom:20px}nav a{display:block;color:var(--muted);text-decoration:none;font-size:14px;padding:8px;border-radius:6px}nav a:hover{background:#edf2ff;color:var(--accent)}
+main{margin-left:280px;max-width:1140px;padding:48px 64px 80px;background:#fff;min-height:100vh}h1{font-size:32px;line-height:1.4;margin:0 0 20px}h2{font-size:23px;border-bottom:2px solid var(--line);padding-bottom:12px;margin:48px 0 20px;scroll-margin-top:25px}
+p{margin:0 0 18px}ul{padding-left:24px}li{margin:8px 0}code{background:#eff3f9;border-radius:4px;padding:2px 5px;font:14px Consolas,monospace;overflow-wrap:anywhere}
+.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{border:1px solid var(--line);padding:10px 14px;text-align:left}th{background:#eef3ff}footer{margin-top:48px;color:var(--muted);font-size:13px}
+@media(max-width:900px){nav{position:relative;width:auto;height:auto;border-right:0;border-bottom:1px solid var(--line)}nav a{display:inline-block}main{margin:0;padding:28px 22px}h1{font-size:27px}}
+@media print{nav{display:none}main{margin:0;padding:0;max-width:none}h2{break-after:avoid}table{break-inside:avoid}body{background:#fff}}
+</style></head><body><nav aria-label="목차"><strong>Folder Deck</strong><a href='#section-1'>1. 설치와 첫 실행</a>
+<a href='#section-2'>2. 화면과 타일</a>
+<a href='#section-3'>3. 폴더 등록과 배치 편집</a>
+<a href='#section-4'>4. 보기&#183;정렬&#183;미리보기</a>
+<a href='#section-5'>5. 파일 열기&#183;선택&#183;이름 변경&#183;삭제</a>
+<a href='#section-6'>6. 복사&#183;이동&#183;대상함&#183;매크로</a>
+<a href='#section-7'>7. 검색</a>
+<a href='#section-8'>8. 폴더 비교&#183;내용 비교&#183;중복 찾기&#183;배치 리네임</a>
+<a href='#section-9'>9. 단축키</a>
+<a href='#section-10'>10. 저장 위치&#183;백업&#183;문제 해결</a>
+</nav><main><h1>Folder Deck 사용자 매뉴얼</h1>
+<p>대상 버전: 1.7.0 &#183; Windows x64</p>
+<p>Folder Deck는 여러 폴더를 한 화면의 타일에 펼쳐 놓고 탐색&#183;복사&#183;이동&#183;검색하는 데스크톱 앱입니다. 자주 사용하는 폴더를 작업 관리(워크스페이스)로 묶고, 각 타일의 위치와 보기 설정을 저장할 수 있습니다.</p>
+<h2 id='section-1'>1. 설치와 첫 실행</h2>
+<p>1. 설치 파일 <code>FolderDeck-Setup.exe</code>를 실행합니다. 현재 사용자 계정에 설치됩니다.</p>
+<p>2. 시작 메뉴에서 <strong>Folder Deck</strong>를 실행합니다. 자체 포함 배포본은 .NET 런타임을 별도로 설치하지 않아도 됩니다.</p>
+<p>3. 작업 관리 목록에서 <strong>＋ 새 작업 공간</strong>을 누르고 제목과 폴더를 등록합니다. 폴더를 목록 창에 끌어다 놓아 시작할 수도 있습니다.</p>
+<p>4. 카드를 더블클릭하거나 <strong>열기</strong>를 누르면 해당 작업 화면으로 전환됩니다.</p>
+<p>설치 파일은 소스 저장소와 별도로 배포됩니다. 소스만 받은 경우 루트 README의 빌드 안내를 따르세요.</p>
+<p>작업 관리 카드에서 제목과 설명을 수정할 수 있습니다. <strong>삭제</strong>는 작업 관리 등록만 제거하며 실제 파일과 폴더는 삭제하지 않습니다. 이미 열린 작업 관리에는 <strong>열려 있음</strong>이 표시됩니다.</p>
+<p><strong>마지막 작업을 자동으로 열기</strong>를 켜면 다음 실행부터 마지막 작업 관리로 바로 들어갑니다. 메인 도구모음의 <strong>다른 작업 관리 열기</strong>로 목록 창을 열어 다른 작업 관리를 함께 사용할 수 있습니다.</p>
+<h2 id='section-2'>2. 화면과 타일</h2>
+<p>왼쪽에는 등록한 폴더 목록과 복사 대상함&#183;매크로가 있고, 오른쪽에는 4&#215;4 배치 그리드가 있습니다. 타일 하나가 폴더 탐색기 하나이며, 서로 다른 폴더를 동시에 보여줍니다. 왼쪽 패널은 접었다 펼 수 있습니다.</p>
+<ul>
+<li><strong>상시 칸</strong>: 특정 등록 폴더를 계속 표시하는 자리입니다. 하위 폴더로 이동할 수 있습니다.</li>
+<li><strong>순환 칸</strong>: 왼쪽 목록에서 선택한 폴더를 바꿔 표시하는 자리입니다. 여러 순환 칸이 있으면 폴더 행의 우클릭 메뉴에서 사용할 칸을 지정합니다.</li>
+<li><strong>앵커</strong>: 타일이 돌아갈 기준 폴더입니다. <strong>앵커 복귀</strong> 또는 <code>Alt+Home</code>으로 돌아갑니다.</li>
+</ul>
+<p>왼쪽 목록에서 상시 칸에 등록된 폴더를 누르면 해당 타일이 앵커로 돌아갑니다. 타일의 헤더에서 뒤로&#183;앞으로&#183;상위&#183;앵커 복귀&#183;새로 읽기를 사용할 수 있습니다. 폭이 좁으면 일부 기능은 <strong>⋯ 더 보기</strong> 메뉴에 들어갑니다. 타일 확장 버튼으로 작업 영역을 넓히고 다시 복귀할 수 있습니다.</p>
+<h2 id='section-3'>3. 폴더 등록과 배치 편집</h2>
+<ul>
+<li>폴더 목록 머리의 <strong>＋</strong>로 폴더를 등록합니다.</li>
+<li>행의 <strong>✕</strong> 또는 우클릭 <strong>제거</strong>는 등록만 제거합니다. 디스크의 폴더는 남습니다.</li>
+<li>행의 우클릭 메뉴에서 표시 이름&#183;설명을 수정하거나 대상함에 추가할 수 있습니다.</li>
+<li>타일의 경로 영역을 우클릭하면 <strong>새 폴더 만들기</strong>, <strong>탐색기에서 열기</strong>, <strong>경로 복사</strong>, <strong>이 폴더를 앵커로 지정</strong>, <strong>새 폴더로 등록</strong>을 사용할 수 있습니다.</li>
+</ul>
+<p>메인 도구모음에서 <strong>배치 편집</strong>을 켜면 타일을 이동하고 크기를 조절할 수 있습니다. 편집 중에는 파일 목록 조작이 잠깁니다. 빈 그리드 영역에 타일을 배치하고 상시&#183;순환 용도를 지정한 뒤 편집을 종료합니다. 타일 사이 간격도 조절할 수 있습니다. 확장된 타일을 먼저 복귀해야 배치 편집을 할 수 있습니다.</p>
+<h2 id='section-4'>4. 보기&#183;정렬&#183;미리보기</h2>
+<p>일반 폴더 타일의 보기 전환 버튼은 <strong>목록 → 상세 → 큰 아이콘 → 아주 큰 아이콘 → 목록</strong> 순서로 동작합니다. 보기 전환 시 선택한 항목은 해제됩니다. 검색 전용 타일은 상세 보기로 표시됩니다.</p>
+<p>정렬 메뉴에서 이름&#183;수정 시각&#183;크기&#183;종류와 <strong>폴더 먼저</strong>를 선택합니다. 상세 보기에서는 열 머리글로 정렬하고 같은 열을 다시 눌러 방향을 바꿀 수 있습니다. 정렬 변경은 선택을 유지합니다. 열 표시 메뉴로 크기&#183;수정&#183;위치 열을 조절할 수 있습니다.</p>
+<p>미리보기를 켜고 항목을 선택하면 타일 아래에서 내용을 확인합니다. 표시 가능한 형식은 Windows에 설치된 Preview Handler와 앱의 이미지 미리보기 지원에 따라 달라집니다. 지원하지 않는 파일에는 안내 문구가 나타납니다. 구분선을 끌어 미리보기 영역 크기를 조절합니다.</p>
+<p><strong>설정</strong>에서 셸 아이콘 사용 여부와 확장자별 글리프를 바꿀 수 있습니다. 클라우드 전용 파일이나 인터넷에서 받은 파일은 내려받기 상태&#183;보안 표시 등에 따라 미리보기가 제한될 수 있습니다.</p>
+<h2 id='section-5'>5. 파일 열기&#183;선택&#183;이름 변경&#183;삭제</h2>
+<p>파일은 더블클릭하면 기본 프로그램으로 열리고 폴더는 타일 안에서 열립니다. <code>Ctrl</code>과 <code>Shift</code>를 사용해 여러 항목을 선택할 수 있습니다. 우클릭하면 Windows 셸 메뉴와 Folder Deck 기능을 사용할 수 있습니다.</p>
+<ul>
+<li><code>F2</code>: 선택한 항목 하나의 이름을 변경합니다.</li>
+<li><code>Ctrl+Shift+N</code>: 현재 폴더에 새 폴더를 만듭니다.</li>
+<li><code>Delete</code>: 선택한 항목을 휴지통으로 보냅니다. 삭제 확인 내용을 확인하세요.</li>
+<li><code>Shift+Delete</code>: 영구 삭제를 실행하지 않고 거절 안내를 표시합니다.</li>
+</ul>
+<p>등록 제거와 디스크 삭제는 별개입니다. 네트워크 경로 등 휴지통을 사용할 수 없는 대상은 작업이 거절되거나 실패할 수 있습니다. 상태 바의 결과를 확인하세요.</p>
+<h2 id='section-6'>6. 복사&#183;이동&#183;대상함&#183;매크로</h2>
+<p><code>Ctrl+C</code>는 복사, <code>Ctrl+X</code>는 잘라내기, 대상 타일에서 <code>Ctrl+V</code>는 붙여넣기입니다. 타일 사이 또는 Windows 탐색기와의 끌어놓기도 지원합니다. 표시되는 복사&#183;이동 동작을 확인한 뒤 놓으세요. 같은 폴더에 복사하면 사본 이름을 사용합니다.</p>
+<p>복사 대상함에 폴더를 추가하고 대상 폴더를 체크하면 여러 목적지로 복사하는 작업을 준비할 수 있습니다. 이동은 목적지가 하나여야 합니다. 같은 이름이 있을 때는 <strong>덮어쓰기</strong>, <strong>건너뛰기</strong>, <strong>둘 다 두기</strong> 중에서 처리 방법을 선택합니다.</p>
+<p>처리 중에는 상태 바에 진행 상황이 표시됩니다. 취소는 이미 끝난 작업을 되돌리지 않습니다. 결과 메시지와 목적지 파일을 확인하세요.</p>
+<p>매크로는 반복할 복사&#183;이동&#183;휴지통 작업의 규칙을 저장합니다. 편집 창의 <strong>고급 옵션</strong>에서 실행 시 선택한 파일을 사용할지, 고정한 파일을 사용할지, 대상함의 체크 상태를 따를지 등을 정합니다. 실행 전 미리보기 옵션으로 원본&#183;대상&#183;충돌 처리를 확인할 수 있습니다.</p>
+<h2 id='section-7'>7. 검색</h2>
+<p><code>Ctrl+F</code>로 현재 타일의 검색 입력칸을 엽니다. 일반 폴더 검색은 이름의 부분 일치로 검색하며 대소문자를 구분하지 않습니다. 하위 폴더 검색을 켜면 현재 폴더 아래를 재귀로 검색합니다. 검색을 닫으면 일반 폴더 목록으로 돌아갑니다.</p>
+<p>전역 검색은 Everything 연동을 사용합니다. Everything 프로그램이 별도로 설치되고 실행 중이어야 하며, 배포본의 <code>Everything64.dll</code>만으로 검색 인덱스를 만들지는 않습니다. <strong>설정 → 검색</strong>에서 연동 상태와 결과 상한을 확인하세요. Everything이 없거나 연결되지 않으면 전역 검색을 사용할 수 없습니다. 일반 폴더 검색은 별도로 사용할 수 있습니다.</p>
+<h2 id='section-8'>8. 폴더 비교&#183;내용 비교&#183;중복 찾기&#183;배치 리네임</h2>
+<p><strong>타일 간 비교</strong>: 폴더 타일에서 <code>Ctrl+D</code>를 누르고 상대 타일을 선택합니다. 파일 이름은 대소문자 구분 없이 짝지으며 <strong>같음</strong>, <strong>다름</strong>, <strong>여기만</strong> 배지를 표시합니다.</p>
+<p><strong>같음</strong>은 파일의 이름&#183;크기&#183;수정 시각이 같다는 뜻입니다. 파일 내용의 바이트 일치를 보장하지 않습니다. 같은 이름의 폴더는 존재 여부만 비교하며 하위 폴더를 재귀 비교하지 않습니다.</p>
+<p><strong>내용 비교</strong>: 비교된 파일의 우클릭 <strong>내용 비교</strong>를 사용합니다. 텍스트를 나란히 보여주고 달라진 부분을 강조합니다. 양쪽은 가로 스크롤을 따로, 세로 스크롤을 함께 사용합니다. 파일 경로를 클릭하면 기본 프로그램으로 엽니다. 텍스트 파일당 최대 5MB를 지원하며 이진 파일은 거절합니다. BOM&#183;UTF-8&#183;CP949를 처리하지만 다른 인코딩은 문자가 잘못 보일 수 있습니다.</p>
+<p><strong>중복 찾기</strong>: 도구모음에서 실행하면 현재 열린 타일의 파일 중 이름&#183;크기가 같은 항목을 묶습니다. 내용 해시를 비교하지 않으므로 중복 후보로 판단하세요. 결과를 더블클릭하면 탐색기에서 파일 위치를 엽니다.</p>
+<p><strong>배치 리네임</strong>: 파일을 여러 개 선택하고 <code>Ctrl+F2</code>를 누릅니다. 찾기/바꾸기&#183;번호 매기기&#183;대소문자 변환 규칙을 선택한 뒤 새 이름 미리보기를 확인합니다. 이름 충돌이나 사용할 수 없는 이름을 먼저 해결하고 실행하세요.</p>
+<h2 id='section-9'>9. 단축키</h2>
+<div class="table-wrap"><table><thead><tr>
+<th>단축키</th>
+<th>동작</th>
+</tr></thead><tbody>
+<tr>
+<td><code>Alt+←</code> / <code>Alt+→</code></td>
+<td>타일의 뒤로 / 앞으로</td>
+</tr>
+<tr>
+<td><code>Alt+↑</code></td>
+<td>상위 폴더</td>
+</tr>
+<tr>
+<td><code>Alt+Home</code></td>
+<td>앵커 폴더 복귀</td>
+</tr>
+<tr>
+<td><code>F5</code></td>
+<td>열린 폴더 목록 새로 읽기</td>
+</tr>
+<tr>
+<td><code>Ctrl+F</code></td>
+<td>현재 타일 검색 입력</td>
+</tr>
+<tr>
+<td><code>F2</code></td>
+<td>이름 변경</td>
+</tr>
+<tr>
+<td><code>Ctrl+F2</code></td>
+<td>배치 리네임</td>
+</tr>
+<tr>
+<td><code>Ctrl+D</code></td>
+<td>상대 타일과 목록 비교</td>
+</tr>
+<tr>
+<td><code>Ctrl+C</code> / <code>Ctrl+X</code> / <code>Ctrl+V</code></td>
+<td>복사 / 잘라내기 / 붙여넣기</td>
+</tr>
+<tr>
+<td><code>Ctrl+Shift+N</code></td>
+<td>새 폴더 만들기</td>
+</tr>
+<tr>
+<td><code>Delete</code></td>
+<td>휴지통으로 삭제</td>
+</tr>
+</tbody></table></div>
+<p>타일에 포커스가 있어야 해당 타일의 단축키가 적용됩니다. 검색&#183;이름 입력 중에는 텍스트 편집에 사용하는 키가 우선할 수 있습니다.</p>
+<h2 id='section-10'>10. 저장 위치&#183;백업&#183;문제 해결</h2>
+<ul>
+<li>설치 위치: <code>%LOCALAPPDATA%\FolderDeck\app</code></li>
+<li>사용자 데이터: <code>%APPDATA%\FolderDeck</code></li>
+<li>전역 설정: <code>settings.json</code></li>
+<li>작업 관리: <code>workspaces\{id}.json</code></li>
+</ul>
+<p>백업하려면 모든 Folder Deck 창을 닫고 사용자 데이터 폴더를 복사하세요. 복원할 때도 앱을 종료한 뒤 복원합니다. 작업 관리에는 실제 폴더 경로가 저장되므로 다른 PC로 옮기면 해당 경로를 맞추거나 폴더를 다시 등록해야 합니다. 이 데이터는 개인 백업으로 관리하고 공개 저장소에 올리지 마세요.</p>
+<p>폴더가 열리지 않으면 경로 존재 여부&#183;권한&#183;네트워크 연결을 확인한 뒤 <code>F5</code>를 누르세요. 접근 불가 폴더는 자동으로 등록에서 지워지지 않습니다. 파일 목록이 갱신되지 않으면 창을 다시 활성화하거나 <code>F5</code>로 새로 읽으세요.</p>
+<p>전역 검색 실패는 Everything 실행 상태와 설정 화면의 연동 상태를 확인하세요. 미리보기 실패는 파일 형식&#183;로컬 다운로드 상태&#183;Preview Handler 지원 여부를 확인하세요. 저장 실패나 손상 데이터 안내가 나오면 해당 JSON을 백업하고 상태 메시지를 확인한 뒤 복구하세요.</p>
+<footer>Folder Deck 1.7.0 사용자 매뉴얼</footer></main></body></html>

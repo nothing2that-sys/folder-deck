@@ -1,0 +1,141 @@
+<Window x:Class="FolderDeck.App.Views.ContentDiffWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="내용 비교"
+        Width="1000" Height="620"
+        Background="{StaticResource Brush.Chrome}"
+        FontFamily="Segoe UI" FontSize="12"
+        Foreground="{StaticResource Brush.TextPrimary}">
+
+    <DockPanel Margin="14">
+        <TextBlock x:Name="SummaryText" DockPanel.Dock="Top" Margin="0,0,0,8"
+                   TextWrapping="Wrap" Foreground="{StaticResource Brush.TextSecondary}" />
+        <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap"
+                   FontSize="11" Foreground="{StaticResource Brush.TextSecondary}"
+                   Text="줄마다 옆에 나란히 놓았다 — 왼쪽/오른쪽은 각자 가로로 스크롤된다(위아래는 같이 움직인다). 이름+크기만 본 후보다 — 내용까지 같은지는 안 쟀다." />
+
+        <Border BorderBrush="{StaticResource Brush.Border}" BorderThickness="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="120" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="*" MinWidth="120" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Grid.Column="0" Background="{StaticResource Brush.GridCellSurface}"
+                        Padding="6,4">
+                    <TextBlock x:Name="LeftHeaderText" FontWeight="SemiBold" Cursor="Hand"
+                               TextTrimming="CharacterEllipsis"
+                               MouseLeftButtonUp="OnLeftHeaderClick">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="TextDecorations" Value="Underline" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Border>
+                <Border Grid.Row="0" Grid.Column="2" Background="{StaticResource Brush.GridCellSurface}"
+                        Padding="6,4">
+                    <TextBlock x:Name="RightHeaderText" FontWeight="SemiBold" Cursor="Hand"
+                               TextTrimming="CharacterEllipsis"
+                               MouseLeftButtonUp="OnRightHeaderClick">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="TextDecorations" Value="Underline" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Border>
+
+                <GridSplitter Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                              Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                              Background="{StaticResource Brush.Border}"
+                              ResizeBehavior="PreviousAndNext" ShowsPreview="False" />
+
+                <ScrollViewer x:Name="LeftScroll" Grid.Row="1" Grid.Column="0"
+                              HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                              ScrollChanged="OnLeftScrollChanged">
+                    <ItemsControl x:Name="LeftList" ItemsSource="{Binding}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding LeftLineBackground}"
+                                        MinWidth="{Binding ViewportWidth,
+                                                   RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
+                                    <DockPanel Margin="4,1">
+                                        <TextBlock DockPanel.Dock="Left" Text="{Binding LeftNumber}"
+                                                   Width="40" TextAlignment="Right" Margin="0,0,8,0"
+                                                   FontFamily="Consolas" FontSize="11"
+                                                   Foreground="{StaticResource Brush.TextSecondary}" />
+                                        <ItemsControl ItemsSource="{Binding LeftSpans}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Text}"
+                                                               Background="{Binding Background}"
+                                                               FontFamily="Consolas" FontSize="12"
+                                                               TextWrapping="NoWrap" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </DockPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <ScrollViewer x:Name="RightScroll" Grid.Row="1" Grid.Column="2"
+                              HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Hidden"
+                              ScrollChanged="OnRightScrollChanged">
+                    <ItemsControl x:Name="RightList" ItemsSource="{Binding}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding RightLineBackground}"
+                                        MinWidth="{Binding ViewportWidth,
+                                                   RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
+                                    <DockPanel Margin="4,1">
+                                        <TextBlock DockPanel.Dock="Left" Text="{Binding RightNumber}"
+                                                   Width="40" TextAlignment="Right" Margin="0,0,8,0"
+                                                   FontFamily="Consolas" FontSize="11"
+                                                   Foreground="{StaticResource Brush.TextSecondary}" />
+                                        <ItemsControl ItemsSource="{Binding RightSpans}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Text}"
+                                                               Background="{Binding Background}"
+                                                               FontFamily="Consolas" FontSize="12"
+                                                               TextWrapping="NoWrap" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </DockPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </DockPanel>
+</Window>

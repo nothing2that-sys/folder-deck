@@ -1,0 +1,850 @@
+<UserControl x:Class="FolderDeck.App.Views.FolderPanelView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:FolderDeck.App.ViewModels"
+             xmlns:v="clr-namespace:FolderDeck.App.Views"
+             xmlns:interop="clr-namespace:FolderDeck.App.Interop"
+             xmlns:models="clr-namespace:FolderDeck.Core.Models;assembly=FolderDeck.Core"
+             xmlns:comparison="clr-namespace:FolderDeck.Core.Comparison;assembly=FolderDeck.Core"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:FolderPanelViewModel}"
+             Focusable="True"
+             PreviewMouseDown="OnPreviewMouseDown"
+             PreviewMouseMove="OnPanelPreviewMouseMove"
+             PreviewMouseLeftButtonUp="OnPanelPreviewMouseLeftButtonUp"
+             LostMouseCapture="OnPanelLostMouseCapture"
+             DataContextChanged="OnDataContextChanged"
+             AllowDrop="True"
+             DragEnter="OnTileDragOver"
+             DragOver="OnTileDragOver"
+             DragLeave="OnTileDragLeave"
+             Drop="OnTileDrop">
+
+    <UserControl.InputBindings>
+        <KeyBinding Modifiers="Alt" Key="Home" Command="{Binding GoToAnchorCommand}" />
+        <KeyBinding Modifiers="Alt" Key="Up" Command="{Binding GoUpCommand}" />
+        <KeyBinding Modifiers="Alt" Key="Left" Command="{Binding GoBackCommand}" />
+        <KeyBinding Modifiers="Alt" Key="Right" Command="{Binding GoForwardCommand}" />
+
+        <KeyBinding Key="F2" Command="{Binding RenameSelectionCommand}" />
+
+        <KeyBinding Modifiers="Ctrl" Key="D" Command="{Binding StartCompareCommand}" />
+
+        <KeyBinding Modifiers="Ctrl" Key="F2" Command="{Binding BatchRenameSelectionCommand}" />
+
+        <KeyBinding Modifiers="Ctrl" Key="C" Command="{Binding CopySelectionToClipboardCommand}" />
+
+        <KeyBinding Modifiers="Ctrl" Key="X" Command="{Binding CutSelectionToClipboardCommand}" />
+
+        <KeyBinding Modifiers="Ctrl" Key="V" Command="{Binding PasteIntoCurrentCommand}" />
+
+        <KeyBinding Modifiers="Ctrl+Shift" Key="N" Command="{Binding CreateNewFolderInteractiveCommand}" />
+
+    </UserControl.InputBindings>
+
+    <UserControl.Resources>
+
+        <ContextMenu x:Key="CurrentFolderMenu" x:Shared="False">
+            <MenuItem Header="새 폴더 만들기" Command="{Binding CreateNewFolderInteractiveCommand}" />
+            <MenuItem Header="붙여넣기" InputGestureText="Ctrl+V"
+                      Command="{Binding PasteIntoCurrentCommand}" />
+            <Separator />
+            <MenuItem Header="탐색기에서 열기" Command="{Binding RevealCurrentFolderCommand}" />
+            <MenuItem Header="경로 복사" Command="{Binding CopyCurrentPathCommand}" />
+            <Separator />
+            <MenuItem Header="이 폴더를 앵커로 지정" Command="{Binding SetAnchorToCurrentCommand}" />
+            <MenuItem Header="새 폴더로 등록" Command="{Binding RegisterCurrentFolderCommand}" />
+        </ContextMenu>
+
+        <ContextMenu x:Key="ColumnMenu" x:Shared="False">
+            <MenuItem Header="크기" IsCheckable="True"
+                      IsChecked="{Binding CurrentShowSize, Mode=OneWay}"
+                      Command="{Binding ToggleShowSizeCommand}" />
+            <MenuItem Header="수정" IsCheckable="True"
+                      IsChecked="{Binding CurrentShowModified, Mode=OneWay}"
+                      Command="{Binding ToggleShowModifiedCommand}" />
+            <MenuItem Header="위치" IsCheckable="True"
+                      IsChecked="{Binding CurrentShowPosition, Mode=OneWay}"
+                      Command="{Binding ToggleShowPositionCommand}"
+                      Visibility="{Binding NeedsLocationColumn, Converter={StaticResource BoolToVisibility}}" />
+        </ContextMenu>
+
+        <Style x:Key="FileItemContainer" TargetType="ListViewItem">
+
+            <Setter Property="HorizontalAlignment" Value="Left" />
+
+            <EventSetter Event="MouseDoubleClick" Handler="OnItemDoubleClick" />
+
+            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="OnItemPreviewMouseDown" />
+
+            <EventSetter Event="PreviewMouseRightButtonDown" Handler="OnItemPreviewRightButtonDown" />
+            <EventSetter Event="PreviewMouseRightButtonUp" Handler="OnItemPreviewRightButtonUp" />
+
+            <Style.Triggers>
+
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource Brush.SelectionSurface}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="LargeIconItemContainer" TargetType="ListViewItem"
+               BasedOn="{StaticResource FileItemContainer}">
+            <Setter Property="Width" Value="120" />
+            <Setter Property="Height" Value="144" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Padding" Value="4" />
+        </Style>
+
+        <Style x:Key="ExtraLargeIconItemContainer" TargetType="ListViewItem"
+               BasedOn="{StaticResource FileItemContainer}">
+            <Setter Property="Width" Value="144" />
+            <Setter Property="Height" Value="168" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Padding" Value="4" />
+        </Style>
+
+        <Style x:Key="ItemGlyph" TargetType="TextBlock">
+            <Setter Property="Text" Value="{Binding Glyph}" />
+            <Setter Property="Margin" Value="0,0,5,0" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.FileGlyph}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsDirectory}" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource Brush.FolderGlyph}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <DataTemplate x:Key="ItemIcon">
+            <Grid>
+                <Image x:Name="ShellIconImage" Source="{Binding ShellIcon}" Width="16" Height="16"
+                       VerticalAlignment="Center" Margin="0,0,5,0"
+                       Unloaded="OnShellIconImageUnloaded"
+                       DataContextChanged="OnShellIconImageDataContextChanged" />
+                <TextBlock x:Name="GlyphText" Style="{StaticResource ItemGlyph}" Visibility="Collapsed" />
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding ShellIcon}" Value="{x:Null}">
+                    <Setter TargetName="GlyphText" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="CompareBadge">
+            <TextBlock Margin="6,0,0,0">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="FontWeight" Value="Bold" />
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CompareStatus}"
+                                         Value="{x:Static comparison:CompareStatus.OnlyHere}">
+                                <Setter Property="Text" Value="[여기만]" />
+                                <Setter Property="Foreground" Value="{StaticResource Brush.Accent}" />
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding CompareStatus}"
+                                         Value="{x:Static comparison:CompareStatus.Different}">
+                                <Setter Property="Text" Value="[다름]" />
+                                <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding CompareStatus}"
+                                         Value="{x:Static comparison:CompareStatus.Same}">
+                                <Setter Property="Text" Value="[같음]" />
+                                <Setter Property="Foreground" Value="{StaticResource Brush.TextSecondary}" />
+                                <Setter Property="FontWeight" Value="Normal" />
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </DataTemplate>
+
+        <DataTemplate x:Key="NameColumnHeader">
+            <TextBlock Text="{Binding DataContext.NameHeaderText,
+                              RelativeSource={RelativeSource AncestorType=ListView}}" />
+        </DataTemplate>
+        <DataTemplate x:Key="SizeColumnHeader">
+            <TextBlock Text="{Binding DataContext.SizeHeaderText,
+                              RelativeSource={RelativeSource AncestorType=ListView}}" />
+        </DataTemplate>
+        <DataTemplate x:Key="ModifiedColumnHeader">
+            <TextBlock Text="{Binding DataContext.ModifiedHeaderText,
+                              RelativeSource={RelativeSource AncestorType=ListView}}" />
+        </DataTemplate>
+
+        <GridView x:Key="NormalGridView" x:Shared="False">
+
+            <GridView.ColumnHeaderContainerStyle>
+                <Style TargetType="GridViewColumnHeader"
+                       BasedOn="{StaticResource {x:Type GridViewColumnHeader}}">
+                    <Setter Property="HorizontalContentAlignment" Value="Left" />
+                    <Setter Property="ToolTip"
+                            Value="눌러서 이 열로 정렬 — 같은 열을 다시 누르면 오름/내림이 뒤집힌다" />
+
+                    <Setter Property="ContextMenu" Value="{StaticResource ColumnMenu}" />
+                </Style>
+            </GridView.ColumnHeaderContainerStyle>
+
+            <GridViewColumn Header="이름" Width="260" v:ColumnLayout.IsFlexible="True"
+                            HeaderTemplate="{StaticResource NameColumnHeader}"
+                            v:ColumnSort.SortKey="{x:Static models:SortBy.Name}">
+                <GridViewColumn.CellTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <ContentControl ContentTemplate="{StaticResource ItemIcon}" Content="{Binding}" />
+                            <TextBlock Text="{Binding Name}" />
+                            <ContentControl ContentTemplate="{StaticResource CompareBadge}" Content="{Binding}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </GridViewColumn.CellTemplate>
+            </GridViewColumn>
+            <GridViewColumn Header="크기" Width="90"
+                            HeaderTemplate="{StaticResource SizeColumnHeader}"
+                            v:ColumnSort.SortKey="{x:Static models:SortBy.Size}">
+                <GridViewColumn.CellTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding SizeText}" TextAlignment="Right"
+                                   HorizontalAlignment="Right" />
+                    </DataTemplate>
+                </GridViewColumn.CellTemplate>
+            </GridViewColumn>
+            <GridViewColumn Header="수정" Width="130" DisplayMemberBinding="{Binding ModifiedText}"
+                            HeaderTemplate="{StaticResource ModifiedColumnHeader}"
+                            v:ColumnSort.SortKey="{x:Static models:SortBy.Modified}" />
+        </GridView>
+
+        <GridView x:Key="SearchGridView" x:Shared="False">
+            <GridView.ColumnHeaderContainerStyle>
+                <Style TargetType="GridViewColumnHeader"
+                       BasedOn="{StaticResource {x:Type GridViewColumnHeader}}">
+                    <Setter Property="HorizontalContentAlignment" Value="Left" />
+                    <Setter Property="ToolTip"
+                            Value="눌러서 이 열로 정렬 — 같은 열을 다시 누르면 오름/내림이 뒤집힌다" />
+
+                    <Setter Property="ContextMenu" Value="{StaticResource ColumnMenu}" />
+                </Style>
+            </GridView.ColumnHeaderContainerStyle>
+
+            <GridViewColumn Header="이름" Width="220"
+                            HeaderTemplate="{StaticResource NameColumnHeader}"
+                            v:ColumnSort.SortKey="{x:Static models:SortBy.Name}">
+                <GridViewColumn.CellTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <ContentControl ContentTemplate="{StaticResource ItemIcon}" Content="{Binding}" />
+                            <TextBlock Text="{Binding Name}" />
+                            <ContentControl ContentTemplate="{StaticResource CompareBadge}" Content="{Binding}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </GridViewColumn.CellTemplate>
+            </GridViewColumn>
+
+            <GridViewColumn Header="위치" Width="180" v:ColumnLayout.IsFlexible="True">
+                <GridViewColumn.CellTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding RelativeFolder}" TextTrimming="CharacterEllipsis"
+                                   Foreground="{StaticResource Brush.TextSecondary}"
+                                   ToolTip="{Binding FullPath}" />
+                    </DataTemplate>
+                </GridViewColumn.CellTemplate>
+            </GridViewColumn>
+            <GridViewColumn Header="크기" Width="80"
+                            HeaderTemplate="{StaticResource SizeColumnHeader}"
+                            v:ColumnSort.SortKey="{x:Static models:SortBy.Size}">
+                <GridViewColumn.CellTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding SizeText}" TextAlignment="Right"
+                                   HorizontalAlignment="Right" />
+                    </DataTemplate>
+                </GridViewColumn.CellTemplate>
+            </GridViewColumn>
+            <GridViewColumn Header="수정" Width="120" DisplayMemberBinding="{Binding ModifiedText}"
+                            HeaderTemplate="{StaticResource ModifiedColumnHeader}"
+                            v:ColumnSort.SortKey="{x:Static models:SortBy.Modified}" />
+        </GridView>
+    </UserControl.Resources>
+
+    <Grid>
+
+        <Rectangle RadiusX="4" RadiusY="4" StrokeThickness="2">
+            <Rectangle.Style>
+                <Style TargetType="Rectangle">
+                    <Setter Property="Fill" Value="{StaticResource Brush.Surface}" />
+                    <Setter Property="Stroke" Value="{StaticResource Brush.Pinned}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsRotating}" Value="True">
+                            <Setter Property="Stroke" Value="{StaticResource Brush.Rotating}" />
+                            <Setter Property="StrokeDashArray" Value="4 2.5" />
+                        </DataTrigger>
+
+                        <DataTrigger Binding="{Binding IsSearchTile}" Value="True">
+                            <Setter Property="Stroke" Value="{StaticResource Brush.Search}" />
+                            <Setter Property="StrokeDashArray" Value="1 2" />
+                        </DataTrigger>
+
+                        <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                            <Setter Property="Stroke" Value="{StaticResource Brush.Accent}" />
+                            <Setter Property="Fill" Value="{StaticResource Brush.AccentSurface}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Rectangle.Style>
+        </Rectangle>
+
+        <Border Panel.ZIndex="1" IsHitTestVisible="False"
+                Background="{StaticResource Brush.AccentSurface}"
+                BorderBrush="{StaticResource Brush.Accent}" BorderThickness="1.5"
+                CornerRadius="3" Padding="10,4"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Visibility="{Binding IsDropTarget, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="{Binding DropTargetText}" FontWeight="SemiBold"
+                       Foreground="{StaticResource Brush.Accent}" />
+        </Border>
+
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="{Binding EmptyTitle}" TextAlignment="Center"
+                       Foreground="{StaticResource Brush.TextSecondary}" />
+            <TextBlock Text="왼쪽 목록에서 폴더를 클릭" FontSize="11" TextAlignment="Center"
+                       Margin="0,3,0,0" Foreground="{StaticResource Brush.TextSecondary}" />
+        </StackPanel>
+
+        <DockPanel Margin="10,8">
+            <DockPanel.Style>
+                <Style TargetType="DockPanel">
+                    <Setter Property="Visibility" Value="Visible" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsEmpty}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DockPanel.Style>
+
+            <StackPanel DockPanel.Dock="Top">
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+
+                        <ColumnDefinition Width="*" MinWidth="64" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Style="{StaticResource WideOnlyNavButton}" Width="20"
+                                Command="{Binding GoBackCommand}"
+                                AutomationProperties.Name="뒤로"
+                                ToolTip="뒤로 (마우스 뒤로 버튼 · Alt+←)" Content="←" />
+                        <Button Style="{StaticResource WideOnlyNavButton}" Width="20"
+                                Command="{Binding GoForwardCommand}"
+                                AutomationProperties.Name="앞으로"
+                                ToolTip="앞으로 (마우스 앞으로 버튼 · Alt+→)" Content="→" />
+                        <Button Style="{StaticResource WideOnlyNavButton}" Width="20"
+                                Command="{Binding GoUpCommand}"
+                                IsEnabled="{Binding CanGoUp}"
+                                AutomationProperties.Name="상위 폴더"
+                                ToolTip="상위 폴더 (Alt+↑)" Content="↑" />
+
+                        <Button Style="{StaticResource NavButton}" Width="20"
+                                Command="{Binding GoToAnchorCommand}"
+                                AutomationProperties.Name="앵커로 복귀"
+                                ToolTip="앵커로 복귀 (Alt+Home)" Content="⌂" />
+
+                        <Button Style="{StaticResource WideOnlyNavButton}" Width="20"
+                                Command="{Binding RefreshCommand}"
+                                AutomationProperties.Name="다시 읽기"
+                                ToolTip="다시 읽기 (F5)" Content="⟳" />
+
+                        <Button Style="{StaticResource WideOnlyNavButton}" Width="20"
+                                Command="{Binding ToggleViewModeCommand}"
+                                Content="{Binding ViewModeIcon}"
+                                AutomationProperties.Name="뷰 방식 전환"
+                                ToolTip="{Binding ViewModeTip}" />
+
+                        <Button Style="{StaticResource WideOnlyNavButton}" Width="20"
+                                Command="{Binding ToggleShowPreviewCommand}"
+                                Content="▤"
+                                AutomationProperties.Name="미리보기 칸 전환"
+                                ToolTip="미리보기 칸" />
+
+                        <Button Style="{StaticResource WideOnlyNavButton}"
+                                Width="Auto" MinWidth="20" Padding="2,0"
+                                Click="OnMoreMenuClick"
+                                Content="{Binding SortIcon}"
+                                IsEnabled="{Binding IsRecursiveSearch, Converter={StaticResource InverseBool}}"
+                                ToolTipService.ShowOnDisabled="True"
+                                AutomationProperties.Name="정렬 기준 변경"
+                                ToolTip="{Binding SortTip}"
+                                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="이름"
+                                              Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:SortBy.Name}" />
+                                    <MenuItem Header="수정"
+                                              Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:SortBy.Modified}" />
+                                    <MenuItem Header="크기"
+                                              Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:SortBy.Size}" />
+                                    <MenuItem Header="종류"
+                                              Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:SortBy.Type}" />
+                                    <Separator />
+
+                                    <MenuItem Header="폴더 먼저"
+                                              IsChecked="{Binding PlacementTarget.Tag.FoldersFirst,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                          Mode=OneWay}"
+                                              Command="{Binding PlacementTarget.Tag.ToggleFoldersFirstCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Visibility="{Binding PlacementTarget.Tag.IsSearchTile,
+                                                           RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                           Converter={StaticResource InverseBoolToVisibility}}"
+                                              ToolTip="끄면 폴더와 파일을 한 덩어리로 정렬한다 — 아이콘에 ∪ 가 붙는다 (창을 다시 열면 켜진 상태로 돌아온다)" />
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+
+                        <Button Style="{StaticResource WideOnlySearchToggleButton}" Width="20"
+                                Click="OnSearchToggleClick"
+                                AutomationProperties.Name="검색"
+                                ToolTip="검색 (Ctrl+F)" Content="🔍" />
+
+                        <Button Style="{StaticResource NavButton}" Width="20"
+                                Command="{Binding ToggleExpandCommand}"
+                                CommandParameter="{Binding}"
+                                Content="{Binding ExpandIcon}"
+                                AutomationProperties.Name="타일 확장"
+                                ToolTip="{Binding ExpandTip}" />
+
+                        <Button Style="{StaticResource NarrowOnlyNavButton}" Width="20"
+                                Click="OnMoreMenuClick"
+                                AutomationProperties.Name="더 보기"
+                                ToolTip="더 보기" Content="⋯"
+                                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <Button.ContextMenu>
+
+                                <ContextMenu>
+                                    <MenuItem Header="뒤로" InputGestureText="Alt+←"
+                                              Command="{Binding PlacementTarget.Tag.GoBackCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <MenuItem Header="앞으로" InputGestureText="Alt+→"
+                                              Command="{Binding PlacementTarget.Tag.GoForwardCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <MenuItem Header="상위 폴더" InputGestureText="Alt+↑"
+                                              IsEnabled="{Binding PlacementTarget.Tag.CanGoUp,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              Command="{Binding PlacementTarget.Tag.GoUpCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <MenuItem Header="다시 읽기" InputGestureText="F5"
+                                              Command="{Binding PlacementTarget.Tag.RefreshCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <Separator />
+
+                                    <MenuItem Header="목록"
+                                              IsChecked="{Binding PlacementTarget.Tag.IsListView,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                          Mode=OneWay}"
+                                              Command="{Binding PlacementTarget.Tag.SetViewModeCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:FolderViewMode.List}" />
+                                    <MenuItem Header="자세히"
+                                              IsChecked="{Binding PlacementTarget.Tag.IsDetailsView,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                          Mode=OneWay}"
+                                              Command="{Binding PlacementTarget.Tag.SetViewModeCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:FolderViewMode.Details}" />
+                                    <MenuItem Header="큰 아이콘"
+                                              IsChecked="{Binding PlacementTarget.Tag.IsLargeIconView,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                          Mode=OneWay}"
+                                              Command="{Binding PlacementTarget.Tag.SetViewModeCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:FolderViewMode.LargeIcons}" />
+                                    <MenuItem Header="아주 큰 아이콘"
+                                              IsChecked="{Binding PlacementTarget.Tag.IsExtraLargeIconView,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                          Mode=OneWay}"
+                                              Command="{Binding PlacementTarget.Tag.SetViewModeCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{x:Static models:FolderViewMode.ExtraLargeIcons}" />
+
+                                    <MenuItem Header="미리보기"
+                                              IsChecked="{Binding PlacementTarget.Tag.CurrentShowPreview,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                          Mode=OneWay}"
+                                              Command="{Binding PlacementTarget.Tag.ToggleShowPreviewCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+
+                                    <MenuItem Header="정렬"
+                                              IsEnabled="{Binding PlacementTarget.Tag.IsRecursiveSearch,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                          Converter={StaticResource InverseBool}}">
+                                        <MenuItem Header="이름"
+                                                  Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                  CommandParameter="{x:Static models:SortBy.Name}" />
+                                        <MenuItem Header="수정"
+                                                  Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                  CommandParameter="{x:Static models:SortBy.Modified}" />
+                                        <MenuItem Header="크기"
+                                                  Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                  CommandParameter="{x:Static models:SortBy.Size}" />
+                                        <MenuItem Header="종류"
+                                                  Command="{Binding PlacementTarget.Tag.SetSortCommand,
+                                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                  CommandParameter="{x:Static models:SortBy.Type}" />
+                                        <Separator />
+
+                                        <MenuItem Header="폴더 먼저"
+                                                  IsChecked="{Binding PlacementTarget.Tag.FoldersFirst,
+                                                              RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                              Mode=OneWay}"
+                                                  Command="{Binding PlacementTarget.Tag.ToggleFoldersFirstCommand,
+                                                            RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                  Visibility="{Binding PlacementTarget.Tag.IsSearchTile,
+                                                               RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                               Converter={StaticResource InverseBoolToVisibility}}"
+                                                  ToolTip="끄면 폴더와 파일을 한 덩어리로 정렬한다 — 아이콘에 ∪ 가 붙는다 (창을 다시 열면 켜진 상태로 돌아온다)" />
+                                    </MenuItem>
+                                    <Separator />
+
+                                    <MenuItem Header="검색" InputGestureText="Ctrl+F"
+                                              IsChecked="{Binding PlacementTarget.Tag.IsSearchExpanded,
+                                                          RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                          Mode=OneWay}"
+                                              Command="{Binding PlacementTarget.Tag.ToggleSearchExpandedCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+                    </StackPanel>
+
+                    <DockPanel Grid.Column="0">
+
+                        <TextBlock DockPanel.Dock="Right"
+                                   Margin="6,0,4,0" VerticalAlignment="Center" FontSize="11"
+                                   Foreground="{StaticResource Brush.TextSecondary}"
+                                   ToolTip="{Binding MetaText}"><Run
+                                       Text="{Binding ItemCountText, Mode=OneWay}" /><Run
+                                       Text="{Binding SelectionSuffix, Mode=OneWay}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource Brush.Accent}" /></TextBlock>
+
+                    <ScrollViewer x:Name="BreadcrumbScroll"
+                                  VerticalAlignment="Center"
+                                  HorizontalScrollBarVisibility="Hidden"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  Background="Transparent"
+                                  ToolTip="우클릭: 지금 보고 있는 폴더 메뉴"
+                                  ContextMenu="{StaticResource CurrentFolderMenu}"
+                                  ContextMenuOpening="OnListContextMenuOpening"
+                                  ScrollChanged="OnBreadcrumbScrollChanged">
+                        <ItemsControl ItemsSource="{Binding Breadcrumbs}"
+                                      VerticalAlignment="Center" ClipToBounds="True">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="›" Foreground="{StaticResource Brush.TextSecondary}"
+                                                   Margin="1,0" VerticalAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsAnchor}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <Button Style="{StaticResource LinkButton}"
+                                                Content="{Binding Name}"
+                                                ToolTip="{Binding Path}"
+                                                Command="{Binding DataContext.NavigateToCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding Path}">
+                                            <Button.Resources>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsAnchor}" Value="True">
+                                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Resources>
+                                        </Button>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    </DockPanel>
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" Margin="3,2,0,4" ClipToBounds="True"
+                            Visibility="{Binding HasStatusLine,
+                                         Converter={StaticResource BoolToVisibility}}">
+
+                    <TextBlock Text="앵커 밖" Foreground="{StaticResource Brush.Rotating}"
+                               FontSize="11" VerticalAlignment="Center"
+                               Visibility="{Binding IsAwayFromAnchor,
+                                                    Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock Text="읽는 중…" Foreground="{StaticResource Brush.TextSecondary}"
+                               FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
+                               Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+
+                <DockPanel x:Name="SearchArea" Margin="0,2,0,6"
+                           IsKeyboardFocusWithinChanged="OnSearchFocusWithinChanged"
+                           Visibility="{Binding IsSearchExpanded,
+                                        Converter={StaticResource BoolToVisibility}}">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource NavButton}"
+                            Command="{Binding CloseSearchCommand}"
+                            AutomationProperties.Name="검색 닫기"
+                            ToolTip="검색 닫기" Content="✕" />
+
+                    <CheckBox DockPanel.Dock="Right" Content="하위 포함" VerticalAlignment="Center"
+                              Margin="8,0,4,0" FontSize="11"
+                              IsChecked="{Binding IncludeSubfolders}"
+                              Visibility="{Binding IsSearchTile, Converter={StaticResource InverseBoolToVisibility}}"
+                              ToolTip="켜면 이 폴더 아래 트리를 재귀로 검색한다" />
+                    <TextBox x:Name="SearchBox"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             Padding="4,3" FontSize="12" MinHeight="24"
+                             VerticalContentAlignment="Center"
+                             ToolTip="이름으로 검색 (대소문자 무시 · 부분일치)" />
+                </DockPanel>
+            </StackPanel>
+
+            <Border DockPanel.Dock="Top" Padding="10" Margin="0,0,0,6" CornerRadius="3"
+                    Background="{StaticResource Brush.DangerSurface}"
+                    Visibility="{Binding HasFailure, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="{Binding FailureText}" Foreground="{StaticResource Brush.Danger}"
+                               FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding CurrentPath}" Foreground="{StaticResource Brush.TextSecondary}"
+                               FontSize="11" Margin="0,3" TextWrapping="Wrap" />
+                    <Button Content="다시 시도" Command="{Binding RefreshCommand}"
+                            HorizontalAlignment="Left" Padding="10,3" Margin="0,4,0,0" />
+                </StackPanel>
+            </Border>
+
+            <StackPanel DockPanel.Dock="Bottom">
+                <TextBlock Text="{Binding SearchStatusText}" FontSize="11" Margin="3,4,0,0"
+                           Foreground="{StaticResource Brush.TextSecondary}"
+                           Visibility="{Binding IsSearching, Converter={StaticResource BoolToVisibility}}" />
+
+                <TextBlock Text="{Binding SkippedFoldersText}" FontSize="11" Margin="3,4,0,0"
+                           Foreground="{StaticResource Brush.Danger}"
+                           Visibility="{Binding HasSkippedFolders,
+                                                Converter={StaticResource BoolToVisibility}}" />
+            </StackPanel>
+
+            <Grid x:Name="ListAndPreview">
+
+                <Grid.RowDefinitions>
+                    <RowDefinition x:Name="ListRow" Height="*" />
+                    <RowDefinition x:Name="SplitterRow" Height="Auto" />
+                    <RowDefinition x:Name="PreviewRow" Height="0" />
+                </Grid.RowDefinitions>
+
+            <Grid x:Name="ListArea" Grid.Row="0" ContextMenu="{StaticResource CurrentFolderMenu}"
+                  ContextMenuOpening="OnListContextMenuOpening">
+
+                <TextBlock Text="결과 없음" Foreground="{StaticResource Brush.TextSecondary}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Visibility="{Binding ShowNoResults, Converter={StaticResource BoolToVisibility}}" />
+
+                <TextBlock Text="{Binding EverythingStatusText}" TextWrapping="Wrap"
+                           Foreground="{StaticResource Brush.TextSecondary}"
+                           TextAlignment="Center" Margin="20,0"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Visibility="{Binding HasEverythingStatusText, Converter={StaticResource BoolToVisibility}}" />
+
+                <ListView x:Name="DetailsList" ItemsSource="{Binding DisplayItems}"
+                          GridViewColumnHeader.Click="OnColumnHeaderClick"
+                          ItemContainerStyle="{StaticResource FileItemContainer}"
+                          BorderThickness="0" Background="Transparent"
+                          SelectionMode="Extended"
+                          SelectionChanged="OnSelectionChanged"
+                          PreviewMouseLeftButtonDown="OnListPreviewMouseLeftButtonDown"
+                          ScrollViewer.ScrollChanged="OnDetailsScrollChanged"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.CanContentScroll="True"
+                          Visibility="{Binding IsDetailsView, Converter={StaticResource BoolToVisibility}}">
+                    <ListView.Style>
+                        <Style TargetType="ListView">
+                            <Setter Property="View" Value="{StaticResource NormalGridView}" />
+                            <Style.Triggers>
+
+                                <DataTrigger Binding="{Binding NeedsLocationColumn}" Value="True">
+                                    <Setter Property="View" Value="{StaticResource SearchGridView}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListView.Style>
+                </ListView>
+
+                <ListView x:Name="LargeIconList" ItemsSource="{Binding DisplayItems}"
+                          ItemContainerStyle="{StaticResource LargeIconItemContainer}"
+                          BorderThickness="0" Background="Transparent"
+                          SelectionMode="Extended"
+                          SelectionChanged="OnSelectionChanged"
+                          PreviewMouseLeftButtonDown="OnListPreviewMouseLeftButtonDown"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.CanContentScroll="True"
+                          IsVisibleChanged="OnLargeIconListIsVisibleChanged"
+                          Visibility="{Binding IsLargeIconView, Converter={StaticResource BoolToVisibility}}">
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <v:VirtualizingWrapPanel ItemHeight="144" />
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Width="108" Height="132" HorizontalAlignment="Center">
+                                <Image Width="76" Height="76" Margin="0,0,0,4"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Stretch="Uniform" SnapsToDevicePixels="True"
+                                       Loaded="OnLargeIconImageLoaded"
+                                       Unloaded="OnLargeIconImageUnloaded"
+                                       DataContextChanged="OnLargeIconImageDataContextChanged" />
+                                <TextBlock Text="{Binding Name}" Height="48"
+                                           TextAlignment="Center" TextWrapping="Wrap"
+                                           ToolTip="{Binding FullPath}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <ListView x:Name="ExtraLargeIconList" ItemsSource="{Binding DisplayItems}"
+                          ItemContainerStyle="{StaticResource ExtraLargeIconItemContainer}"
+                          BorderThickness="0" Background="Transparent"
+                          SelectionMode="Extended"
+                          SelectionChanged="OnSelectionChanged"
+                          PreviewMouseLeftButtonDown="OnListPreviewMouseLeftButtonDown"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.CanContentScroll="True"
+                          IsVisibleChanged="OnLargeIconListIsVisibleChanged"
+                          Visibility="{Binding IsExtraLargeIconView, Converter={StaticResource BoolToVisibility}}">
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <v:VirtualizingWrapPanel ItemWidth="144" ItemHeight="168" />
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Width="132" Height="156" HorizontalAlignment="Center">
+                                <Image Width="100" Height="100" Margin="0,0,0,4"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Stretch="Uniform" SnapsToDevicePixels="True"
+                                       Loaded="OnLargeIconImageLoaded"
+                                       Unloaded="OnLargeIconImageUnloaded"
+                                       DataContextChanged="OnLargeIconImageDataContextChanged" />
+                                <TextBlock Text="{Binding Name}" Height="48"
+                                           TextAlignment="Center" TextWrapping="Wrap"
+                                           ToolTip="{Binding FullPath}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <ListView x:Name="SimpleList" ItemsSource="{Binding DisplayItems}"
+                          ItemContainerStyle="{StaticResource FileItemContainer}"
+                          BorderThickness="0" Background="Transparent"
+                          SelectionMode="Extended"
+                          SelectionChanged="OnSelectionChanged"
+                          PreviewMouseLeftButtonDown="OnListPreviewMouseLeftButtonDown"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.CanContentScroll="True"
+                          Visibility="{Binding IsListView, Converter={StaticResource BoolToVisibility}}">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <ContentControl ContentTemplate="{StaticResource ItemIcon}" Content="{Binding}" />
+
+                                <TextBlock Text="{Binding RelativeFolderPrefix}"
+                                           Foreground="{StaticResource Brush.TextSecondary}"
+                                           Visibility="{Binding HasRelativeFolder,
+                                                                Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Text="{Binding Name}" />
+
+                                <ContentControl ContentTemplate="{StaticResource CompareBadge}" Content="{Binding}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <Canvas x:Name="BandLayer" IsHitTestVisible="False" ClipToBounds="True">
+                    <Rectangle x:Name="Band" Visibility="Collapsed"
+                               Stroke="{StaticResource Brush.Accent}" StrokeThickness="1"
+                               Fill="{StaticResource Brush.AccentSurface}" />
+                </Canvas>
+            </Grid>
+
+                <GridSplitter x:Name="PreviewSplitter" Grid.Row="1" Height="6"
+                              Style="{StaticResource RowSplitter}"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"
+                              Visibility="Collapsed"
+                              DragCompleted="OnPreviewSplitterDragCompleted" />
+
+                <Border x:Name="PreviewPane" Grid.Row="2" Visibility="Collapsed"
+                        Background="{StaticResource Brush.Surface}"
+                        BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0">
+                    <Grid>
+
+                        <interop:PreviewHandlerHost x:Name="PreviewHost" Visibility="Collapsed" />
+                        <Image x:Name="PreviewImage" Visibility="Collapsed" Margin="8"
+                               Stretch="Uniform"
+                               RenderOptions.BitmapScalingMode="HighQuality" />
+                        <TextBlock x:Name="PreviewFallbackText" Text="미리 볼 수 없습니다" FontSize="11"
+                                   Foreground="{StaticResource Brush.TextSecondary}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+            </Grid>
+        </DockPanel>
+
+        <Rectangle Margin="4" RadiusX="2" RadiusY="2" IsHitTestVisible="False"
+                   Stroke="{StaticResource Brush.TileActive}" StrokeThickness="2">
+            <Rectangle.Style>
+                <Style TargetType="Rectangle">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsKeyboardFocusWithin,
+                                               RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                     Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Rectangle.Style>
+        </Rectangle>
+    </Grid>
+</UserControl>

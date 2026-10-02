@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "id": "2f4a6b18-9c31-4d7e-8a05-1b6c9de24f70",
+  "title": "예제 작업 공간",
+  "description": "예제 폴더 5개와 접근 불가 경로 1개를 포함한 샘플입니다. 경로는 자신의 환경에 맞게 바꾸세요.",
+  "lastUsed": "2000-01-01T00:00:00+00:00",
+  "folders": [
+    {
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "path": "C:\\FolderDeckExample\\Source",
+      "displayName": "소스",
+      "description": "소스 예제",
+      "viewMode": "details",
+      "sortBy": "name",
+      "sortDesc": false,
+      "pinned": true
+    },
+    {
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "path": "C:\\FolderDeckExample\\Resources",
+      "displayName": "리소스",
+      "description": "리소스 예제",
+      "viewMode": "details",
+      "sortBy": "name",
+      "sortDesc": false,
+      "pinned": true
+    },
+    {
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "path": "C:\\FolderDeckExample\\Output",
+      "displayName": "산출물",
+      "description": "산출물 예제",
+      "viewMode": "details",
+      "sortBy": "modified",
+      "sortDesc": true,
+      "pinned": false
+    },
+    {
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "path": "C:\\FolderDeckExample\\Documents",
+      "displayName": "문서",
+      "description": "문서 예제",
+      "viewMode": "list",
+      "sortBy": "name",
+      "sortDesc": false,
+      "pinned": false
+    },
+    {
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "path": "C:\\FolderDeckExample\\Temp",
+      "displayName": "임시",
+      "description": "임시 예제",
+      "viewMode": "details",
+      "sortBy": "modified",
+      "sortDesc": true,
+      "pinned": false
+    },
+    {
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "path": "\\\\example-server\\logs",
+      "displayName": "연결 안 된 공유 폴더",
+      "description": "연결 안 된 공유 폴더 예제",
+      "viewMode": "details",
+      "sortBy": "modified",
+      "sortDesc": true,
+      "pinned": false
+    }
+  ]
+}

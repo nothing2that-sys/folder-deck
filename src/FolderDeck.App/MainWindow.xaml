@@ -1,0 +1,667 @@
+<Window x:Class="FolderDeck.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:FolderDeck.App.Views"
+        xmlns:vm="clr-namespace:FolderDeck.App.ViewModels"
+        xmlns:layout="clr-namespace:FolderDeck.Core.Layout;assembly=FolderDeck.Core"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
+        Title="{Binding WindowTitle}"
+        Height="900" Width="1400"
+        MinWidth="{x:Static layout:WindowPlacement.MinWindowWidth}"
+        MinHeight="{x:Static layout:WindowPlacement.MinWindowHeight}"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource Brush.Chrome}"
+        FontFamily="Segoe UI, Segoe UI Emoji, Segoe UI Symbol" FontSize="12"
+        Foreground="{StaticResource Brush.TextPrimary}">
+
+
+
+    <Window.InputBindings>
+        <KeyBinding Key="F5" Command="{Binding RefreshAllCommand}" />
+
+        <KeyBinding Key="Delete" Command="{Binding TrashSelectionCommand}" />
+        <KeyBinding Modifiers="Shift" Key="Delete" Command="{Binding RejectPermanentDeleteCommand}" />
+    </Window.InputBindings>
+
+    <DockPanel>
+
+
+        <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{StaticResource Brush.Border}"
+                Background="{StaticResource Brush.Chrome}" Padding="8,5">
+            <DockPanel>
+
+                <Button DockPanel.Dock="Left" Style="{StaticResource NavButton}"
+                        Margin="0,0,6,0"
+                        Command="{Binding ToggleLeftPanelCommand}"
+                        Content="{Binding LeftPanelToggleText}"
+                        ToolTip="{Binding LeftPanelToggleTip}"
+                        AutomationProperties.Name="왼쪽 패널 접기/펴기" />
+
+
+                <Button DockPanel.Dock="Right" Padding="12,4" Margin="6,0,0,0"
+                        Command="{Binding OpenLauncherCommand}"
+                        Content="다른 작업 관리 열기"
+                        AutomationProperties.Name="다른 작업 관리 열기"
+                        ToolTip="작업 관리 목록을 새 창으로 띄운다 — 거기서 다른 작업 관리를 열 수 있다. 이 창은 그대로 남는다." />
+
+                <Button DockPanel.Dock="Right" Style="{StaticResource EditModeButton}"
+                        Margin="6,0,0,0"
+                        Command="{Binding ToggleLayoutEditCommand}"
+                        Content="{Binding EditToggleText}"
+                        AutomationProperties.Name="배치 편집"
+                        ToolTip="켜면 타일을 옮기고 크기를 바꿀 수 있다. 그동안 파일 목록은 잠긴다." />
+
+
+                <Button DockPanel.Dock="Right" Padding="12,4" Margin="6,0,0,0"
+                        Command="{Binding OpenSettingsCommand}"
+                        IsEnabled="{Binding CanOpenSettings}"
+                        Content="설정"
+                        AutomationProperties.Name="설정"
+                        ToolTip="확장자별 글리프 매핑·셸 아이콘·검색 결과 상한을 편집한다." />
+
+
+                <Button DockPanel.Dock="Right" Padding="12,4" Margin="6,0,0,0"
+                        Command="{Binding FindDuplicatesCommand}"
+                        Content="중복 찾기"
+                        AutomationProperties.Name="중복 파일 찾기"
+                        ToolTip="지금 열린 모든 타일에서 이름·크기가 같은 후보 중복을 찾는다." />
+
+
+                <Grid Margin="12,0,0,0">
+
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  Visibility="{Binding IsEditingLayout,
+                                               Converter={StaticResource InverseBoolToVisibility}}">
+                        <ItemsControl ItemsSource="{Binding RotatingRows}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:FolderRowViewModel}">
+
+                                    <Button Margin="0,0,5,0"
+                                            Content="{Binding DisplayName}"
+                                            Command="{Binding DataContext.ShowFolderCommand,
+                                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
+                                            AutomationProperties.Name="순환 칸에 표시"
+                                            ToolTip="{Binding PathText}">
+                                        <Button.Style>
+                                            <Style TargetType="Button"
+                                                   BasedOn="{StaticResource RotatingTileButton}">
+                                                <Style.Triggers>
+
+                                                    <DataTrigger Binding="{Binding IsShowingInRotating}"
+                                                                 Value="True">
+                                                        <Setter Property="Background"
+                                                                Value="{StaticResource Brush.RotatingSurface}" />
+                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                    </DataTrigger>
+
+                                                    <DataTrigger Binding="{Binding IsInaccessible}" Value="True">
+                                                        <Setter Property="Foreground"
+                                                                Value="{StaticResource Brush.Danger}" />
+                                                        <Setter Property="BorderBrush"
+                                                                Value="{StaticResource Brush.Danger}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+
+                    <DockPanel Visibility="{Binding IsEditingLayout,
+                                            Converter={StaticResource BoolToVisibility}}">
+
+
+                        <ComboBox DockPanel.Dock="Right" FontSize="11"
+                                  VerticalAlignment="Center"
+                                  ItemsSource="{Binding TileGapChoices}"
+                                  SelectedItem="{Binding TileGap}"
+                                  AutomationProperties.Name="타일 사이 여백"
+                                  ToolTip="타일과 타일 사이의 간격(px). 고르면 바로 반영되고 앱을 껐다 켜도 남는다." />
+
+                        <TextBlock DockPanel.Dock="Right" Text="타일 사이" FontSize="11"
+                                   VerticalAlignment="Center" Margin="12,0,4,0"
+                                   Foreground="{StaticResource Brush.EditChromeText}" />
+
+                        <TextBlock VerticalAlignment="Center" FontSize="11"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{StaticResource Brush.EditChromeText}"
+                                   Text="배치 편집 중 — 타일 끌어 이동 · 오른쪽 아래 ◢ 로 크기 · 우클릭으로 상시↔순환/제거 · 빈 칸 클릭이나 폴더 끌어놓기로 추가" />
+                    </DockPanel>
+                </Grid>
+            </DockPanel>
+        </Border>
+
+
+        <Border DockPanel.Dock="Bottom" BorderThickness="0,1,0,0" BorderBrush="{StaticResource Brush.Border}"
+                Background="{StaticResource Brush.Chrome}" Padding="10,4">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left" Text="{Binding StatusLabel}"
+                           Foreground="{StaticResource Brush.TextSecondary}"
+                           Margin="0,0,6,0" />
+
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Message}" Margin="10,0,0,0"
+                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Message}"
+                           Visibility="{Binding HasMessage, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{StaticResource Brush.TextSecondary}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding MessageIsWarning}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Text="{Binding StatusPath}" TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding StatusPath}" />
+            </DockPanel>
+        </Border>
+
+
+        <Border DockPanel.Dock="Bottom" BorderThickness="0,1,0,0" BorderBrush="{StaticResource Brush.Border}"
+                Background="{StaticResource Brush.Chrome}" Padding="10,5"
+                Visibility="{Binding IsProgressVisible, Converter={StaticResource BoolToVisibility}}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="취소" Padding="14,3" Margin="10,0,0,0"
+                        Command="{Binding CancelOperationCommand}"
+                        AutomationProperties.Name="조작 취소"
+                        ToolTip="지금 처리 중인 파일까지만 하고 멈춘다. 이동은 원본을 지우기 전이라 그대로 남는다." />
+                <ProgressBar DockPanel.Dock="Left" Width="180" Height="12" Minimum="0" Maximum="100"
+                             Value="{Binding ProgressValue}"
+                             Foreground="{StaticResource Brush.Accent}"
+                             Background="{StaticResource Brush.GridCellSurface}"
+                             BorderBrush="{StaticResource Brush.Border}" />
+                <TextBlock Text="{Binding ProgressText}" Margin="10,0,0,0" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" ToolTip="{Binding ProgressText}" />
+            </DockPanel>
+        </Border>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+
+
+                <ColumnDefinition x:Name="LeftColumn" Width="1*" MinWidth="220" MaxWidth="520" />
+                <ColumnDefinition x:Name="LeftSplitterColumn" Width="6" />
+                <ColumnDefinition Width="3*" MinWidth="380" />
+            </Grid.ColumnDefinitions>
+
+
+            <Grid Grid.Column="0"
+                  Visibility="{Binding LeftPanelCollapsed,
+                               Converter={StaticResource InverseBoolToVisibility}}">
+
+                <Grid.RowDefinitions>
+                    <RowDefinition x:Name="FoldersRow" MinHeight="0" Height="2*" />
+                    <RowDefinition Height="6" />
+                    <RowDefinition x:Name="LowerRow" MinHeight="0" Height="1*" />
+                </Grid.RowDefinitions>
+
+
+                <DockPanel Grid.Row="0">
+
+                    <DockPanel DockPanel.Dock="Top" Margin="6,6,6,2">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource NavButton}"
+                                Content="＋"
+                                Click="OnAddFoldersClick"
+                                ToolTip="폴더를 선택해 이 작업 관리에 등록"
+                                AutomationProperties.Name="폴더 추가" />
+
+
+                        <Button Style="{StaticResource FolderRowButton}"
+                                Command="{Binding ToggleFoldersCommand}"
+                                ToolTip="폴더 리스트 접기/펴기"
+                                AutomationProperties.Name="폴더 리스트 접기/펴기">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontSize="10" VerticalAlignment="Center" Margin="0,0,5,0"
+                                           Foreground="{StaticResource Brush.TextSecondary}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="▾" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding FoldersCollapsed}" Value="True">
+                                                    <Setter Property="Text" Value="▸" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="폴더" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Button>
+                    </DockPanel>
+
+                    <TextBlock DockPanel.Dock="Bottom" Margin="10,4,10,6" FontSize="11"
+                               Foreground="{StaticResource Brush.TextSecondary}" TextWrapping="Wrap"
+                               Text="클릭 = 순환 칸에 표시 · 재클릭 = 앵커로 복귀 · 우클릭 = 순환 번호 지정&#x0a;그리드 파일을 이 행으로 끌면 이동 (Ctrl 을 누르면 복사)&#x0a;배치 편집 중에는 빈 칸으로 끌어다 놓을 수 있다"
+                               Visibility="{Binding FoldersCollapsed,
+                                            Converter={StaticResource InverseBoolToVisibility}}" />
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,0"
+                                  Visibility="{Binding FoldersCollapsed,
+                                               Converter={StaticResource InverseBoolToVisibility}}">
+                        <ItemsControl ItemsSource="{Binding Rows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:FolderRowViewModel}">
+
+                                    <Button Style="{StaticResource FolderListRowButton}"
+                                            Command="{Binding DataContext.ShowFolderCommand,
+                                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
+                                            PreviewMouseLeftButtonDown="OnFolderRowMouseDown"
+                                            PreviewMouseMove="OnFolderRowMouseMove"
+                                            AllowDrop="True"
+                                            DragEnter="OnFileDropOver"
+                                            DragOver="OnFileDropOver"
+                                            DragLeave="OnFileDropLeave"
+                                            Drop="OnFileDrop"
+                                            ToolTip="{Binding PathText}"
+                                            Tag="{Binding DataContext,
+                                                  RelativeSource={RelativeSource AncestorType=Window}}">
+                                        <Button.ContextMenu>
+                                            <ContextMenu>
+
+                                                <MenuItem Header="대상함에 추가"
+                                                          Command="{Binding PlacementTarget.Tag.AddToTrayCommand,
+                                                                    RelativeSource={RelativeSource
+                                                                        AncestorType=ContextMenu}}"
+                                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                    RelativeSource={RelativeSource
+                                                                        AncestorType=ContextMenu}}" />
+                                                <Separator />
+
+                                                <MenuItem ItemsSource="{Binding RotationChoices}">
+                                                    <MenuItem.Style>
+                                                        <Style TargetType="MenuItem">
+                                                            <Setter Property="Header" Value="순환 칸 지정" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasPinnedTile}"
+                                                                             Value="True">
+                                                                    <Setter Property="Header"
+                                                                            Value="순환 칸 지정 — 상시 칸이라 해당 없음" />
+                                                                    <Setter Property="IsEnabled" Value="False" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </MenuItem.Style>
+                                                    <MenuItem.ItemContainerStyle>
+                                                        <Style TargetType="MenuItem">
+                                                            <Setter Property="Header" Value="{Binding Label}" />
+                                                            <Setter Property="InputGestureText"
+                                                                    Value="{Binding Note}" />
+                                                            <Setter Property="IsCheckable" Value="True" />
+                                                            <Setter Property="IsChecked"
+                                                                    Value="{Binding IsSelected, Mode=OneWay}" />
+                                                            <Setter Property="Command"
+                                                                    Value="{Binding SelectCommand}" />
+                                                        </Style>
+                                                    </MenuItem.ItemContainerStyle>
+                                                </MenuItem>
+                                                <Separator />
+
+                                                <MenuItem Header="수정"
+                                                          Command="{Binding PlacementTarget.Tag.EditFolderCommand,
+                                                                    RelativeSource={RelativeSource
+                                                                        AncestorType=ContextMenu}}"
+                                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                    RelativeSource={RelativeSource
+                                                                        AncestorType=ContextMenu}}" />
+                                                <MenuItem Header="제거"
+                                                          Command="{Binding PlacementTarget.Tag.RemoveFolderCommand,
+                                                                    RelativeSource={RelativeSource
+                                                                        AncestorType=ContextMenu}}"
+                                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                    RelativeSource={RelativeSource
+                                                                        AncestorType=ContextMenu}}" />
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+
+
+                                            <Ellipse Grid.Column="0" Width="10" Height="10"
+                                                     StrokeThickness="2" VerticalAlignment="Top"
+                                                     Margin="0,4,8,0">
+                                                <Ellipse.Style>
+                                                    <Style TargetType="Ellipse">
+                                                        <Setter Property="Stroke"
+                                                                Value="{StaticResource Brush.Rotating}" />
+                                                        <Setter Property="StrokeDashArray" Value="1.6 1.4" />
+                                                        <Setter Property="Fill" Value="Transparent" />
+                                                        <Setter Property="ToolTip" Value="순환 전용" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Pinned}" Value="True">
+                                                                <Setter Property="Stroke"
+                                                                        Value="{StaticResource Brush.Pinned}" />
+                                                                <Setter Property="StrokeDashArray"
+                                                                        Value="{x:Null}" />
+                                                                <Setter Property="Fill"
+                                                                        Value="{StaticResource Brush.Pinned}" />
+                                                                <Setter Property="ToolTip" Value="상시 표시" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Ellipse.Style>
+                                            </Ellipse>
+
+                                            <StackPanel Grid.Column="1">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding DisplayName}"
+                                                               FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis" />
+
+                                                    <Border Background="{StaticResource Brush.DangerSurface}" CornerRadius="2"
+                                                            Padding="4,0" Margin="6,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Visibility="{Binding IsInaccessible,
+                                                                Converter={StaticResource BoolToVisibility}}">
+                                                        <TextBlock Text="접근 불가" FontSize="10"
+                                                                   Foreground="{StaticResource Brush.Danger}" />
+                                                    </Border>
+
+
+                                                    <Border Background="{StaticResource Brush.AccentSurface}"
+                                                            CornerRadius="2" Padding="4,0" Margin="6,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            IsHitTestVisible="False"
+                                                            Visibility="{Binding IsDropTarget,
+                                                                Converter={StaticResource BoolToVisibility}}">
+                                                        <TextBlock Text="{Binding DropTargetText}"
+                                                                   FontSize="10"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource Brush.Accent}" />
+                                                    </Border>
+
+
+                                                    <Border Background="{StaticResource Brush.RotatingSurface}"
+                                                            CornerRadius="2" Padding="4,0" Margin="6,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            ToolTip="이 폴더를 클릭하면 뜨는 순환 칸 (우클릭으로 바꾼다)"
+                                                            Visibility="{Binding ShowRotationTag,
+                                                                Converter={StaticResource BoolToVisibility}}">
+                                                        <TextBlock Text="{Binding RotationSlotText}" FontSize="10"
+                                                                   Foreground="{StaticResource Brush.Rotating}" />
+                                                    </Border>
+                                                </StackPanel>
+
+                                                <TextBlock Text="{Binding PathText}" FontSize="10"
+                                                           Foreground="{StaticResource Brush.TextSecondary}"
+                                                           TextTrimming="CharacterEllipsis" />
+
+                                                <TextBlock Text="{Binding Description}" FontSize="11"
+                                                           Foreground="{StaticResource Brush.TextSecondary}"
+                                                           TextWrapping="Wrap" Margin="0,2,0,0"
+                                                           Visibility="{Binding HasDescription,
+                                                               Converter={StaticResource BoolToVisibility}}" />
+
+
+                                                <TextBlock Text="{Binding LocationHint}" FontSize="11"
+                                                           Foreground="{StaticResource Brush.Rotating}"
+                                                           TextWrapping="Wrap" Margin="0,2,0,0"
+                                                           Visibility="{Binding HasLocationHint,
+                                                               Converter={StaticResource BoolToVisibility}}" />
+                                            </StackPanel>
+
+
+                                            <Button Grid.Column="1" Style="{StaticResource RowActionButton}"
+                                                    Content="✕"
+                                                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                    Margin="0,1,0,0"
+                                                    Command="{Binding DataContext.RemoveFolderCommand,
+                                                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip="작업 관리에서 등록만 지운다. 실제 폴더는 그대로다"
+                                                    AutomationProperties.Name="폴더 등록 제거" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+
+
+                <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch"
+                              Style="{StaticResource RowSplitter}"
+                              ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"
+                              Visibility="{Binding ShowLeftSplitter,
+                                           Converter={StaticResource BoolToVisibility}}" />
+
+
+                <DockPanel Grid.Row="2">
+                    <Button DockPanel.Dock="Top" Style="{StaticResource FolderRowButton}"
+                            Command="{Binding ToggleLowerCommand}"
+                            ToolTip="목적지 영역 접기/펴기"
+                            AutomationProperties.Name="목적지 접기/펴기"
+                            Margin="6,2,6,2">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontSize="10" VerticalAlignment="Center" Margin="0,0,5,0"
+                                       Foreground="{StaticResource Brush.TextSecondary}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="▾" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding LowerCollapsed}" Value="True">
+                                                <Setter Property="Text" Value="▸" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="목적지" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Button>
+
+                    <Border Margin="6,0,6,6" BorderThickness="1" BorderBrush="{StaticResource Brush.Border}"
+                            Visibility="{Binding LowerCollapsed,
+                                         Converter={StaticResource InverseBoolToVisibility}}">
+                        <DockPanel Margin="6">
+
+                            <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                                <TextBlock Text="저장된 규칙" FontWeight="SemiBold" FontSize="11"
+                                           Margin="2,0,2,4"
+                                           Foreground="{StaticResource Brush.TextSecondary}" />
+
+                                <TextBlock FontSize="11" TextWrapping="Wrap" Margin="2,0,2,6"
+                                           Foreground="{StaticResource Brush.TextSecondary}"
+                                           Text="그리드에서 파일을 고른 뒤 저장하면 지금 상태가 그대로 채워진다."
+                                           Visibility="{Binding MacrosAreEmpty,
+                                                        Converter={StaticResource BoolToVisibility}}" />
+
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="180">
+                                    <ItemsControl ItemsSource="{Binding Macros}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:MacroCardViewModel}">
+                                                <Border Margin="0,0,0,4" Padding="6,4" CornerRadius="3"
+                                                        BorderThickness="1"
+                                                        BorderBrush="{StaticResource Brush.Border}"
+                                                        Background="{StaticResource Brush.Surface}">
+                                                    <DockPanel>
+                                                        <Button DockPanel.Dock="Right" Content="✕"
+                                                                Style="{StaticResource NavButton}"
+                                                                VerticalAlignment="Top"
+                                                                Command="{Binding DataContext.RemoveMacroCommand,
+                                                                          RelativeSource={RelativeSource
+                                                                              AncestorType=Window}}"
+                                                                CommandParameter="{Binding}"
+                                                                AutomationProperties.Name="규칙 지우기"
+                                                                ToolTip="이 규칙을 지운다 (파일은 그대로)" />
+                                                        <Button DockPanel.Dock="Right" Content="✎"
+                                                                Style="{StaticResource NavButton}"
+                                                                VerticalAlignment="Top"
+                                                                Command="{Binding DataContext.EditMacroCommand,
+                                                                          RelativeSource={RelativeSource
+                                                                              AncestorType=Window}}"
+                                                                CommandParameter="{Binding}"
+                                                                AutomationProperties.Name="규칙 고치기"
+                                                                ToolTip="이 규칙의 값을 고친다" />
+                                                        <Button DockPanel.Dock="Right" Content="실행"
+                                                                Padding="10,2" Margin="0,0,4,0"
+                                                                VerticalAlignment="Top"
+                                                                Command="{Binding DataContext.RunMacroCommand,
+                                                                          RelativeSource={RelativeSource
+                                                                              AncestorType=Window}}"
+                                                                CommandParameter="{Binding}"
+                                                                ToolTip="{Binding Summary}" />
+                                                        <StackPanel>
+                                                            <TextBlock Text="{Binding Name}"
+                                                                       FontWeight="SemiBold"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Text="{Binding Summary}" FontSize="11"
+                                                                       TextWrapping="Wrap"
+                                                                       Foreground="{StaticResource Brush.TextSecondary}" />
+
+                                                            <TextBlock Text="확인 없이 바로 실행" FontSize="10"
+                                                                       Foreground="{StaticResource Brush.Danger}"
+                                                                       Visibility="{Binding RunsWithoutConfirm,
+                                                                            Converter={StaticResource BoolToVisibility}}" />
+                                                        </StackPanel>
+                                                    </DockPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </StackPanel>
+
+
+                            <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                                <TextBlock Text="{Binding OperationSummary}" FontSize="11"
+                                           TextWrapping="Wrap" Margin="2,0,2,4"
+                                           Foreground="{StaticResource Brush.TextSecondary}" />
+
+
+                                <StackPanel Orientation="Horizontal" Margin="2,0,2,6">
+                                    <TextBlock Text="{Binding ConflictPolicyText}" FontSize="11"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{StaticResource Brush.TextSecondary}" />
+                                    <Button Style="{StaticResource LinkButton}"
+                                            Content="다시 묻기" FontSize="11" Margin="4,0,0,0"
+                                            Command="{Binding RestoreConflictPromptCommand}"
+                                            ToolTip="같은 이름이 있을 때 다시 물어보게 되돌린다"
+                                            Visibility="{Binding CanRestoreConflictPrompt,
+                                                         Converter={StaticResource BoolToVisibility}}">
+                                        <Button.Resources>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground"
+                                                        Value="{StaticResource Brush.Accent}" />
+                                            </Style>
+                                        </Button.Resources>
+                                    </Button>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="복사" Padding="14,4" Margin="0,0,6,0"
+                                            Command="{Binding CopySelectionCommand}"
+                                            ToolTip="고른 파일을 체크된 폴더 전부에 복사한다" />
+                                    <Button Content="이동" Padding="14,4" Margin="0,0,6,0"
+                                            Command="{Binding MoveSelectionCommand}"
+                                            ToolTip="고른 파일을 체크된 폴더로 옮긴다 — 원본이 사라지므로 확인을 받는다" />
+                                    <Button Content="저장…" Padding="14,4"
+                                            Command="{Binding CreateMacroCommand}"
+                                            ToolTip="지금 고른 파일을 이름 붙여 저장한다(복사·이동은 하지 않는다) — 목적지는 기본적으로 실행할 때의 대상함 체크를 따라간다. 지금 체크를 그대로 고정하려면 저장 창의 고급 옵션에서 고른다" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <TextBlock Text="왼쪽 폴더를 우클릭해 &#x27;대상함에 추가&#x27;.&#x0a;여기에 항목을 끌어다 놓으면 그 폴더 하나로만 간다."
+                                       FontSize="11" TextWrapping="Wrap" Margin="2,4"
+                                       Foreground="{StaticResource Brush.TextSecondary}"
+                                       Visibility="{Binding TrayIsEmpty,
+                                                    Converter={StaticResource BoolToVisibility}}" />
+
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding Tray}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:TrayEntryViewModel}">
+
+                                            <Border Margin="0,1" CornerRadius="3" Padding="2,1"
+                                                    BorderThickness="1"
+                                                    ToolTip="{Binding PathText}"
+                                                    AllowDrop="True"
+                                                    DragEnter="OnFileDropOver"
+                                                    DragOver="OnFileDropOver"
+                                                    DragLeave="OnFileDropLeave"
+                                                    Drop="OnFileDrop">
+
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="Transparent" />
+                                                        <Setter Property="BorderBrush" Value="Transparent" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsDropTarget}"
+                                                                         Value="True">
+                                                                <Setter Property="Background"
+                                                                    Value="{StaticResource Brush.AccentSurface}" />
+                                                                <Setter Property="BorderBrush"
+                                                                    Value="{StaticResource Brush.Accent}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <DockPanel>
+                                                    <Button DockPanel.Dock="Right" Content="✕"
+                                                            Style="{StaticResource NavButton}"
+                                                            Command="{Binding RemoveCommand}"
+                                                            AutomationProperties.Name="대상함에서 빼기"
+                                                            ToolTip="대상함에서 뺀다 (폴더는 그대로)" />
+
+
+                                                    <Border DockPanel.Dock="Right"
+                                                            Background="{StaticResource Brush.AccentSurface}"
+                                                            CornerRadius="2" Padding="4,0" Margin="4,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            IsHitTestVisible="False"
+                                                            Visibility="{Binding IsDropTarget,
+                                                                Converter={StaticResource BoolToVisibility}}">
+                                                        <TextBlock Text="{Binding DropTargetText}"
+                                                                   FontSize="10"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource Brush.Accent}" />
+                                                    </Border>
+                                                    <CheckBox IsChecked="{Binding IsChecked}"
+                                                              VerticalContentAlignment="Center"
+                                                              Checked="OnTrayCheckChanged"
+                                                              Unchecked="OnTrayCheckChanged">
+                                                        <TextBlock Text="{Binding DisplayName}"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                    </CheckBox>
+                                                </DockPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                </DockPanel>
+            </Grid>
+
+
+            <GridSplitter Grid.Column="1" Width="6" VerticalAlignment="Stretch"
+                          HorizontalAlignment="Stretch"
+                          Style="{StaticResource ColumnSplitter}"
+                          ResizeDirection="Columns" ResizeBehavior="PreviousAndNext"
+                          Visibility="{Binding LeftPanelCollapsed,
+                                       Converter={StaticResource InverseBoolToVisibility}}" />
+
+
+            <views:TileGridView Grid.Column="2" Margin="2,4,6,4" />
+        </Grid>
+    </DockPanel>
+</Window>

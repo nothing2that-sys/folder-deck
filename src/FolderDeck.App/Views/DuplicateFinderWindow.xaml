@@ -1,0 +1,40 @@
+<Window x:Class="FolderDeck.App.Views.DuplicateFinderWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="중복 파일 찾기"
+        Width="720" Height="520"
+        Background="{StaticResource Brush.Chrome}"
+        FontFamily="Segoe UI" FontSize="12"
+        Foreground="{StaticResource Brush.TextPrimary}">
+
+    <DockPanel Margin="14">
+        <TextBlock x:Name="SummaryText" DockPanel.Dock="Top" Margin="0,0,0,10"
+                   TextWrapping="Wrap" Foreground="{StaticResource Brush.TextSecondary}" />
+        <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap"
+                   FontSize="11" Foreground="{StaticResource Brush.TextSecondary}"
+                   Text="더블클릭하면 탐색기에서 그 파일을 연다. 이름+크기만 본 후보다 — 내용까지 같은지는 안 쟀다." />
+
+        <ListView x:Name="ResultList" BorderThickness="1" BorderBrush="{StaticResource Brush.Border}"
+                  Background="Transparent">
+            <ListView.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate>
+                            <Border Background="{StaticResource Brush.GridCellSurface}"
+                                    Padding="6,4" Margin="0,4,0,0">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                            </Border>
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </ListView.GroupStyle>
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="위치" Width="110" DisplayMemberBinding="{Binding TileLabel}" />
+                    <GridViewColumn Header="경로" Width="360" DisplayMemberBinding="{Binding FolderPath}" />
+                    <GridViewColumn Header="수정" Width="130" DisplayMemberBinding="{Binding ModifiedText}" />
+                </GridView>
+            </ListView.View>
+        </ListView>
+    </DockPanel>
+</Window>
