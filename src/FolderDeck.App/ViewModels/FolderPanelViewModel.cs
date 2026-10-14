@@ -174,6 +174,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// <summary>지금 보고 있는 경로. <b>런타임 전용 — JSON 에 저장하지 않는다</b>(§4.6).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsAwayFromAnchor))]
+    [NotifyPropertyChangedFor(nameof(ShowsAwayFromAnchor))]
     [NotifyPropertyChangedFor(nameof(HasStatusLine))]
     [NotifyPropertyChangedFor(nameof(LocationHint))]
     [NotifyPropertyChangedFor(nameof(CanGoUp))]
@@ -701,7 +702,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
         if (Entry is not null && CurrentPath is not null)
         {
-            Breadcrumbs = BuildBreadcrumbs(Entry, CurrentPath);
+            Breadcrumbs = BuildBreadcrumbs(Entry, CurrentPath, HidesAnchor);
         }
     }
 
@@ -847,7 +848,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     /// 남은 둘은 고르는 동작과 무관하게 바뀌므로 그 자리에 둔다.
     /// </para>
     /// </remarks>
-    public bool HasStatusLine => IsAwayFromAnchor || IsLoading;
+    public bool HasStatusLine => ShowsAwayFromAnchor || IsLoading;
 
     /// <summary>
     /// 메타의 가운데 조각 — 뷰 방식. <b>눌러서 뒤집는 글자</b>다(§3.2 · Stage 3D).
@@ -1275,6 +1276,28 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public bool IsAwayFromAnchor =>
         Entry is not null && CurrentPath is not null && !PathEquals(CurrentPath, Normalize(Entry.Path));
 
+    /// <summary>
+    /// 앵커를 사용자에게 보이지 않는 패널인가 — 1회용 창(2026-10-14 2차 A1). 닫으면 끝나는 창이라
+    /// 「돌아갈 자리」가 뜻이 없다. <b>보이는 것만</b> 감춘다: 「앵커 밖」 글자 · ⌂ 버튼 · Alt+Home ·
+    /// 「앵커로 지정」 메뉴, 그리고 브레드크럼은 늘 전체 경로다. <see cref="GoToAnchorAsync"/> 의 동작
+    /// 자체는 그대로다 — 같은 폴더 재클릭·처음 띄우기가 안에서 부른다.
+    /// </summary>
+    public bool HidesAnchor { get; init; }
+
+    /// <summary>「앵커 밖」 글자를 보일지 — XAML 은 이것만 본다.</summary>
+    public bool ShowsAwayFromAnchor => IsAwayFromAnchor && !HidesAnchor;
+
+    /// <summary>앵커를 다루는 메뉴·버튼을 보일지.</summary>
+    public bool ShowsAnchorActions => !HidesAnchor;
+
+    /// <summary>
+    /// ⌂ 버튼과 Alt+Home 의 진입점. 앵커를 감춘 패널에서는 아무 일도 안 한다 —
+    /// <see cref="GoToAnchorAsync"/> 를 막으면 내부 호출까지 막히므로 진입점을 따로 둔다.
+    /// </summary>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    public Task GoToAnchorFromUserAsync() =>
+        HidesAnchor ? Task.CompletedTask : GoToAnchorAsync();
+
     /// <summary>예: "지금 src › Recipe 안".</summary>
     public string? LocationHint
     {
@@ -1283,6 +1306,12 @@ public sealed partial class FolderPanelViewModel : ObservableObject
             if (!IsAwayFromAnchor)
             {
                 return null;
+            }
+
+            // 1회용 창(A1) — 「앵커」 낱말 없이 지금 자리만 말한다.
+            if (HidesAnchor)
+            {
+                return $"지금 {CurrentPath}";
             }
 
             return Breadcrumbs.Count > 0 && Breadcrumbs[0].IsAnchor
@@ -2254,7 +2283,7 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
         // breadcrumb 을 먼저 세운다. CurrentPath 변경 통지를 받은 쪽(왼쪽 리스트 행)이
         // LocationHint 를 읽을 때 이미 새 경로 기준이어야 한다.
-        Breadcrumbs = BuildBreadcrumbs(entry, path);
+        Breadcrumbs = BuildBreadcrumbs(entry, path, HidesAnchor);
         CurrentPath = path;
 
         await LoadAsync(path).ConfigureAwait(true);
@@ -2402,12 +2431,20 @@ public sealed partial class FolderPanelViewModel : ObservableObject
 
     // ── 경로 표시 헬퍼 ───────────────────────────────────────────────────────
 
-    private static IReadOnlyList<BreadcrumbSegment> BuildBreadcrumbs(FolderEntry entry, string currentPath)
+    /// <param name="fullPath">
+    /// 앵커로 접지 않고 늘 드라이브 뿌리부터 전체 경로를 낼지 — 1회용 창(A1). 아래 「앵커 밖」 갈래와 같은 모양이다.
+    /// </param>
+    internal static IReadOnlyList<BreadcrumbSegment> BuildBreadcrumbs(FolderEntry entry, string currentPath, bool fullPath = false)
     {
         var anchor = Normalize(entry.Path);
         var anchorName = string.IsNullOrWhiteSpace(entry.DisplayName)
             ? LastSegment(entry.Path)
             : entry.DisplayName!;
+
+        if (fullPath)
+        {
+            return FullPathBreadcrumbs(currentPath);
+        }
 
         if (PathEquals(currentPath, anchor))
         {
@@ -2423,6 +2460,12 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         }
 
         // 앵커 위나 옆으로 나간 경우엔 접을 기준이 없으므로 전체 경로를 그대로 보여준다.
+        return FullPathBreadcrumbs(currentPath);
+    }
+
+    /// <summary>드라이브(또는 UNC) 뿌리부터 전체 경로 조각. 어느 조각도 앵커가 아니다.</summary>
+    private static IReadOnlyList<BreadcrumbSegment> FullPathBreadcrumbs(string currentPath)
+    {
         var root = IoPath.GetPathRoot(currentPath);
         if (string.IsNullOrEmpty(root))
         {

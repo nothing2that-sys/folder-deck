@@ -20,7 +20,16 @@ namespace FolderDeck.App.Services;
 /// 1회용 창(2026-10-14 S4) — 저장되지 않는 탐색기 창을 띄운다. 여러 개를 동시에 띄울 수 있다.
 /// <c>--workspace</c> 와 같이 주면 오류다(둘 중 무엇을 열지 정할 수 없다).
 /// </description></item>
+/// <item><term><c>--agent</c></term><description>
+/// 상주 프로그램(2026-10-14 2차) — 트레이에 남아 1회용 창 단축키를 받는다. 창을 띄우지 않는다.
+/// </description></item>
+/// <item><term><c>--agent-exit</c></term><description>
+/// 떠 있는 상주에게 끝내라고 알리고, 끝날 때까지 잠깐 기다린 뒤 끝난다(설치·제거가 부른다).
+/// </description></item>
 /// </list>
+/// <para>
+/// <c>--agent</c>·<c>--agent-exit</c> 는 <b>홀로</b> 써야 한다 — 다른 인자와 섞이면 오류를 내고 둘 다 버린다.
+/// </para>
 /// <para>
 /// 잘못된 인자는 <see cref="Error"/> 로 올린다 — 조용히 무시하지 않는다(§5). 그때도 런처는
 /// 뜬다: 인자를 못 읽었다고 아무것도 못 열게 하면 빠져나갈 길이 없다.
@@ -33,6 +42,10 @@ public sealed record CommandLineOptions
 
     public const string ScratchSwitch = "--scratch";
 
+    public const string AgentSwitch = "--agent";
+
+    public const string AgentExitSwitch = "--agent-exit";
+
     /// <summary>열라고 지정된 워크스페이스. 없으면 null.</summary>
     public Guid? WorkspaceId { get; private init; }
 
@@ -41,6 +54,12 @@ public sealed record CommandLineOptions
 
     /// <summary>1회용 창을 띄우라는 요청 (S4).</summary>
     public bool Scratch { get; private init; }
+
+    /// <summary>상주 프로그램으로 뜨라는 요청 (2026-10-14 2차).</summary>
+    public bool Agent { get; private init; }
+
+    /// <summary>떠 있는 상주를 끝내라는 요청 (2026-10-14 2차).</summary>
+    public bool AgentExit { get; private init; }
 
     /// <summary>읽지 못한 인자에 대한 사용자에게 보일 말. 문제가 없으면 null.</summary>
     public string? Error { get; private init; }
@@ -55,6 +74,8 @@ public sealed record CommandLineOptions
         Guid? workspaceId = null;
         var forceLauncher = false;
         var scratch = false;
+        var agent = false;
+        var agentExit = false;
         string? error = null;
 
         for (var i = 0; i < (args?.Count ?? 0); i++)
@@ -64,6 +85,18 @@ public sealed record CommandLineOptions
             if (Matches(arg, ScratchSwitch))
             {
                 scratch = true;
+                continue;
+            }
+
+            if (Matches(arg, AgentSwitch))
+            {
+                agent = true;
+                continue;
+            }
+
+            if (Matches(arg, AgentExitSwitch))
+            {
+                agentExit = true;
                 continue;
             }
 
@@ -103,8 +136,18 @@ public sealed record CommandLineOptions
             scratch = false;
         }
 
+        // 상주 둘은 홀로 써야 한다 — 다른 인자와 섞이면 무엇을 원했는지 모른다.
+        if ((agent || agentExit) && (args!.Count != 1 || (agent && agentExit)))
+        {
+            error = Combine(error, $"{AgentSwitch} · {AgentExitSwitch} 는 다른 인자 없이 혼자 써야 한다.");
+            agent = false;
+            agentExit = false;
+        }
+
         return new CommandLineOptions
         {
+            Agent = agent,
+            AgentExit = agentExit,
             WorkspaceId = workspaceId,
             ForceLauncher = forceLauncher,
             Scratch = scratch,

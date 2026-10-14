@@ -34,8 +34,11 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     private readonly IFolderEditor _folderEditor;
     private readonly ISettingsEditor _settingsEditor;
 
-    /// <summary>1회용 창 바로가기의 단축키를 맞추는 통로 (2026-10-14 S4).</summary>
-    private readonly IScratchShortcut _scratchShortcut;
+    /// <summary>
+    /// 1회용 창 단축키를 누가 받을지(상주 · 바로가기) 맞추는 통로 (2026-10-14 2차). 앞 회차의 바로가기 전용
+    /// 통로(<c>IScratchShortcut</c>)를 이것이 감쌌다 — 체크 하나로 둘 중 한쪽만 켠다.
+    /// </summary>
+    private readonly IHotkeyRouting _hotkeyRouting;
     private readonly ISelfLauncher _selfLauncher;
 
     /// <summary>전역 설정 (§7.2). 워크스페이스가 아니라 <b>앱 전체</b>의 값이 여기 있다.</summary>
@@ -82,11 +85,11 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         ISettingsEditor? settingsEditor = null,
         FavoritesStore? favoritesStore = null,
         bool isScratch = false,
-        IScratchShortcut? scratchShortcut = null)
+        IHotkeyRouting? hotkeyRouting = null)
     {
         Workspace = workspace;
         IsScratch = isScratch;
-        _scratchShortcut = scratchShortcut ?? NullScratchShortcut.Instance;
+        _hotkeyRouting = hotkeyRouting ?? NullHotkeyRouting.Instance;
         _store = store;
         _enumerator = enumerator;
         _shell = shell;
@@ -384,7 +387,8 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         var request = new SettingsEditRequest(
             _settings.ExtensionGlyphs, _settings.ShowShellIcons, _settings.EverythingMaxResults,
             EverythingProbe.Detect(), _settings.ScratchLayout,
-            _settings.ScratchHotkey, _scratchShortcut.IsInstalled);
+            _settings.ScratchHotkey, _hotkeyRouting.ShortcutInstalled,
+            _settings.UseResidentAgent, _hotkeyRouting.Agent.IsRunning);
 
         if (_settingsEditor.Edit(request) is not { } updated)
         {
@@ -396,13 +400,19 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         _settings.EverythingMaxResults = updated.EverythingMaxResults;
         _settings.ScratchLayout = updated.ScratchLayout ?? _settings.ScratchLayout;
 
-        // 단축키(S4) — 설정값이 원본이고 바로가기는 그것을 따른다. 바뀌었을 때만 바로가기를 고친다.
+        // 단축키(S4 · 2차) — 설정값이 원본이다. 값이나 받는 쪽(상주/바로가기)이 바뀌었으면 맞춘다.
         // 알림은 맨 끝에 낸다 — RefreshAllAsync 가 짧은 알림을 지우기 때문이다.
-        ScratchShortcutResult? applied = null;
+        var hotkeyChanged = false;
         if (updated.ScratchHotkey is { } hotkey && hotkey != _settings.ScratchHotkey)
         {
             _settings.ScratchHotkey = hotkey;
-            applied = _scratchShortcut.Apply(_settings.ScratchHotkey);
+            hotkeyChanged = true;
+        }
+
+        if (updated.UseResidentAgent is { } useAgent && useAgent != _settings.UseResidentAgent)
+        {
+            _settings.UseResidentAgent = useAgent;
+            hotkeyChanged = true;
         }
 
         foreach (var panel in Panels)
@@ -420,30 +430,65 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             _store.SaveSettingsDebounced(_settings);
         }
 
+        string? hotkeyNotice = null;
+        var hotkeyNoticeIsWarning = false;
+        if (hotkeyChanged)
+        {
+            // 상주를 새로 띄우기 전에 파일에 먼저 써야 한다 — 새 상주는 시작할 때 settings.json 을 읽고,
+            // 디바운스가 아직 안 썼으면 「상주 끔」을 읽고 바로 끝난다. 이미 떠 있는 상주도 파일 감시로 받는다.
+            if (_settingsWritable)
+            {
+                _store.Flush();
+            }
+
+            (hotkeyNotice, hotkeyNoticeIsWarning) = ApplyHotkeyRouting();
+        }
+
         await RefreshAllAsync().ConfigureAwait(true);
 
-        if (applied is not null)
+        if (hotkeyNotice is not null)
         {
-            ReportShortcutApplied(applied);
+            if (hotkeyNoticeIsWarning)
+            {
+                Warn(hotkeyNotice, transient: true);
+            }
+            else
+            {
+                Inform(hotkeyNotice);
+            }
         }
     }
 
-    private void ReportShortcutApplied(ScratchShortcutResult applied)
+    /// <summary>바로가기·Run 키를 맞추고, 상주를 써야 하는데 꺼져 있으면 띄운다. 알릴 글과 경고 여부를 낸다.</summary>
+    private (string Notice, bool IsWarning) ApplyHotkeyRouting()
     {
         var shown = _settings.ScratchHotkey.Length == 0 ? "없음" : _settings.ScratchHotkey;
-        switch (applied.Outcome)
+
+        if (!_settingsWritable)
         {
-            case ScratchShortcutOutcome.Written:
-            case ScratchShortcutOutcome.Unchanged:
-                Inform($"1회용 창 단축키: {shown}");
-                break;
-            case ScratchShortcutOutcome.NotInstalled:
-                Warn($"단축키 {shown} 을(를) 저장했지만 설치본 바로가기가 없어 적용하지 못했다.", transient: true);
-                break;
-            default:
-                Warn($"단축키 {shown} 을(를) 저장했지만 바로가기에 쓰지 못했다 — {applied.Error}", transient: true);
-                break;
+            return ($"설정을 저장할 수 없는 실행이라 단축키({shown})를 적용하지 않았다.", true);
         }
+
+        // 「끔」인데 상주가 아직 떠 있으면 상주가 키를 쥐고 있다 — 바로가기 키는 상주가 물러나며 쓴다(HotkeyRouting 주석).
+        var agentHoldsKey = !_settings.UseResidentAgent && _hotkeyRouting.Agent.IsRunning;
+        if (_hotkeyRouting.Apply(_settings, agentHoldsKey) is { } failure)
+        {
+            return ($"단축키 {shown} — {failure}", true);
+        }
+
+        if (!_settings.UseResidentAgent)
+        {
+            return _hotkeyRouting.ShortcutInstalled
+                ? ($"1회용 창 단축키: {shown} (시작 메뉴 바로가기 — 상주 없음)", false)
+                : ($"단축키 {shown} 을(를) 저장했지만 설치본 바로가기가 없어 적용하지 못했다.", true);
+        }
+
+        if (!_hotkeyRouting.Agent.IsRunning && _hotkeyRouting.Agent.Start() is { } startFailure)
+        {
+            return ($"상주 프로그램을 띄우지 못했다 — {startFailure}", true);
+        }
+
+        return ($"1회용 창 단축키: {shown} (상주 프로그램)", false);
     }
 
     // ── 창 위치 (§6.1 · Phase 4 Stage 2) ─────────────────────────────────────
@@ -2486,7 +2531,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             ExpandedTile = null;
         }
 
-        if (tile.Panel.Entry is null)
+        // 1회용 창(2차 A1)은 앵커가 없다 — 폴더가 떠 있는 순환 칸이라도 임시 이동이 아니라 그 칸의
+        // 폴더를 바꾼다. 빈 칸 갈래(메모리 등록 + ShowFolderAsync)와 같은 길이다.
+        if (tile.Panel.Entry is null || (IsScratch && tile.IsRotating))
         {
             await OpenFavoriteInEmptyTileAsync(tile, row).ConfigureAwait(true);
             return;
@@ -2528,6 +2575,13 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
 
     /// <summary>1회용 창인가. 이 창의 작업 관리는 디스크에 쓰이지 않는다(저장소가 래퍼다).</summary>
     public bool IsScratch { get; }
+
+    /// <summary>
+    /// 왼쪽 폴더 목록 아래 안내문. 1회용 창(2차 A1)에서는 「앵커」 낱말을 뺀다 — 일반 창은 예전 글 그대로.
+    /// </summary>
+    public string FolderListHint => IsScratch
+        ? "클릭 = 순환 칸에 표시 · 재클릭 = 처음 폴더로 · 우클릭 = 순환 번호 지정\n그리드 파일을 이 행으로 끌면 이동 (Ctrl 을 누르면 복사)\n배치 편집 중에는 빈 칸으로 끌어다 놓을 수 있다"
+        : "클릭 = 순환 칸에 표시 · 재클릭 = 앵커로 복귀 · 우클릭 = 순환 번호 지정\n그리드 파일을 이 행으로 끌면 이동 (Ctrl 을 누르면 복사)\n배치 편집 중에는 빈 칸으로 끌어다 놓을 수 있다";
 
     /// <summary>⋯ 메뉴 「타일 배치」의 넷 — 1회용 창에서만 보인다.</summary>
     public IReadOnlyList<LayoutPresetChoice> ScratchLayoutChoices { get; } =
@@ -2595,9 +2649,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             : $"타일 배치: {choice.Label}");
     }
 
-    /// <summary>시작할 때 바로가기 단축키를 못 맞췄으면 한 줄로 알린다(App 이 부른다). 시작을 막지 않는다.</summary>
+    /// <summary>시작할 때 단축키 받는 쪽(바로가기·자동 시작)을 못 맞췄으면 한 줄로 알린다(App 이 부른다). 시작을 막지 않는다.</summary>
     public void ReportShortcutSyncFailure(string error) =>
-        Warn($"1회용 창 단축키를 바로가기에 맞추지 못했다 — {error}", transient: true);
+        Warn($"1회용 창 단축키 — {error}", transient: true);
 
     /// <summary>즐겨찾기 우클릭 「등록 폴더로 추가」 — 사용자가 고를 때만 등록 폴더와 이어진다.</summary>
     [RelayCommand]
@@ -3715,7 +3769,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         // 이 OKCancel 이기 때문이고, 예/아니오로 바꾸면 「폴더 제거」창까지 같이 바뀐다.
         if (_prompt.Confirm(
                 "이름 바꾸기",
-                $"'{label}' 등록의 앵커 폴더 이름이 바뀌었다:\n{newPath}\n\n" +
+                (IsScratch
+                    ? $"'{label}' 등록 폴더의 이름이 바뀌었다:\n{newPath}\n\n"
+                    : $"'{label}' 등록의 앵커 폴더 이름이 바뀌었다:\n{newPath}\n\n") +
                 $"표시 이름도 '{leaf}' 로 바꿀까?"))
         {
             row.Entry.DisplayName = leaf;
@@ -3738,7 +3794,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         // 공용 저장 경로다 — 디바운스가 그대로 걸린다(§7.1). currentPath 는 저장 대상이 아니다.
         Save();
 
-        Inform($"이름을 바꿨다: {oldLeaf} → {leaf} (등록 '{row.DisplayName}' 의 앵커도 따라갔다)");
+        Inform(IsScratch
+            ? $"이름을 바꿨다: {oldLeaf} → {leaf} (등록 '{row.DisplayName}' 도 따라갔다)"
+            : $"이름을 바꿨다: {oldLeaf} → {leaf} (등록 '{row.DisplayName}' 의 앵커도 따라갔다)");
     }
 
     /// <summary>등록 경로 비교 — 끝 구분자와 대소문자를 무시한다 (§4.11-1 D3).</summary>
@@ -3763,6 +3821,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             _enumerator, _shell, _clipboard, spec.Kind == TileKind.Rotating, isSearchTile,
             ReportError, ReportRejection)
         {
+            // 1회용 창은 앵커를 사용자에게 보이지 않는다 (2026-10-14 2차 A1).
+            HidesAnchor = IsScratch,
+
             // 확장자→글리프 매핑(D59). 패널은 설정 저장소를 모른다 — 여기서 스냅샷을 물려주고,
             // 설정 창에서 바뀌면 OpenSettingsAsync 가 다시 물려준다.
             ExtensionGlyphs = _settings.ExtensionGlyphs,

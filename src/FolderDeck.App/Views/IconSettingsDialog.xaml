@@ -156,12 +156,14 @@
                     <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" FontSize="11"
                                Foreground="{StaticResource Brush.Danger}"
                                Text="{Binding HotkeyMessage}" />
+                    <!-- 2026-10-14 2차 — 받는 쪽을 사용자가 고른다(JH). 바인딩만, XAML 기본값 없음. -->
+                    <CheckBox Margin="0,10,0,0"
+                              Content="상주 프로그램으로 받기 (빠름 · 트레이에 남는다 · 로그인할 때 자동 시작)"
+                              IsChecked="{Binding UseResidentAgent}"
+                              AutomationProperties.Name="상주 프로그램으로 단축키 받기" />
                     <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" FontSize="11"
                                Foreground="{StaticResource Brush.TextSecondary}"
-                               Text="{Binding ShortcutStatusText}" />
-                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" FontSize="11"
-                               Foreground="{StaticResource Brush.TextSecondary}"
-                               Text="다른 프로그램과 키가 겹치는지는 알아낼 방법이 없다 — 겹치면 먼저 등록된 쪽이 이긴다." />
+                               Text="{Binding RoutingStatusText}" />
                 </StackPanel>
             </TabItem>
         </TabControl>

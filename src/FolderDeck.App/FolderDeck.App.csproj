@@ -36,6 +36,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <!-- 트레이 아이콘(NotifyIcon) 하나 때문에 켠다 — 2026-10-14 2차 A2 상주 프로그램. WPF 에는 트레이가 없다. -->
+    <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>FolderDeck</AssemblyName>
     <RootNamespace>FolderDeck.App</RootNamespace>
     <ApplicationIcon>Assets\FolderDeck.ico</ApplicationIcon>
@@ -53,5 +55,13 @@
          FileContentReader), 셰어드 프레임워크에 포함돼 있지 않다. -->
     <NoWarn>$(NoWarn);NU1510</NoWarn>
   </PropertyGroup>
+
+  <!-- UseWindowsForms + ImplicitUsings 는 System.Windows.Forms · System.Drawing 을 전역 using 으로 깐다.
+       그러면 WPF 쪽 Application · MessageBox · Clipboard · Point 등이 모호해진다 — 전역 using 만 걷어 내고
+       WinForms 는 쓰는 자리(트레이)에서 전체 이름으로 부른다. -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
 
 </Project>

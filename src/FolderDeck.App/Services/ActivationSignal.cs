@@ -70,6 +70,19 @@ public static class ActivationSignal
         return Send(pipeName, ActivateBytes);
     }
 
+    /// <summary>
+    /// 다른 본문을 싣는다 (2026-10-14 2차 — 상주의 「1회용 창 열기」·「끝내기」). 받는 쪽이 새 창을 앞으로
+    /// 띄울 수 있게 포그라운드 권한도 같이 넘긴다.
+    /// </summary>
+    public static bool TrySend(string pipeName, string payload)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(payload);
+
+        AllowSetForegroundWindow(AsfwAny);
+        return Send(pipeName, Encoding.UTF8.GetBytes(payload + "\n"));
+    }
+
     private static bool Send(string pipeName, byte[] payload)
     {
         try

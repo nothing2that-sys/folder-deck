@@ -25,7 +25,7 @@
     <!-- 앵커 복귀 Alt+Home, 상위 Alt+↑, 뒤로/앞으로 Alt+←/→.
          마우스 XButton1/2 는 코드 비하인드에서 받는다. -->
     <UserControl.InputBindings>
-        <KeyBinding Modifiers="Alt" Key="Home" Command="{Binding GoToAnchorCommand}" />
+        <KeyBinding Modifiers="Alt" Key="Home" Command="{Binding GoToAnchorFromUserCommand}" />
         <KeyBinding Modifiers="Alt" Key="Up" Command="{Binding GoUpCommand}" />
         <KeyBinding Modifiers="Alt" Key="Left" Command="{Binding GoBackCommand}" />
         <KeyBinding Modifiers="Alt" Key="Right" Command="{Binding GoForwardCommand}" />
@@ -91,7 +91,8 @@
             <MenuItem Header="탐색기에서 열기" Command="{Binding RevealCurrentFolderCommand}" />
             <MenuItem Header="경로 복사" Command="{Binding CopyCurrentPathCommand}" />
             <Separator />
-            <MenuItem Header="이 폴더를 앵커로 지정" Command="{Binding SetAnchorToCurrentCommand}" />
+            <MenuItem Header="이 폴더를 앵커로 지정" Command="{Binding SetAnchorToCurrentCommand}"
+                      Visibility="{Binding ShowsAnchorActions, Converter={StaticResource BoolToVisibility}}" />
             <MenuItem Header="새 폴더로 등록" Command="{Binding RegisterCurrentFolderCommand}" />
             <MenuItem Header="즐겨찾기에 추가" Command="{Binding AddCurrentFolderToFavoritesCommand}" />
         </ContextMenu>
@@ -524,8 +525,10 @@
                              Alt+Home, §4.6)이라 대체가 있지만, ⤢ 와 나란히 어느 폭에서도
                              보이기로 D117~D120 이 정했다(다른 성격의 "장소"·"크기" 조작
                              둘을 늘 보이게). -->
+                        <!-- 1회용 창(2026-10-14 2차 A1)에서는 감춘다 — ShowsAnchorActions. -->
                         <Button Style="{StaticResource NavButton}" Width="20"
-                                Command="{Binding GoToAnchorCommand}"
+                                Command="{Binding GoToAnchorFromUserCommand}"
+                                Visibility="{Binding ShowsAnchorActions, Converter={StaticResource BoolToVisibility}}"
                                 AutomationProperties.Name="앵커로 복귀"
                                 ToolTip="앵커로 복귀 (Alt+Home)" Content="⌂" />
 
@@ -890,7 +893,7 @@
                          무엇에서 이어지는지 알 수 없는 점 하나가 뜬다. -->
                     <TextBlock Text="앵커 밖" Foreground="{StaticResource Brush.Rotating}"
                                FontSize="11" VerticalAlignment="Center"
-                               Visibility="{Binding IsAwayFromAnchor,
+                               Visibility="{Binding ShowsAwayFromAnchor,
                                                     Converter={StaticResource BoolToVisibility}}" />
                     <TextBlock Text="읽는 중…" Foreground="{StaticResource Brush.TextSecondary}"
                                FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"

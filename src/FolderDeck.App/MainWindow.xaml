@@ -434,7 +434,7 @@
 
                     <TextBlock DockPanel.Dock="Bottom" Margin="10,4,10,6" FontSize="11"
                                Foreground="{StaticResource Brush.TextSecondary}" TextWrapping="Wrap"
-                               Text="클릭 = 순환 칸에 표시 · 재클릭 = 앵커로 복귀 · 우클릭 = 순환 번호 지정&#x0a;그리드 파일을 이 행으로 끌면 이동 (Ctrl 을 누르면 복사)&#x0a;배치 편집 중에는 빈 칸으로 끌어다 놓을 수 있다"
+                               Text="{Binding FolderListHint}"
                                Visibility="{Binding FoldersCollapsed,
                                             Converter={StaticResource InverseBoolToVisibility}}" />
 

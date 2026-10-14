@@ -1,3 +1,4 @@
+using FolderDeck.App.Interop;
 using FolderDeck.App.Services;
 using FolderDeck.App.ViewModels;
 using FolderDeck.Core.Enumeration;
@@ -20,7 +21,7 @@ public sealed class ScratchModeTests
     {
         private readonly string _root;
 
-        public ScratchFixture(LayoutPreset preset = LayoutPreset.Quad, IScratchShortcut? shortcut = null)
+        public ScratchFixture(LayoutPreset preset = LayoutPreset.Quad, IHotkeyRouting? routing = null)
         {
             _root = Path.Combine(Path.GetTempPath(), "FolderDeck.ScratchTests", Guid.NewGuid().ToString("N"));
             APath = Directory.CreateDirectory(Path.Combine(_root, "a")).FullName;
@@ -39,7 +40,7 @@ public sealed class ScratchModeTests
                 new FakeShellLauncher(), new FakeClipboardService(), new FileOperationEngine(new FakeRecycleBin()),
                 new FakeUserPrompt(), new FakeMacroEditor(), new FakeFolderEditor(), new FakeSelfLauncher(),
                 Settings, settingsWritable: true, SettingsEditor, new FavoritesStore(Paths),
-                isScratch: true, shortcut);
+                isScratch: true, routing);
         }
 
         public string APath { get; }
@@ -224,9 +225,147 @@ public sealed class ScratchModeTests
         Assert.Equal(0, f.WorkspaceFileCount());
     }
 
-    // ── 단축키 ───────────────────────────────────────────────────────────────
+    // ── 단축키 받는 쪽 (S4 → 2026-10-14 2차에서 다시 씀) ──────────────────────────
+    //
+    // 앞 회차에는 설정 저장이 바로가기(.lnk)만 고쳤다. 2차에서 JH 가 「상주 / 바로가기」를 사용자가 고르게 정해
+    // 설정 저장은 HotkeyRouting 을 부른다 — 아래 셋은 그에 맞게 다시 쓴 것이다(지시서가 기대값이 바뀐다고 적은 자리).
 
-    private sealed class RecordingShortcut(bool installed, ScratchShortcutOutcome outcome) : IScratchShortcut
+    /// <summary>뷰모델이 무엇을 맞추라고 했는지 적는 가짜. 실제 Run 키·바로가기·프로세스에 손대지 않는다.</summary>
+    private sealed class RecordingRouting(bool shortcutInstalled, bool agentRunning) : IHotkeyRouting, IAgentControl
+    {
+        public List<(string Hotkey, bool UseAgent)> Applied { get; } = [];
+
+        /// <summary>각 Apply 때 「상주가 아직 키를 쥐고 있다」고 넘겼는지.</summary>
+        public List<bool> AgentHeldKey { get; } = [];
+
+        public int Starts { get; private set; }
+
+        public IAgentControl Agent => this;
+
+        public bool ShortcutInstalled => shortcutInstalled;
+
+        public bool IsRunning => agentRunning;
+
+        public string? Apply(AppSettings settings, bool agentHoldsKey = false)
+        {
+            Applied.Add((settings.ScratchHotkey, settings.UseResidentAgent));
+            AgentHeldKey.Add(agentHoldsKey);
+            return null;
+        }
+
+        public string? Start()
+        {
+            Starts++;
+            return null;
+        }
+
+        public string? HandOverToShortcut(AppSettings settings) => null;
+
+        public bool TrySignalScratch() => false;
+
+        public bool TrySignalExit() => false;
+    }
+
+    private static SettingsEditResult Answer(AppSettings s, string? hotkey = null, bool? useAgent = null) =>
+        new(s.ExtensionGlyphs, s.ShowShellIcons, s.EverythingMaxResults, ScratchHotkey: hotkey, UseResidentAgent: useAgent);
+
+    [Fact]
+    public async Task ChangingTheHotkeyRoutesItAndStartsAMissingAgent()
+    {
+        var routing = new RecordingRouting(shortcutInstalled: true, agentRunning: false);
+        using var f = new ScratchFixture(routing: routing);
+        await f.ViewModel.InitializeAsync();
+        f.SettingsEditor.Answer = Answer(f.Settings, hotkey: "Ctrl+Alt+G");
+
+        await f.ViewModel.OpenSettingsCommand.ExecuteAsync(null);
+
+        Assert.Equal("Ctrl+Alt+G", f.Settings.ScratchHotkey);
+        Assert.Equal([("Ctrl+Alt+G", true)], routing.Applied);
+        Assert.Equal(1, routing.Starts);
+        Assert.Contains("상주 프로그램", f.ViewModel.Message);
+        var request = Assert.Single(f.SettingsEditor.Opened);
+        Assert.True(request.UseResidentAgent);
+        Assert.False(request.AgentRunning);
+    }
+
+    /// <summary>새 상주는 시작할 때 settings.json 을 읽는다 — 띄우기 전에 디바운스를 기다리지 않고 써 있어야 한다.</summary>
+    [Fact]
+    public async Task TheSettingsFileIsWrittenBeforeTheAgentIsStarted()
+    {
+        var routing = new RecordingRouting(shortcutInstalled: true, agentRunning: false);
+        using var f = new ScratchFixture(routing: routing);
+        await f.ViewModel.InitializeAsync();
+        f.SettingsEditor.Answer = Answer(f.Settings, hotkey: "Ctrl+Alt+G");
+
+        await f.ViewModel.OpenSettingsCommand.ExecuteAsync(null);
+
+        Assert.Equal("Ctrl+Alt+G", f.Inner.LoadSettings().Value!.ScratchHotkey);
+    }
+
+    [Fact]
+    public async Task ARunningAgentIsNotStartedAgain()
+    {
+        var routing = new RecordingRouting(shortcutInstalled: true, agentRunning: true);
+        using var f = new ScratchFixture(routing: routing);
+        await f.ViewModel.InitializeAsync();
+        f.SettingsEditor.Answer = Answer(f.Settings, hotkey: "Ctrl+Alt+G");
+
+        await f.ViewModel.OpenSettingsCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, routing.Starts);
+    }
+
+    [Fact]
+    public async Task AnUnchangedHotkeyAndModeDoNotRoute()
+    {
+        var routing = new RecordingRouting(shortcutInstalled: true, agentRunning: false);
+        using var f = new ScratchFixture(routing: routing);
+        await f.ViewModel.InitializeAsync();
+        f.SettingsEditor.Answer = Answer(f.Settings, hotkey: f.Settings.ScratchHotkey, useAgent: f.Settings.UseResidentAgent);
+
+        await f.ViewModel.OpenSettingsCommand.ExecuteAsync(null);
+
+        Assert.Empty(routing.Applied);
+        Assert.Equal(0, routing.Starts);
+    }
+
+    [Fact]
+    public async Task TurningTheAgentOffRoutesToTheShortcutWithoutStartingAnything()
+    {
+        var routing = new RecordingRouting(shortcutInstalled: true, agentRunning: true);
+        using var f = new ScratchFixture(routing: routing);
+        await f.ViewModel.InitializeAsync();
+        f.SettingsEditor.Answer = Answer(f.Settings, useAgent: false);
+
+        await f.ViewModel.OpenSettingsCommand.ExecuteAsync(null);
+
+        Assert.False(f.Settings.UseResidentAgent);
+        Assert.Equal([(f.Settings.ScratchHotkey, false)], routing.Applied);
+        Assert.Equal(0, routing.Starts);
+
+        // 상주가 떠 있으니 아직 키를 쥐고 있다 — 바로가기 키는 상주가 물러나며 쓴다(JH 손확인 버그).
+        Assert.Equal([true], routing.AgentHeldKey);
+        Assert.Contains("바로가기", f.ViewModel.Message);
+        Assert.False(f.Inner.LoadSettings().Value!.UseResidentAgent);
+    }
+
+    [Fact]
+    public async Task AMissingShortcutWithTheAgentOffKeepsTheValueAndSaysSo()
+    {
+        var routing = new RecordingRouting(shortcutInstalled: false, agentRunning: false);
+        using var f = new ScratchFixture(routing: routing);
+        await f.ViewModel.InitializeAsync();
+        f.SettingsEditor.Answer = Answer(f.Settings, hotkey: "", useAgent: false);
+
+        await f.ViewModel.OpenSettingsCommand.ExecuteAsync(null);
+
+        Assert.Equal(ScratchHotkey.None, f.Settings.ScratchHotkey);
+        Assert.Contains("바로가기가 없어", f.ViewModel.Message);
+    }
+
+    // ── HotkeyRouting 실물 규칙 (가짜 바로가기 · 가짜 Run 키) ─────────────────────
+
+    private sealed class FakeShortcut(bool installed) : IScratchShortcut
     {
         public List<string> Applied { get; } = [];
 
@@ -235,57 +374,343 @@ public sealed class ScratchModeTests
         public ScratchShortcutResult Apply(string hotkey)
         {
             Applied.Add(hotkey);
-            return new(outcome, outcome == ScratchShortcutOutcome.Failed ? "막힘" : null);
+            return new(installed ? ScratchShortcutOutcome.Written : ScratchShortcutOutcome.NotInstalled);
         }
     }
 
-    [Fact]
-    public async Task ChangingTheHotkeyInSettingsRewritesTheShortcut()
+    private sealed class FakeRunKey : IRunKey
     {
-        var shortcut = new RecordingShortcut(installed: true, ScratchShortcutOutcome.Written);
-        using var f = new ScratchFixture(shortcut: shortcut);
-        await f.ViewModel.InitializeAsync();
-        f.SettingsEditor.Answer = new SettingsEditResult(
-            f.Settings.ExtensionGlyphs, f.Settings.ShowShellIcons, f.Settings.EverythingMaxResults,
-            ScratchHotkey: "Ctrl+Alt+G");
+        public string? Value { get; set; }
 
-        await f.ViewModel.OpenSettingsCommand.ExecuteAsync(null);
+        public int Writes { get; private set; }
 
-        Assert.Equal("Ctrl+Alt+G", f.Settings.ScratchHotkey);
+        public string? Read() => Value;
+
+        public void Write(string command)
+        {
+            Value = command;
+            Writes++;
+        }
+
+        public void Delete() => Value = null;
+    }
+
+    /// <summary>상주를 쓰면 바로가기 키는 지우고 Run 키를 쓴다 — 둘 다 켜지면 창이 두 번 뜬다.</summary>
+    [Fact]
+    public void WithTheAgentTheShortcutKeyIsClearedAndTheRunKeyIsWritten()
+    {
+        var shortcut = new FakeShortcut(installed: true);
+        var run = new FakeRunKey();
+        var routing = new HotkeyRouting(shortcut, run, NullHotkeyRouting.Instance, @"C:\Program Files\FD\FolderDeck.exe");
+
+        Assert.Null(routing.Apply(new AppSettings { UseResidentAgent = true, ScratchHotkey = "Ctrl+Alt+G" }));
+        Assert.Null(routing.Apply(new AppSettings { UseResidentAgent = true, ScratchHotkey = "Ctrl+Alt+G" }));
+
+        Assert.Equal([ScratchHotkey.None, ScratchHotkey.None], shortcut.Applied);
+        Assert.Equal("\"C:\\Program Files\\FD\\FolderDeck.exe\" --agent", run.Value);
+        Assert.Equal(1, run.Writes);
+    }
+
+    /// <summary>
+    /// 「끔」인데 상주가 아직 키를 쥐고 있으면 바로가기에 키를 쓰지 않는다 — 탐색기가 등록하려다 상주에 막히면 다시 시도하지
+    /// 않아 단축키가 죽는다(JH 손확인). Run 키는 그래도 지운다.
+    /// </summary>
+    [Fact]
+    public void WhileTheAgentStillHoldsTheKeyTheShortcutStaysEmpty()
+    {
+        var shortcut = new FakeShortcut(installed: true);
+        var run = new FakeRunKey { Value = "\"x\" --agent" };
+        var routing = new HotkeyRouting(shortcut, run, NullHotkeyRouting.Instance, @"C:\FD\FolderDeck.exe");
+
+        Assert.Null(routing.Apply(new AppSettings { UseResidentAgent = false, ScratchHotkey = "Ctrl+Alt+G" }, agentHoldsKey: true));
+
+        Assert.Equal([ScratchHotkey.None], shortcut.Applied);
+        Assert.Null(run.Value);
+
+        // 상주가 키를 놓은 뒤 다시 부르면 그때 쓴다.
+        Assert.Null(routing.Apply(new AppSettings { UseResidentAgent = false, ScratchHotkey = "Ctrl+Alt+G" }));
+        Assert.Equal([ScratchHotkey.None, "Ctrl+Alt+G"], shortcut.Applied);
+    }
+
+    /// <summary>
+    /// 상주가 끝날 때 단축키를 바로가기에 넘긴다(JH 결정) — 키만 쓰고 Run 키는 그대로(설정은 여전히 「켬」). 다음 시작이
+    /// <see cref="HotkeyRouting.Apply"/> 로 다시 지운다.
+    /// </summary>
+    [Fact]
+    public void HandingOverWritesTheShortcutKeyAndKeepsTheRunKey()
+    {
+        var shortcut = new FakeShortcut(installed: true);
+        var run = new FakeRunKey { Value = "\"x\" --agent" };
+        var routing = new HotkeyRouting(shortcut, run, NullHotkeyRouting.Instance, "x");
+        var settings = new AppSettings { UseResidentAgent = true, ScratchHotkey = "Ctrl+Alt+G" };
+
+        Assert.Null(routing.HandOverToShortcut(settings));
         Assert.Equal(["Ctrl+Alt+G"], shortcut.Applied);
-        Assert.Contains("Ctrl+Alt+G", f.ViewModel.Message);
-        Assert.True(Assert.Single(f.SettingsEditor.Opened).ScratchShortcutInstalled);
+        Assert.Equal("\"x\" --agent", run.Value);
+
+        Assert.Null(routing.Apply(settings));
+        Assert.Equal(["Ctrl+Alt+G", ScratchHotkey.None], shortcut.Applied);
+    }
+
+    /// <summary>트레이 「상주 끝내기」 뒤 앱을 다시 실행하면 상주도 다시 떠야 한다(JH 손확인 버그).</summary>
+    [Theory]
+    [InlineData(true, true, false, true)]
+    [InlineData(true, true, true, false)]
+    [InlineData(false, true, false, false)]
+    [InlineData(true, false, false, false)]
+    public void ALaunchStartsTheAgentOnlyWhenItIsWantedWritableAndMissing(
+        bool useAgent, bool writable, bool running, bool expected) =>
+        Assert.Equal(expected, HotkeyRoutingRules.ShouldStartAgent(useAgent, writable, running));
+
+    [Fact]
+    public void WithoutTheAgentTheShortcutGetsTheKeyAndTheRunKeyIsRemoved()
+    {
+        var shortcut = new FakeShortcut(installed: true);
+        var run = new FakeRunKey { Value = "\"x\" --agent" };
+        var routing = new HotkeyRouting(shortcut, run, NullHotkeyRouting.Instance, @"C:\FD\FolderDeck.exe");
+
+        Assert.Null(routing.Apply(new AppSettings { UseResidentAgent = false, ScratchHotkey = "Ctrl+Alt+G" }));
+
+        Assert.Equal(["Ctrl+Alt+G"], shortcut.Applied);
+        Assert.Null(run.Value);
+    }
+
+    // ── 상주 단축키 등록 ─────────────────────────────────────────────────────────
+
+    private sealed class FakeRegistrar(string? failure = null) : IHotkeyRegistrar
+    {
+        public List<string> Calls { get; } = [];
+
+        public string? Register(uint modifiers, uint virtualKey)
+        {
+            Calls.Add($"register {modifiers:X} {virtualKey:X}");
+            return failure;
+        }
+
+        public void Unregister() => Calls.Add("unregister");
     }
 
     [Fact]
-    public async Task AnUnchangedHotkeyDoesNotTouchTheShortcut()
+    public void TheBinderRegistersOnceAndReRegistersOnlyOnChange()
     {
-        var shortcut = new RecordingShortcut(installed: true, ScratchShortcutOutcome.Written);
-        using var f = new ScratchFixture(shortcut: shortcut);
-        await f.ViewModel.InitializeAsync();
-        f.SettingsEditor.Answer = new SettingsEditResult(
-            f.Settings.ExtensionGlyphs, f.Settings.ShowShellIcons, f.Settings.EverythingMaxResults,
-            ScratchHotkey: f.Settings.ScratchHotkey);
+        var registrar = new FakeRegistrar();
+        var binder = new AgentHotkeyBinder(registrar);
 
-        await f.ViewModel.OpenSettingsCommand.ExecuteAsync(null);
+        Assert.Null(binder.Update("Ctrl+Alt+F"));
+        Assert.Null(binder.Update("Ctrl+Alt+F"));
+        Assert.Null(binder.Update("Ctrl+Alt+Shift+G"));
+        Assert.Null(binder.Update(ScratchHotkey.None));
 
-        Assert.Empty(shortcut.Applied);
+        Assert.Equal(
+            [
+                "unregister", "register 4003 46",
+                "unregister", "register 4007 47",
+                "unregister",
+            ],
+            registrar.Calls);
+        Assert.Null(binder.Registered);
     }
 
     [Fact]
-    public async Task AMissingShortcutKeepsTheValueAndSaysSo()
+    public void AFailedRegistrationLeavesNothingRegisteredAndSaysWhy()
     {
-        var shortcut = new RecordingShortcut(installed: false, ScratchShortcutOutcome.NotInstalled);
-        using var f = new ScratchFixture(shortcut: shortcut);
-        await f.ViewModel.InitializeAsync();
-        f.SettingsEditor.Answer = new SettingsEditResult(
-            f.Settings.ExtensionGlyphs, f.Settings.ShowShellIcons, f.Settings.EverythingMaxResults,
-            ScratchHotkey: "");
+        var binder = new AgentHotkeyBinder(new FakeRegistrar("다른 프로그램이 이미 그 단축키를 쓰고 있다."));
 
-        await f.ViewModel.OpenSettingsCommand.ExecuteAsync(null);
+        Assert.NotNull(binder.Update("Ctrl+Alt+F"));
+        Assert.Null(binder.Registered);
+    }
 
-        Assert.Equal(ScratchHotkey.None, f.Settings.ScratchHotkey);
-        Assert.Contains("바로가기가 없어", f.ViewModel.Message);
+    /// <summary>
+    /// 실물 <c>RegisterHotKey</c> — 등록 · 숨은 창으로 <c>WM_HOTKEY</c> 받기 · 해제. 이 PC 에서 쓰일 일이 거의 없는
+    /// 조합을 쓴다. 그래도 이미 누가 쓰고 있으면 실패가 정상이라, 그때는 그 사실만 확인하고 끝낸다.
+    /// </summary>
+    [Fact]
+    public void TheRealHotkeyRegistersReceivesAndUnregisters()
+    {
+        RunOnSta(() =>
+        {
+            var pressed = 0;
+            using var hotkey = new GlobalHotkey(() => pressed++);
+            var registration = ScratchHotkey.ToRegistration("Ctrl+Alt+Shift+F11")!.Value;
+
+            var failure = hotkey.Register(registration.Modifiers, registration.VirtualKey);
+            if (failure is not null)
+            {
+                Assert.Contains("이미", failure);
+                return;
+            }
+
+            hotkey.SimulatePress();
+            Assert.Equal(1, pressed);
+
+            hotkey.Unregister();
+            var again = hotkey.Register(registration.Modifiers, registration.VirtualKey);
+            Assert.Null(again);
+            hotkey.Unregister();
+        });
+    }
+
+    // ── 시작 메뉴 위임 · 명령줄 ─────────────────────────────────────────────────
+
+    private sealed class FakeAgent(bool running, bool delivers) : IAgentControl
+    {
+        public int Signals { get; private set; }
+
+        public bool IsRunning => running;
+
+        public string? Start() => null;
+
+        public bool TrySignalScratch()
+        {
+            Signals++;
+            return delivers;
+        }
+
+        public bool TrySignalExit() => delivers;
+    }
+
+    [Theory]
+    [InlineData(true, true, true, true)]
+    [InlineData(true, true, false, false)]
+    [InlineData(true, false, true, false)]
+    [InlineData(false, true, true, false)]
+    public void TheStartMenuDelegatesOnlyWhenTheAgentIsUsedAliveAndReached(
+        bool useAgent, bool running, bool delivers, bool expected)
+    {
+        var agent = new FakeAgent(running, delivers);
+
+        Assert.Equal(expected, ScratchLaunch.DelegatedToAgent(useAgent, agent));
+        if (!useAgent || !running)
+        {
+            Assert.Equal(0, agent.Signals);
+        }
+    }
+
+    [Theory]
+    [InlineData("--agent", true, false)]
+    [InlineData("--agent-exit", false, true)]
+    public void TheAgentSwitchesAreRead(string arg, bool agent, bool exit)
+    {
+        var options = CommandLineOptions.Parse([arg]);
+
+        Assert.Equal(agent, options.Agent);
+        Assert.Equal(exit, options.AgentExit);
+        Assert.Null(options.Error);
+    }
+
+    [Theory]
+    [InlineData("--agent", "--scratch")]
+    [InlineData("--agent", "--agent-exit")]
+    [InlineData("--launcher", "--agent-exit")]
+    public void TheAgentSwitchesMustStandAlone(string a, string b)
+    {
+        var options = CommandLineOptions.Parse([a, b]);
+
+        Assert.False(options.Agent);
+        Assert.False(options.AgentExit);
+        Assert.NotNull(options.Error);
+    }
+
+    // ── 상주 안 1회용 창 ─────────────────────────────────────────────────────────
+
+    /// <summary>상주는 한 프로세스에 1회용 창을 여럿 연다 — 세고, 닫고, 디스크에는 아무것도 안 남긴다.</summary>
+    [Fact]
+    public void TheHostOpensSeveralScratchWindowsAndClosesThemAll()
+    {
+        RunOnSta(() =>
+        {
+            using var f = new ScratchFixture();
+            var host = new ScratchWindowHost(
+                f.Inner,
+                () => LayoutPreset.SideBySide,
+                (workspace, store) => new MainWindow(
+                    new MainViewModel(
+                        workspace, store, new FolderEnumerator(), new FakeShellLauncher(), new FakeClipboardService(),
+                        new FileOperationEngine(new FakeRecycleBin()), new FakeUserPrompt(), new FakeMacroEditor(),
+                        new FakeFolderEditor(), new FakeSelfLauncher(), f.Settings, settingsWritable: true,
+                        f.SettingsEditor, new FavoritesStore(f.Paths), isScratch: true),
+                    new FakeFolderPicker()));
+
+            var first = host.Open();
+            var second = host.Open();
+
+            Assert.Equal(2, host.OpenWindows.Count);
+            Assert.NotSame(first, second);
+            Assert.Equal(2, ((MainWindow)first).ViewModel.Tiles.Count);
+
+            first.Close();
+            Assert.Single(host.OpenWindows);
+
+            host.CloseAll();
+            Assert.Empty(host.OpenWindows);
+
+            f.Inner.Flush();
+            Assert.Equal(0, f.WorkspaceFileCount());
+        });
+    }
+
+    private static ScratchWindowHost HostFor(ScratchFixture f) => new(
+        f.Inner,
+        () => LayoutPreset.SideBySide,
+        (workspace, store) => new MainWindow(
+            new MainViewModel(
+                workspace, store, new FolderEnumerator(), new FakeShellLauncher(), new FakeClipboardService(),
+                new FileOperationEngine(new FakeRecycleBin()), new FakeUserPrompt(), new FakeMacroEditor(),
+                new FakeFolderEditor(), new FakeSelfLauncher(), f.Settings, settingsWritable: true,
+                f.SettingsEditor, new FavoritesStore(f.Paths), isScratch: true),
+            new FakeFolderPicker()));
+
+    private static void PumpUntil(Func<bool> condition)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition() && watch.ElapsedMilliseconds < 10000)
+        {
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(
+                () => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        }
+    }
+
+    /// <summary>데우기 창은 세지 않고, 첫 렌더 뒤 스스로 닫히고, 「마지막 창 닫힘」을 쏘지 않는다.</summary>
+    [Fact]
+    public void TheWarmUpWindowClosesItselfUncounted()
+    {
+        RunOnSta(() =>
+        {
+            using var f = new ScratchFixture();
+            var host = HostFor(f);
+            var lastClosed = 0;
+            host.LastWindowClosed += (_, _) => lastClosed++;
+            var done = false;
+
+            host.WarmUp(() => done = true);
+            Assert.Empty(host.OpenWindows);
+            PumpUntil(() => done);
+
+            Assert.True(done);
+            Assert.Empty(host.OpenWindows);
+            Assert.Equal(0, lastClosed);
+        });
+    }
+
+    /// <summary>「상주로 받기」를 끄면 상주는 이 알림을 기다렸다 끝난다 — 마지막 창이 닫힐 때 한 번만 와야 한다.</summary>
+    [Fact]
+    public void LastWindowClosedFiresOnlyWhenTheLastOneCloses()
+    {
+        RunOnSta(() =>
+        {
+            using var f = new ScratchFixture();
+            var host = HostFor(f);
+            var lastClosed = 0;
+            host.LastWindowClosed += (_, _) => lastClosed++;
+
+            var first = host.Open();
+            var second = host.Open();
+            first.Close();
+            Assert.Equal(0, lastClosed);
+
+            second.Close();
+            Assert.Equal(1, lastClosed);
+        });
     }
 
     [Fact]
@@ -349,6 +774,109 @@ public sealed class ScratchModeTests
         {
             Directory.Delete(dir, recursive: true);
         }
+    }
+
+    // ── 앵커 빼기 (2026-10-14 2차 A1) ────────────────────────────────────────
+
+    private static async Task<TileViewModel> ShowInFirstTileAsync(ScratchFixture f)
+    {
+        f.ViewModel.AddFolders([f.APath]);
+        await f.ViewModel.ShowFolderCommand.ExecuteAsync(f.ViewModel.Rows.Single(r => r.Entry.Path == f.APath));
+        return f.ViewModel.Tiles.Single(t => t.Panel.Entry is not null);
+    }
+
+    [Fact]
+    public async Task GoingIntoASubfolderShowsNoAnchorWordsInScratch()
+    {
+        using var f = new ScratchFixture(LayoutPreset.SideBySide);
+        await f.ViewModel.InitializeAsync();
+        var sub = Directory.CreateDirectory(Path.Combine(f.APath, "sub")).FullName;
+        var tile = await ShowInFirstTileAsync(f);
+
+        await tile.Panel.NavigateToAsync(sub);
+
+        Assert.True(tile.Panel.IsAwayFromAnchor);
+        Assert.False(tile.Panel.ShowsAwayFromAnchor);
+        Assert.False(tile.Panel.HasStatusLine);
+        Assert.False(tile.Panel.ShowsAnchorActions);
+        Assert.Equal(Path.GetPathRoot(sub), tile.Panel.Breadcrumbs[0].Path);
+        Assert.DoesNotContain(tile.Panel.Breadcrumbs, b => b.IsAnchor);
+        Assert.DoesNotContain("앵커", tile.Panel.LocationHint);
+    }
+
+    /// <summary>같은 동작이 일반 작업 관리에서는 예전 그대로다 — 앵커로 접은 브레드크럼, 「앵커 밖」 표시.</summary>
+    [Fact]
+    public async Task ANormalWorkspaceStillShowsTheAnchor()
+    {
+        using var f = new MainWindowFixture();
+        await f.ViewModel.InitializeAsync();
+        var code = f.ViewModel.Tiles.Single(t => t.IsPinned
+            && string.Equals(t.Panel.Entry?.Path, f.CodePath, StringComparison.OrdinalIgnoreCase));
+
+        await code.Panel.NavigateToAsync(Path.Combine(f.CodePath, "Recipe"));
+
+        Assert.True(code.Panel.ShowsAwayFromAnchor);
+        Assert.True(code.Panel.HasStatusLine);
+        Assert.True(code.Panel.ShowsAnchorActions);
+        Assert.True(code.Panel.Breadcrumbs[0].IsAnchor);
+        Assert.Contains("앵커로 복귀", f.ViewModel.FolderListHint);
+    }
+
+    [Fact]
+    public async Task TheHomeKeyDoesNothingInScratchButStillWorksInANormalWorkspace()
+    {
+        using var s = new ScratchFixture(LayoutPreset.SideBySide);
+        await s.ViewModel.InitializeAsync();
+        var sub = Directory.CreateDirectory(Path.Combine(s.APath, "sub")).FullName;
+        var scratchTile = await ShowInFirstTileAsync(s);
+        await scratchTile.Panel.NavigateToAsync(sub);
+
+        await scratchTile.Panel.GoToAnchorFromUserCommand.ExecuteAsync(null);
+
+        Assert.Equal(sub, scratchTile.Panel.CurrentPath, ignoreCase: true);
+
+        using var n = new MainWindowFixture();
+        await n.ViewModel.InitializeAsync();
+        var code = n.ViewModel.Tiles.Single(t => t.IsPinned
+            && string.Equals(t.Panel.Entry?.Path, n.CodePath, StringComparison.OrdinalIgnoreCase));
+        await code.Panel.NavigateToAsync(Path.Combine(n.CodePath, "Recipe"));
+
+        await code.Panel.GoToAnchorFromUserCommand.ExecuteAsync(null);
+
+        Assert.Equal(n.CodePath, code.Panel.CurrentPath, ignoreCase: true);
+    }
+
+    /// <summary>1회용 창에서는 폴더가 떠 있는 칸이라도 즐겨찾기가 그 칸의 폴더를 바꾼다(임시 이동이 아니다).</summary>
+    [Fact]
+    public async Task AFavoriteReplacesTheFolderOfAnOccupiedScratchTile()
+    {
+        using var f = new ScratchFixture(LayoutPreset.SideBySide);
+        await f.ViewModel.InitializeAsync();
+        var tile = await ShowInFirstTileAsync(f);
+        tile.Panel.NotifyActivated();
+        f.ViewModel.Favorites.AddPath(f.BPath);
+
+        await f.ViewModel.OpenFavoriteCommand.ExecuteAsync(f.ViewModel.Favorites.Rows.Single());
+
+        Assert.Equal(f.BPath, tile.Panel.Entry!.Path, ignoreCase: true);
+        Assert.False(tile.Panel.IsAwayFromAnchor);
+    }
+
+    [Fact]
+    public void TheShellMenuCanLeaveOutSetAnchor()
+    {
+        Assert.Contains(ShellMenuPolicy.AppItems(isDirectory: true), i => i.Command == ShellMenuAppCommand.SetAnchor);
+        Assert.DoesNotContain(
+            ShellMenuPolicy.AppItems(isDirectory: true, includeSetAnchor: false),
+            i => i.Command == ShellMenuAppCommand.SetAnchor);
+    }
+
+    [Fact]
+    public void TheFolderListHintDropsTheAnchorWordInScratch()
+    {
+        using var f = new ScratchFixture();
+
+        Assert.DoesNotContain("앵커", f.ViewModel.FolderListHint);
     }
 
     // ── 창 ───────────────────────────────────────────────────────────────────

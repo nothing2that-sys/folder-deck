@@ -124,7 +124,11 @@ public static class ShellMenuPolicy
     /// <c>F2</c> 는 패널이, <c>Del</c> 은 창이 실제로 물고 있다.
     /// </para>
     /// </remarks>
-    public static IReadOnlyList<ShellMenuAppItem> AppItems(bool isDirectory, bool canCompareContent = false)
+    /// <param name="includeSetAnchor">
+    /// 「이 폴더를 앵커로 지정」을 넣을지 — 1회용 창(2026-10-14 2차 A1)은 앵커를 보이지 않으므로 false 를 준다.
+    /// </param>
+    public static IReadOnlyList<ShellMenuAppItem> AppItems(
+        bool isDirectory, bool canCompareContent = false, bool includeSetAnchor = true)
     {
         var items = new List<ShellMenuAppItem>(6)
         {
@@ -139,7 +143,11 @@ public static class ShellMenuPolicy
 
         if (isDirectory)
         {
-            items.Add(new(ShellMenuAppCommand.SetAnchor, "이 폴더를 앵커로 지정"));
+            if (includeSetAnchor)
+            {
+                items.Add(new(ShellMenuAppCommand.SetAnchor, "이 폴더를 앵커로 지정"));
+            }
+
             items.Add(new(ShellMenuAppCommand.RegisterFolder, "새 폴더로 등록"));
             items.Add(new(ShellMenuAppCommand.AddFavorite, "즐겨찾기에 추가"));
         }

@@ -1384,7 +1384,8 @@ public partial class FolderPanelView : UserControl
         try
         {
             var outcome = ShellItemMenu.Show(
-                source, paths, item.IsDirectory, canCompareContent, (int)screen.X, (int)screen.Y);
+                source, paths, item.IsDirectory, canCompareContent, (int)screen.X, (int)screen.Y,
+                includeSetAnchor: panel.ShowsAnchorActions);
 
             if (outcome.ShellHr != 0)
             {

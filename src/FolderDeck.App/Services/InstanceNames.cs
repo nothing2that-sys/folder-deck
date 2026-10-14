@@ -36,6 +36,12 @@ public static class InstanceNames
     /// <summary>워크스페이스 창이 "앞으로" 신호를 받는 파이프 이름.</summary>
     public static string WorkspacePipe(Guid workspaceId) => Pipe(workspaceId.ToString());
 
+    /// <summary>상주 프로그램(2026-10-14 2차)은 세션에 하나 — 단축키를 두 프로세스가 다투지 않게.</summary>
+    public const string AgentMutex = @"Local\FolderDeck.Agent";
+
+    /// <summary>상주에게 「1회용 창 열기」·「끝내기」를 싣는 파이프.</summary>
+    public static string AgentPipe => Pipe("agent");
+
     private static string Pipe(string key) => $"FolderDeck.s{SessionId}.{key}";
 
     private static int ReadSessionId()

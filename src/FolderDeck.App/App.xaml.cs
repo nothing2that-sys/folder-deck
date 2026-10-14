@@ -23,8 +23,11 @@ public partial class App : Application, IWorkspaceHost
     /// <summary>"앞으로" 신호를 받는 파이프 서버 (§3.3).</summary>
     private ActivationListener? _listener;
 
-    /// <summary>시작할 때 1회용 창 단축키를 바로가기에 못 맞췄으면 그 이유(S4). 띄운 창이 한 줄로 알린다.</summary>
+    /// <summary>시작할 때 1회용 창 단축키 받는 쪽을 못 맞췄으면 그 이유(S4 · 2차). 띄운 창이 한 줄로 알린다.</summary>
     private string? _shortcutSyncFailure;
+
+    /// <summary>이 프로세스가 상주 프로그램이면 그 런타임(2026-10-14 2차).</summary>
+    private AgentRuntime? _agent;
 
     /// <summary>떠 있는 선택 창 (§3.1). 워크스페이스를 열 때 이 창을 닫고 갈아끼운다.</summary>
     private LauncherWindow? _launcherWindow;
@@ -63,6 +66,19 @@ public partial class App : Application, IWorkspaceHost
 
         var options = CommandLineOptions.Parse(e.Args);
 
+        // 상주 끝내기(2026-10-14 2차) — 설치·제거가 부른다. 설정·바로가기·Run 키를 건드리지 않고 신호만 보낸 뒤
+        // 상주가 정말 끝날 때까지 잠깐 기다린다 — 그래야 설치 프로그램이 파일을 덮을 수 있다.
+        if (options.AgentExit)
+        {
+            if (AgentControl.Default.TrySignalExit())
+            {
+                AgentControl.WaitForExit(TimeSpan.FromSeconds(5));
+            }
+
+            Shutdown();
+            return;
+        }
+
         var store = new WorkspaceStore();
         _store = store;
         store.Paths.EnsureCreated();
@@ -71,18 +87,44 @@ public partial class App : Application, IWorkspaceHost
 
         string? message = options.Error;
 
-        // 1회용 창 단축키를 설치본 바로가기에 맞춘다(2026-10-14 S4). 설정값이 원본이다 — 재설치가
-        // 바로가기를 기본값으로 다시 만들었어도 여기서 고친다. 시작을 막지 않는다: 실패는 띄운 창에
-        // 한 줄로만 알린다. 바로가기가 없으면(개발 빌드) 아무 일도 없다.
-        var shortcutSync = ScratchShortcut.Default.Apply(_settings.ScratchHotkey);
-        _shortcutSyncFailure = shortcutSync.Outcome == ScratchShortcutOutcome.Failed ? shortcutSync.Error : null;
+        // 1회용 창 단축키를 누가 받을지 맞춘다(2026-10-14 S4 · 2차). 설정값이 원본이다 — 상주를 쓰면 바로가기 키를
+        // 지우고 Run 키를 쓰고, 안 쓰면 그 반대다(HotkeyRouting). 재설치가 바로가기를 새로 만들었어도 여기서 고친다.
+        // 시작을 막지 않는다: 실패는 띄운 창에 한 줄로만 알린다. 설정을 못 쓰는 실행이면 건드리지 않는다.
+        _shortcutSyncFailure = _settingsWritable ? HotkeyRouting.Default.Apply(_settings) : null;
+
+        // ⓐ 상주(2026-10-14 2차) — 창을 띄우지 않고 트레이에 남는다. 이미 상주가 있거나 설정이 상주를 끄라고 하면 끝낸다.
+        if (options.Agent)
+        {
+            var agent = new AgentRuntime(this, store, _settings, CreateScratchHost(), new SelfLauncher(), HotkeyRouting.Default);
+            if (!agent.TryStart())
+            {
+                agent.Dispose();
+                Shutdown();
+                return;
+            }
+
+            _agent = agent;
+            return;
+        }
 
         // ⓪ 1회용 창(S4) — 뮤텍스·파이프를 잡지 않으므로 여러 개가 동시에 뜬다. skipLauncher 와 무관하다.
+        // 상주가 살아 있으면(2차) 상주에게 맡기고 끝난다 — 상주 안에서 여는 쪽이 빠르다. 신호가 실패하면 여기서 연다.
         if (options.Scratch)
         {
+            if (ScratchLaunch.DelegatedToAgent(_settings.UseResidentAgent, AgentControl.Default))
+            {
+                Shutdown();
+                return;
+            }
+
+            EnsureAgent();
             ShowScratchWindow();
             return;
         }
+
+        // 상주를 써야 하는데 떠 있지 않으면(트레이 「상주 끝내기」 뒤 등) 앱을 다시 실행하는 것만으로 다시 띄운다
+        // (2026-10-14 2차 · JH 손확인). 이 프로세스는 그대로 자기 일을 한다.
+        EnsureAgent();
 
         // ① 인자로 워크스페이스를 지정했다 — 선택 창을 거치지 않는다 (§3.1).
         if (options.WorkspaceId is { } requested)
@@ -226,20 +268,29 @@ public partial class App : Application, IWorkspaceHost
         ShowWorkspaceWindow(workspace, new ScratchWorkspaceStore(_store!, workspace.Id), isScratch: true);
     }
 
-    /// <summary>워크스페이스 창을 실제로 만든다.</summary>
-    /// <param name="storeOverride">1회용 창이면 저장을 막는 래퍼. 아니면 null(앱 저장소).</param>
-    /// <param name="isScratch">
-    /// 1회용 창인가. 그러면 <c>LastWorkspaceId</c> 를 바꾸지 않는다 — 1회용의 id 가 「마지막 작업 관리」로
-    /// 남으면 다음 자동 열기가 없는 파일을 찾는다.
-    /// </param>
-    private MainWindow ShowWorkspaceWindow(Workspace workspace, IWorkspaceStore? storeOverride = null, bool isScratch = false)
+    /// <summary>상주를 써야 하는데 떠 있지 않으면 새 프로세스로 띄운다. 실패해도 이 실행을 막지 않는다.</summary>
+    private void EnsureAgent()
     {
-        if (!isScratch && _settingsWritable && _settings.LastWorkspaceId != workspace.Id)
+        var agent = AgentControl.Default;
+        if (HotkeyRoutingRules.ShouldStartAgent(_settings.UseResidentAgent, _settingsWritable, agent.IsRunning))
         {
-            _settings.LastWorkspaceId = workspace.Id;
-            _store!.SaveSettingsDebounced(_settings);
+            agent.Start();
         }
+    }
 
+    /// <summary>
+    /// 상주 안에서 1회용 창을 여닫는 자리(2026-10-14 2차). 창은 <see cref="BuildWorkspaceWindow"/> 로 만든다 —
+    /// <see cref="ShowWorkspaceWindow"/> 와 달리 <c>MainWindow</c>·<c>LastWorkspaceId</c> 를 건드리지 않는다.
+    /// </summary>
+    private ScratchWindowHost CreateScratchHost() => new(
+        _store!,
+        () => _settings.ScratchLayout,
+        (workspace, store) => BuildWorkspaceWindow(workspace, store, isScratch: true).Window);
+
+    /// <summary>뷰모델과 창을 만들고 자리를 잡는다. 띄우지는 않는다.</summary>
+    private (MainWindow Window, MainViewModel ViewModel, WindowPlacementResult Placement) BuildWorkspaceWindow(
+        Workspace workspace, IWorkspaceStore? storeOverride, bool isScratch)
+    {
         var viewModel = new MainViewModel(
             workspace,
             storeOverride ?? _store!,
@@ -256,7 +307,7 @@ public partial class App : Application, IWorkspaceHost
             new IconSettingsEditor(),
             new FavoritesStore(_store!.Paths),
             isScratch,
-            ScratchShortcut.Default);
+            HotkeyRouting.Default);
 
         var window = new MainWindow(viewModel, new FolderPicker());
 
@@ -266,6 +317,25 @@ public partial class App : Application, IWorkspaceHost
         var monitors = MonitorLayout.Query();
         var placement = WindowPlacement.Resolve(workspace.Window, monitors.WorkAreas, monitors.PrimaryIndex);
         window.ApplyPlacement(placement);
+
+        return (window, viewModel, placement);
+    }
+
+    /// <summary>워크스페이스 창을 실제로 만든다.</summary>
+    /// <param name="storeOverride">1회용 창이면 저장을 막는 래퍼. 아니면 null(앱 저장소).</param>
+    /// <param name="isScratch">
+    /// 1회용 창인가. 그러면 <c>LastWorkspaceId</c> 를 바꾸지 않는다 — 1회용의 id 가 「마지막 작업 관리」로
+    /// 남으면 다음 자동 열기가 없는 파일을 찾는다.
+    /// </param>
+    private MainWindow ShowWorkspaceWindow(Workspace workspace, IWorkspaceStore? storeOverride = null, bool isScratch = false)
+    {
+        if (!isScratch && _settingsWritable && _settings.LastWorkspaceId != workspace.Id)
+        {
+            _settings.LastWorkspaceId = workspace.Id;
+            _store!.SaveSettingsDebounced(_settings);
+        }
+
+        var (window, viewModel, placement) = BuildWorkspaceWindow(workspace, storeOverride, isScratch);
 
         MainWindow = window;
         window.Show();
@@ -339,6 +409,7 @@ public partial class App : Application, IWorkspaceHost
     protected override void OnExit(ExitEventArgs e)
     {
         // 파이프 서버를 닫고 뮤텍스를 놓는다 (§3.2). 놓기 전에 밀린 저장을 마무리한다 (§5).
+        _agent?.Dispose();
         _listener?.Dispose();
         _store?.Dispose();
         _instanceLock?.Dispose();

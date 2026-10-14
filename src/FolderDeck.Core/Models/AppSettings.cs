@@ -13,7 +13,9 @@ public sealed class AppSettings
     /// 구파일은 기본값(좌우)으로 읽힌다 — 1회용 창 자체가 새 기능이라 바뀌는 기존 화면이 없다.
     /// 같은 판에서 <c>favoritesCollapsed</c>(S3 · 즐겨찾기 묶음 접힘, 없으면 펼침)와
     /// <c>scratchHotkey</c>(S4 · 1회용 창 단축키, 없으면 <c>Ctrl+Alt+F</c>)도 늘었다 — 한 회차의
-    /// 추가라 판을 두 번 올리지 않는다.
+    /// 추가라 판을 두 번 올리지 않는다. 같은 날 2차 회차가 <c>useResidentAgent</c>(상주 프로그램이
+    /// 단축키를 받을지, 없으면 켬)를 더했다 — v5 는 그때 아직 정식 배포 전(미리보기 설치본뿐)이라 역시
+    /// 판을 올리지 않는다.
     /// <b>워크스페이스 스키마는 이것과 무관하다</b> — 간격도 아이콘 매핑도 창마다가 아니라
     /// 앱 전체의 값이다.
     /// </summary>
@@ -175,6 +177,14 @@ public sealed class AppSettings
             : Models.ScratchHotkey.Default;
     }
 
+    /// <summary>
+    /// 1회용 창 단축키를 <b>상주 프로그램</b>(<c>--agent</c>, 트레이)이 받을지 (2026-10-14 2차). 켜면 빠르다 —
+    /// 이미 떠 있는 프로세스가 창만 연다. 끄면 시작 메뉴 바로가기(.lnk)의 바로 가기 키가 받는다 — 상주가
+    /// 없지만 탐색기를 거쳐 느리다. <b>둘 중 하나만 켜진다</b>: 둘 다면 같은 키에 창이 두 번 뜬다.
+    /// 로그인 시 자동 시작도 이 값 하나를 따른다. 없으면 켬(<c>true</c>).
+    /// </summary>
+    public bool UseResidentAgent { get; set; } = true;
+
     // ── 즐겨찾기 (2026-10-14 S3) ─────────────────────────────────────────────
 
     /// <summary>
@@ -182,4 +192,33 @@ public sealed class AppSettings
     /// 파일의 <c>leftLayout</c> 에 두면 작업 관리 스키마가 오른다. 없으면 펼침(<c>false</c>).
     /// </summary>
     public bool FavoritesCollapsed { get; set; }
+
+    // ── 다른 프로세스가 바꾼 값 받기 (2026-10-14 2차) ───────────────────────────
+
+    /// <summary>
+    /// <paramref name="other"/> 의 값을 <b>이 인스턴스에</b> 덮어쓴다. 상주 프로그램은 설정 인스턴스 하나를
+    /// 열린 창들과 나눠 들고 오래 산다 — 다른 프로세스가 <c>settings.json</c> 을 바꾸면 다시 읽어 여기로
+    /// 옮겨야, 나중에 상주가 저장할 때 낡은 값으로 그 변경을 되돌리지 않는다.
+    /// </summary>
+    /// <remarks>
+    /// 속성이 늘면 <b>여기에도 한 줄을 더해야 한다</b>. 빠뜨리면 상주가 그 값을 되돌린다 — 시험
+    /// (<c>AppSettingsCopyTests</c>)이 공개 쓰기 가능 속성 전부를 리플렉션으로 세어 이 메서드가 다 옮기는지 본다.
+    /// </remarks>
+    public void CopyFrom(AppSettings other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+
+        SchemaVersion = other.SchemaVersion;
+        SkipLauncher = other.SkipLauncher;
+        LastWorkspaceId = other.LastWorkspaceId;
+        WorkspaceOrder = other.WorkspaceOrder is null ? null : [.. other.WorkspaceOrder];
+        TileGap = other.TileGap;
+        ExtensionGlyphs = new Dictionary<string, string>(other.ExtensionGlyphs);
+        ShowShellIcons = other.ShowShellIcons;
+        EverythingMaxResults = other.EverythingMaxResults;
+        ScratchLayout = other.ScratchLayout;
+        ScratchHotkey = other.ScratchHotkey;
+        UseResidentAgent = other.UseResidentAgent;
+        FavoritesCollapsed = other.FavoritesCollapsed;
+    }
 }

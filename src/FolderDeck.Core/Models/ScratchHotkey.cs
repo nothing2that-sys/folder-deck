@@ -121,6 +121,33 @@ public static class ScratchHotkey
             : null;
     }
 
+    // ── RegisterHotKey 용 (2026-10-14 2차 · 상주 프로그램) ──────────────────────
+
+    /// <summary><c>RegisterHotKey</c> 의 수식키 비트. .lnk 의 <c>HOTKEYF_*</c> 와 <b>배치가 다르다</b>(ALT 1 · CONTROL 2 · SHIFT 4).</summary>
+    public const uint ModAlt = 0x0001;
+    public const uint ModControl = 0x0002;
+    public const uint ModShift = 0x0004;
+
+    /// <summary>누르고 있는 동안 되풀이 알림을 받지 않는다 — 창이 줄줄이 뜨지 않게.</summary>
+    public const uint ModNoRepeat = 0x4000;
+
+    /// <summary>
+    /// 정규형 표기 → <c>RegisterHotKey(hwnd, id, modifiers, vk)</c> 의 (modifiers, vk). 「없음」이면 null
+    /// (등록하지 않는다). 정규형이 아니면 던진다 — <see cref="ToShortcutValue"/> 와 같은 계약이다.
+    /// </summary>
+    public static (uint Modifiers, uint VirtualKey)? ToRegistration(string normalized)
+    {
+        var value = ToShortcutValue(normalized);
+        if (value == 0)
+        {
+            return null;
+        }
+
+        var shift = (value >> 8 & HotkeyfShift) != 0;
+        var modifiers = ModControl | ModAlt | ModNoRepeat | (shift ? ModShift : 0);
+        return (modifiers, (uint)(value & 0xFF));
+    }
+
     private static string Format(bool shift, string key) => shift ? $"Ctrl+Alt+Shift+{key}" : $"Ctrl+Alt+{key}";
 
     private static byte? VirtualKey(string? keyName)

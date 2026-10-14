@@ -27,7 +27,8 @@ public sealed class ActivationListener : IDisposable
     private const int ReadTimeoutMs = 2000;
 
     private readonly string _pipeName;
-    private readonly Action _onActivate;
+    private readonly Action<string> _onPayload;
+    private readonly IReadOnlySet<string> _accepted;
     private readonly CancellationTokenSource _cts = new();
     private readonly Lock _gate = new();
 
@@ -36,12 +37,24 @@ public sealed class ActivationListener : IDisposable
 
     /// <param name="onActivate">"앞으로" 신호를 받았을 때.</param>
     public ActivationListener(string pipeName, Action onActivate)
+        : this(pipeName, _ => onActivate(), [ActivationSignal.ActivatePayload])
+    {
+        ArgumentNullException.ThrowIfNull(onActivate);
+    }
+
+    /// <summary>
+    /// 본문 여럿을 가르는 수신자 (2026-10-14 2차 — 상주의 「1회용 창 열기」·「끝내기」). <paramref name="accepted"/>
+    /// 밖의 본문(존재 확인만 한 빈 연결 포함)에는 아무것도 안 한다 — 한 가지 본문만 받던 때와 같은 규칙이다.
+    /// </summary>
+    public ActivationListener(string pipeName, Action<string> onPayload, IReadOnlyCollection<string> accepted)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
-        ArgumentNullException.ThrowIfNull(onActivate);
+        ArgumentNullException.ThrowIfNull(onPayload);
+        ArgumentNullException.ThrowIfNull(accepted);
 
         _pipeName = pipeName;
-        _onActivate = onActivate;
+        _onPayload = onPayload;
+        _accepted = new HashSet<string>(accepted, StringComparer.Ordinal);
 
         // 첫 서버는 여기서 동기로 만든다 — 이름이 이미 쓰이고 있으면(다른 세션 등) 그 사실을
         // 창을 띄우기 전에 알 수 있어야 한다. 조용히 "신호를 못 받는 창"이 되지 않게 (§5).
@@ -97,9 +110,9 @@ public sealed class ActivationListener : IDisposable
                 var line = await reader.ReadLineAsync(readCts.Token).ConfigureAwait(false);
 
                 // 본문이 맞을 때만 반응한다. 남이 존재 확인만 한 연결(본문 없음)에는 아무것도 안 한다.
-                if (line == ActivationSignal.ActivatePayload)
+                if (line is not null && _accepted.Contains(line))
                 {
-                    _onActivate();
+                    _onPayload(line);
                 }
             }
             catch (OperationCanceledException)

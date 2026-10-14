@@ -15,7 +15,8 @@ public partial class IconSettingsDialog : Window
         EverythingTabContent.DataContext =
             new EverythingSettingsViewModel(request.EverythingStatus, request.EverythingMaxResults);
         ScratchTabContent.DataContext = new ScratchSettingsViewModel(
-            request.ScratchLayout, request.ScratchHotkey, request.ScratchShortcutInstalled);
+            request.ScratchLayout, request.ScratchHotkey, request.ScratchShortcutInstalled,
+            request.UseResidentAgent, request.AgentRunning);
     }
 
     public SettingsEditResult? Result { get; private set; }
@@ -65,7 +66,7 @@ public partial class IconSettingsDialog : Window
 
         Result = new SettingsEditResult(
             iconVm.ToDictionary(), iconVm.ShowShellIcons, everythingVm.EverythingMaxResults,
-            scratchVm.SelectedLayout.Preset, scratchVm.HotkeyText);
+            scratchVm.SelectedLayout.Preset, scratchVm.HotkeyText, scratchVm.UseResidentAgent);
         DialogResult = true;
     }
 }

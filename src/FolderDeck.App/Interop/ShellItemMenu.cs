@@ -37,7 +37,7 @@ internal static class ShellItemMenu
     /// </remarks>
     public static ShellMenuOutcome Show(
         HwndSource source, IReadOnlyList<string> paths, bool isDirectory, bool canCompareContent,
-        int screenX, int screenY)
+        int screenX, int screenY, bool includeSetAnchor = true)
     {
         using var scm = ShellContextMenu.Acquire(paths, source.Handle);
 
@@ -50,7 +50,7 @@ internal static class ShellItemMenu
         try
         {
             // 앱 항목이 먼저다 — 셸은 그 뒤부터 채운다. 구분선 하나로 갈라 둔다.
-            foreach (var item in ShellMenuPolicy.AppItems(isDirectory, canCompareContent))
+            foreach (var item in ShellMenuPolicy.AppItems(isDirectory, canCompareContent, includeSetAnchor))
             {
                 ShellNative.AppendMenuW(hMenu, ShellNative.MF_STRING, (UIntPtr)(uint)item.Command, item.Text);
             }

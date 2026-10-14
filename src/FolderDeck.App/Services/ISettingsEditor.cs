@@ -14,7 +14,9 @@ public sealed record SettingsEditRequest(
     EverythingStatus EverythingStatus,
     LayoutPreset ScratchLayout = AppSettings.DefaultScratchLayout,
     string ScratchHotkey = Core.Models.ScratchHotkey.Default,
-    bool ScratchShortcutInstalled = false);
+    bool ScratchShortcutInstalled = false,
+    bool UseResidentAgent = true,
+    bool AgentRunning = false);
 
 /// <summary>
 /// 창이 저장을 눌러 돌려주는 값 한 벌. 취소면 <see cref="ISettingsEditor.Edit"/> 가 <c>null</c> 을 낸다.
@@ -26,7 +28,8 @@ public sealed record SettingsEditResult(
     bool ShowShellIcons,
     int EverythingMaxResults,
     LayoutPreset? ScratchLayout = null,
-    string? ScratchHotkey = null);
+    string? ScratchHotkey = null,
+    bool? UseResidentAgent = null);
 
 /// <summary>
 /// 설정 창 (D59 「아이콘」 탭 전용으로 시작해 D69-d 가 이름·계약을 함께 넓혔다). 테스트에서
