@@ -24,6 +24,13 @@ public sealed partial class TileViewModel : ObservableObject
 
     public FolderPanelViewModel Panel { get; }
 
+    /// <summary>
+    /// 즐겨찾기 클릭이 닿을 대상 타일인가 (2026-10-14 S3). 런타임 전용 — 저장하지 않는다.
+    /// <see cref="MainViewModel.TargetTile"/> 이 하나만 켠다.
+    /// </summary>
+    [ObservableProperty]
+    private bool isTarget;
+
     public int CellX => Spec.CellX;
 
     public int CellY => Spec.CellY;

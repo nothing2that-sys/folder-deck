@@ -164,6 +164,14 @@
                                                IsHitTestVisible="{Binding DataContext.IsViewMode,
                                                                   ElementName=TileRoot}" />
 
+                        <!-- 대상 타일 표시 (2026-10-14 S3) — 즐겨찾기 클릭이 닿을 타일. 위 가장자리에
+                             얇은 강조선 하나만 긋는다(과하지 않게). 클릭을 가로채지 않는다. -->
+                        <Border BorderBrush="{StaticResource Brush.Accent}" BorderThickness="0,2,0,0"
+                                CornerRadius="3" IsHitTestVisible="False"
+                                Margin="{Binding DataContext.TileGap, ElementName=Root,
+                                         Converter={StaticResource TileMargin}}"
+                                Visibility="{Binding IsTarget, Converter={StaticResource BoolToVisibility}}" />
+
                         <!-- 편집 손잡이 층 — 여기를 잡으면 이동, 오른쪽 아래 그립은 리사이즈. -->
                         <Border Background="{StaticResource Brush.EditOverlay}"
                                 CornerRadius="4" Cursor="SizeAll"

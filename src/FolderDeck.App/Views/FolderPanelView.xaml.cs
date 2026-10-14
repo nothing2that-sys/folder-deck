@@ -1434,6 +1434,10 @@ public partial class FolderPanelView : UserControl
                 panel.RegisterFolderCommand?.Execute(item);
                 break;
 
+            case ShellMenuAppCommand.AddFavorite:
+                panel.AddItemToFavorites(item);
+                break;
+
             case ShellMenuAppCommand.Trash:
                 panel.TrashSelectionCommand?.Execute(null);
                 break;
@@ -1550,6 +1554,14 @@ public partial class FolderPanelView : UserControl
         if (ViewModel is not { } panel)
         {
             return;
+        }
+
+        // 대상 타일(2026-10-14 S3) — 이 패널 안 왼쪽 클릭이면 무엇을 눌렀든 즐겨찾기가 닿을 타일이
+        // 된다. 포커스 판정(아래)과 달리 가드를 두지 않는다: 버튼·항목을 눌러도 「이 타일을 쓰고
+        // 있다」는 뜻은 같다.
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            panel.NotifyActivated();
         }
 
         switch (e.ChangedButton)

@@ -16,6 +16,10 @@ namespace FolderDeck.App.Services;
 /// <c>skipLauncher</c> 를 <b>무시하고</b> 런처를 띄운다. 자동 열기가 켜져 있으면 인자 없는 실행이
 /// 워크스페이스로 가버려 다른 워크스페이스를 열 자리가 없어지므로 이 인자가 필요하다.
 /// </description></item>
+/// <item><term><c>--scratch</c></term><description>
+/// 1회용 창(2026-10-14 S4) — 저장되지 않는 탐색기 창을 띄운다. 여러 개를 동시에 띄울 수 있다.
+/// <c>--workspace</c> 와 같이 주면 오류다(둘 중 무엇을 열지 정할 수 없다).
+/// </description></item>
 /// </list>
 /// <para>
 /// 잘못된 인자는 <see cref="Error"/> 로 올린다 — 조용히 무시하지 않는다(§5). 그때도 런처는
@@ -27,11 +31,16 @@ public sealed record CommandLineOptions
     public const string WorkspaceSwitch = "--workspace";
     public const string LauncherSwitch = "--launcher";
 
+    public const string ScratchSwitch = "--scratch";
+
     /// <summary>열라고 지정된 워크스페이스. 없으면 null.</summary>
     public Guid? WorkspaceId { get; private init; }
 
     /// <summary><c>skipLauncher</c> 를 무시하고 런처를 띄우라는 요청.</summary>
     public bool ForceLauncher { get; private init; }
+
+    /// <summary>1회용 창을 띄우라는 요청 (S4).</summary>
+    public bool Scratch { get; private init; }
 
     /// <summary>읽지 못한 인자에 대한 사용자에게 보일 말. 문제가 없으면 null.</summary>
     public string? Error { get; private init; }
@@ -45,11 +54,18 @@ public sealed record CommandLineOptions
     {
         Guid? workspaceId = null;
         var forceLauncher = false;
+        var scratch = false;
         string? error = null;
 
         for (var i = 0; i < (args?.Count ?? 0); i++)
         {
             var arg = args![i];
+
+            if (Matches(arg, ScratchSwitch))
+            {
+                scratch = true;
+                continue;
+            }
 
             if (Matches(arg, LauncherSwitch))
             {
@@ -79,10 +95,19 @@ public sealed record CommandLineOptions
             error = Combine(error, $"알 수 없는 인자: {arg}");
         }
 
+        if (scratch && workspaceId is not null)
+        {
+            error = Combine(error, $"{ScratchSwitch} 와 {WorkspaceSwitch} 는 같이 쓸 수 없다.");
+            // 둘 다 버리고 선택 창으로 떨어진다 — 어느 쪽을 원했는지 모른다.
+            workspaceId = null;
+            scratch = false;
+        }
+
         return new CommandLineOptions
         {
             WorkspaceId = workspaceId,
             ForceLauncher = forceLauncher,
+            Scratch = scratch,
             Error = error,
         };
     }

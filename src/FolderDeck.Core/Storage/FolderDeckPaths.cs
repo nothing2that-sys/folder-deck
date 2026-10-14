@@ -8,6 +8,7 @@ public sealed class FolderDeckPaths
 {
     public const string WorkspacesDirName = "workspaces";
     public const string SettingsFileName = "settings.json";
+    public const string FavoritesFileName = "favorites.json";
 
     public FolderDeckPaths(string root)
     {
@@ -26,6 +27,9 @@ public sealed class FolderDeckPaths
     public string WorkspacesDir => Path.Combine(Root, WorkspacesDirName);
 
     public string SettingsFile => Path.Combine(Root, SettingsFileName);
+
+    /// <summary>모든 작업 관리가 함께 쓰는 즐겨찾기 (2026-10-14 S3).</summary>
+    public string FavoritesFile => Path.Combine(Root, FavoritesFileName);
 
     public string WorkspaceFile(Guid id) => Path.Combine(WorkspacesDir, $"{id}.json");
 

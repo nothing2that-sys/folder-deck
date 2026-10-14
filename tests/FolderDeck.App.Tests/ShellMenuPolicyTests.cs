@@ -77,6 +77,7 @@ public sealed class ShellMenuPolicyTests
     [InlineData(0x13u, ShellMenuAppCommand.SetAnchor)]
     [InlineData(0x14u, ShellMenuAppCommand.RegisterFolder)]
     [InlineData(0x15u, ShellMenuAppCommand.Trash)]
+    [InlineData(0x17u, ShellMenuAppCommand.AddFavorite)]
     public void AppIdsMapToTheirOwnCommand(uint id, ShellMenuAppCommand expected)
     {
         Assert.Equal(expected, ShellMenuPolicy.ToAppCommand(id));
@@ -104,12 +105,13 @@ public sealed class ShellMenuPolicyTests
     /// <summary>
     /// 대역 안이어도 우리가 넣지 않은 id 면 아무 커맨드도 부르지 않는다. <c>0x16</c> 은
     /// 예전에는 이 셋에 있었다 — <see cref="ShellMenuAppCommand.CompareContent"/> 로 배정된
-    /// 뒤(2026-09-18) <c>0x17</c> 로 옮겼다, 더는 "안 쓰는 id"가 아니라서.
+    /// 뒤(2026-09-18) <c>0x17</c> 로 옮겼다, 더는 "안 쓰는 id"가 아니라서. <c>0x17</c> 도 같은 이유로
+    /// <c>0x18</c> 로 옮겼다 — <see cref="ShellMenuAppCommand.AddFavorite"/>(2026-10-14 S3).
     /// </summary>
     [Theory]
     [InlineData(0x01u)]
     [InlineData(0x10u)]
-    [InlineData(0x17u)]
+    [InlineData(0x18u)]
     [InlineData(0x0FFFu)]
     public void UnknownAppBandIdRunsNothing(uint id)
     {
@@ -118,9 +120,12 @@ public sealed class ShellMenuPolicyTests
 
     // ── D34: 끼우는 항목은 다섯 (폴더) / 셋 (파일) ───────────────────────────
 
-    /// <summary>폴더에는 다섯 전부가 그 순서로 들어간다.</summary>
+    /// <summary>
+    /// 폴더에는 여섯 전부가 그 순서로 들어간다. 2026-10-14 S3 가 「즐겨찾기에 추가」를 「새 폴더로 등록」
+    /// 바로 뒤에 더했다(다섯 → 여섯).
+    /// </summary>
     [Fact]
-    public void FolderGetsAllFiveInOrder()
+    public void FolderGetsAllSixInOrder()
     {
         var items = ShellMenuPolicy.AppItems(isDirectory: true);
 
@@ -130,6 +135,7 @@ public sealed class ShellMenuPolicyTests
                 ShellMenuAppCommand.Rename,
                 ShellMenuAppCommand.SetAnchor,
                 ShellMenuAppCommand.RegisterFolder,
+                ShellMenuAppCommand.AddFavorite,
                 ShellMenuAppCommand.Trash,
             ],
             items.Select(i => i.Command));

@@ -570,6 +570,21 @@ public sealed partial class FolderPanelViewModel : ObservableObject
     public Action<string>? RegisterFolderPath { get; set; }
 
     /// <summary>
+    /// 「즐겨찾기에 추가」가 닿을 통로 (2026-10-14 S3) — 항목 우클릭(폴더)과 「지금 보고 있는 폴더」
+    /// 메뉴 둘 다. 패널은 즐겨찾기 저장소를 모른다 — <see cref="RegisterFolderPath"/> 와 같은 결이다.
+    /// </summary>
+    public Action<string>? AddFavoritePath { get; set; }
+
+    /// <summary>
+    /// 사용자가 이 패널을 클릭했다고 알리는 통로 (2026-10-14 S3 · 대상 타일). 패널은 자기가 어느
+    /// 타일인지 모른다 — <see cref="CompareRequested"/> 와 같은 결이다.
+    /// </summary>
+    public Action<FolderPanelViewModel>? Activated { get; set; }
+
+    /// <summary>뷰가 패널 안 왼쪽 클릭마다 부른다.</summary>
+    public void NotifyActivated() => Activated?.Invoke(this);
+
+    /// <summary>
     /// 「지금 보고 있는 폴더」 메뉴의 "새 폴더 만들기"가 띄우는 모달이 닿을 통로 (§4.6 · D75-c).
     /// 패널은 <c>IPrompt</c> 를 모른다 — <see cref="RenameOnDisk"/> 와 같은 결로 타일을 만들 때
     /// 걸어 준다.
@@ -1622,6 +1637,31 @@ public sealed partial class FolderPanelViewModel : ObservableObject
         if (CurrentPath is { } path)
         {
             RegisterFolderPath?.Invoke(path);
+        }
+    }
+
+    /// <summary>「지금 보고 있는 폴더」 메뉴의 "즐겨찾기에 추가" (2026-10-14 S3).</summary>
+    [RelayCommand]
+    public void AddCurrentFolderToFavorites()
+    {
+        if (IsSearchTile)
+        {
+            Reject("검색 타일에는 즐겨찾기에 넣을 폴더가 없다");
+            return;
+        }
+
+        if (CurrentPath is { } path)
+        {
+            AddFavoritePath?.Invoke(path);
+        }
+    }
+
+    /// <summary>항목 우클릭(폴더)의 "즐겨찾기에 추가" (2026-10-14 S3). 파일에는 메뉴가 안 뜬다.</summary>
+    public void AddItemToFavorites(FileItemViewModel? item)
+    {
+        if (item is { IsDirectory: true })
+        {
+            AddFavoritePath?.Invoke(item.FullPath);
         }
     }
 

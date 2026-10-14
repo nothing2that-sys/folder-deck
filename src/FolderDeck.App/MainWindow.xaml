@@ -40,7 +40,8 @@
                    있다: 창의 Del 키(위 InputBindings)와 항목 우클릭 메뉴의 「휴지통으로 삭제」
                    (Interop/ShellMenuPolicy.cs 의 AppItems). 툴바에만 없다.
                  7 「배치 편집」·「다른 작업 관리 열기」를 오른쪽 끝으로 보냈다. 둘 다 자주
-                   누르는 것이 아니고, 왼쪽 자리는 8 이 쓴다.
+                   누르는 것이 아니고, 왼쪽 자리는 8 이 쓴다. (2026-10-14 S1 에서 오른쪽 끝은
+                   ⋯ 메뉴 + 작은 「배치」 토글로 다시 줄었다 — 아래 오른쪽 끝 주석.)
                  8 비워진 왼쪽에 순환 폴더 이름을 늘어놓는다. 왼쪽 패널을 접었을 때(위 첫
                    버튼)의 우회로다 — 접으면 순환 칸에 폴더를 띄울 길이 없어진다. -->
         <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{StaticResource Brush.Border}"
@@ -55,39 +56,61 @@
                         ToolTip="{Binding LeftPanelToggleTip}"
                         AutomationProperties.Name="왼쪽 패널 접기/펴기" />
 
-                <!-- 오른쪽 끝 둘 (7). 먼저 붙인 쪽이 더 바깥(오른쪽)이므로 이 순서가
-                     화면에서는 「배치 편집」 「다른 작업 관리 열기」로 읽힌다 — 옮기기 전의
-                     좌우 순서 그대로다. -->
-                <Button DockPanel.Dock="Right" Padding="12,4" Margin="6,0,0,0"
-                        Command="{Binding OpenLauncherCommand}"
-                        Content="다른 작업 관리 열기"
-                        AutomationProperties.Name="다른 작업 관리 열기"
-                        ToolTip="작업 관리 목록을 새 창으로 띄운다 — 거기서 다른 작업 관리를 열 수 있다. 이 창은 그대로 남는다." />
+                <!-- 오른쪽 끝 (2026-10-14 S1). 글자 버튼 넷이 자리를 너무 차지해서 줄였다.
+
+                     「중복 찾기」·「설정」·「다른 작업 관리 열기」는 자주 누르는 것이 아니라
+                     ⋯ 메뉴 하나로 접었다. 메뉴의 DataContext 는 생성자가 직접 건다
+                     (MainWindow.xaml.cs) — ContextMenu 는 시각 트리 밖이라 상속을 믿지 않는다.
+
+                     「배치 편집」은 켜짐/꺼짐이 보여야 하는 모드라 메뉴에 숨기지 않고 작은
+                     토글로 남긴다. 켜진 모양은 EditModeButton 스타일이 그대로 그린다.
+                     먼저 붙인 쪽이 더 바깥(오른쪽)이므로 화면에서는 「배치」 「⋯」 순이다. -->
+                <Button x:Name="MoreMenuButton" DockPanel.Dock="Right" Style="{StaticResource NavButton}"
+                        Margin="6,0,0,0"
+                        Content="⋯"
+                        Click="OnMoreMenuClick"
+                        AutomationProperties.Name="더 보기"
+                        ToolTip="중복 찾기 · 설정 · 다른 작업 관리 열기">
+                    <Button.ContextMenu>
+                        <ContextMenu x:Name="MoreMenu">
+                            <MenuItem x:Name="FindDuplicatesMenuItem" Header="중복 찾기"
+                                      Command="{Binding FindDuplicatesCommand}"
+                                      AutomationProperties.Name="중복 파일 찾기"
+                                      ToolTip="지금 열린 모든 타일에서 이름·크기가 같은 후보 중복을 찾는다." />
+                            <MenuItem x:Name="SettingsMenuItem" Header="설정"
+                                      Command="{Binding OpenSettingsCommand}"
+                                      IsEnabled="{Binding CanOpenSettings}"
+                                      AutomationProperties.Name="설정"
+                                      ToolTip="확장자별 글리프 매핑·셸 아이콘·검색 결과 상한을 편집한다." />
+                            <!-- 1회용 창(S4)에서만 — 타일 배치를 그 자리에서 다시 만든다. -->
+                            <MenuItem x:Name="ScratchLayoutMenuItem" Header="타일 배치"
+                                      ItemsSource="{Binding ScratchLayoutChoices}"
+                                      Visibility="{Binding IsScratch, Converter={StaticResource BoolToVisibility}}">
+                                <MenuItem.ItemContainerStyle>
+                                    <Style TargetType="MenuItem">
+                                        <Setter Property="Header" Value="{Binding Label}" />
+                                        <Setter Property="Command"
+                                                Value="{Binding DataContext.ApplyScratchLayoutCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <Setter Property="CommandParameter" Value="{Binding}" />
+                                    </Style>
+                                </MenuItem.ItemContainerStyle>
+                            </MenuItem>
+                            <Separator />
+                            <MenuItem x:Name="OpenLauncherMenuItem" Header="다른 작업 관리 열기"
+                                      Command="{Binding OpenLauncherCommand}"
+                                      AutomationProperties.Name="다른 작업 관리 열기"
+                                      ToolTip="작업 관리 목록을 새 창으로 띄운다 — 거기서 다른 작업 관리를 열 수 있다. 이 창은 그대로 남는다." />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
 
                 <Button DockPanel.Dock="Right" Style="{StaticResource EditModeButton}"
-                        Margin="6,0,0,0"
+                        Margin="6,0,0,0" MinWidth="0" Padding="8,3"
                         Command="{Binding ToggleLayoutEditCommand}"
                         Content="{Binding EditToggleText}"
                         AutomationProperties.Name="배치 편집"
                         ToolTip="켜면 타일을 옮기고 크기를 바꿀 수 있다. 그동안 파일 목록은 잠긴다." />
-
-                <!-- 설정 창 진입점 (D59). 자주 누르는 것이 아니라 「배치 편집」·「다른 작업
-                     관리 열기」와 같은 자리(오른쪽 끝)에 텍스트 버튼으로 둔다 — 나머지 둘을
-                     옮기지 않으므로(결정 2) 셋 중 안쪽(가운데에 더 가까운 쪽)에 붙는다. -->
-                <Button DockPanel.Dock="Right" Padding="12,4" Margin="6,0,0,0"
-                        Command="{Binding OpenSettingsCommand}"
-                        IsEnabled="{Binding CanOpenSettings}"
-                        Content="설정"
-                        AutomationProperties.Name="설정"
-                        ToolTip="확장자별 글리프 매핑·셸 아이콘·검색 결과 상한을 편집한다." />
-
-                <!-- 중복 파일 찾기(기능 후보 ②, 2026-09-18 설계) — 「설정」과 같은 자리
-                     (자주 누르는 게 아니라 오른쪽 끝, 새로 추가되는 것이라 셋 중 가장 안쪽). -->
-                <Button DockPanel.Dock="Right" Padding="12,4" Margin="6,0,0,0"
-                        Command="{Binding FindDuplicatesCommand}"
-                        Content="중복 찾기"
-                        AutomationProperties.Name="중복 파일 찾기"
-                        ToolTip="지금 열린 모든 타일에서 이름·크기가 같은 후보 중복을 찾는다." />
 
                 <!-- 남는 가운데. 두 내용이 번갈아 들어서므로 Grid 로 겹쳐 둔다 —
                      DockPanel 은 마지막 자식 하나만 남는 폭을 먹기 때문이다. -->
@@ -275,6 +298,108 @@
 
                 <!-- 위: 폴더 리스트 = 유일한 컨트롤러 (§3.2) -->
                 <DockPanel Grid.Row="0">
+                    <!-- 즐겨찾기 (2026-10-14 S3) — 모든 작업 관리가 함께 쓰는 「바로 이동」 목록.
+                         등록 폴더와 분리돼 있다: 클릭은 대상 타일(마지막으로 클릭한 타일, 위 가장자리
+                         강조선)을 그 경로로 임시 이동시킬 뿐 이 작업 관리를 바꾸지 않는다.
+                         행 높이 계산(ApplyLeftRowHeights)을 건드리지 않으려고 새 행을 만들지 않고
+                         폴더 리스트 칸 맨 위에 얹는다. 길어지면 MaxHeight 안에서 스크롤한다.
+                         DataContext 는 Favorites 다 — 행 명령은 Window 의 DataContext 에서 찾는다. -->
+                    <DockPanel DockPanel.Dock="Top" DataContext="{Binding Favorites}">
+                        <DockPanel DockPanel.Dock="Top" Margin="6,6,6,2">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource NavButton}"
+                                    Content="＋"
+                                    Click="OnAddFavoriteClick"
+                                    ToolTip="폴더를 골라 즐겨찾기에 추가 — 모든 작업 관리에 함께 보인다"
+                                    AutomationProperties.Name="즐겨찾기 추가" />
+
+                            <Button Style="{StaticResource FolderRowButton}"
+                                    Command="{Binding ToggleCollapsedCommand}"
+                                    ToolTip="즐겨찾기 접기/펴기"
+                                    AutomationProperties.Name="즐겨찾기 접기/펴기">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock FontSize="10" VerticalAlignment="Center" Margin="0,0,5,0"
+                                               Foreground="{StaticResource Brush.TextSecondary}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="▾" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsCollapsed}" Value="True">
+                                                        <Setter Property="Text" Value="▸" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Text="즐겨찾기" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Button>
+                        </DockPanel>
+
+                        <ScrollViewer DockPanel.Dock="Top" MaxHeight="180" Padding="4,0"
+                                      VerticalScrollBarVisibility="Auto"
+                                      Visibility="{Binding IsCollapsed,
+                                                   Converter={StaticResource InverseBoolToVisibility}}">
+                            <ItemsControl x:Name="FavoritesList" ItemsSource="{Binding Rows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:FavoriteRowViewModel}">
+                                        <Button Command="{Binding DataContext.OpenFavoriteCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="{Binding Path}"
+                                                Tag="{Binding DataContext,
+                                                      RelativeSource={RelativeSource AncestorType=Window}}">
+                                            <Button.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="위로"
+                                                              Command="{Binding PlacementTarget.Tag.Favorites.MoveUpCommand,
+                                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                    <MenuItem Header="아래로"
+                                                              Command="{Binding PlacementTarget.Tag.Favorites.MoveDownCommand,
+                                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                    <Separator />
+                                                    <MenuItem Header="등록 폴더로 추가"
+                                                              Command="{Binding PlacementTarget.Tag.RegisterFavoriteAsFolderCommand,
+                                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                    <Separator />
+                                                    <MenuItem Header="제거"
+                                                              Command="{Binding PlacementTarget.Tag.Favorites.RemoveCommand,
+                                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding PlacementTarget.DataContext,
+                                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                </ContextMenu>
+                                            </Button.ContextMenu>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="★" FontSize="11" Margin="0,0,6,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{StaticResource Brush.TextSecondary}" />
+                                                <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource FolderRowButton}">
+                                                    <Style.Triggers>
+                                                        <!-- 지금 열 수 없는 경로 — 흐리게. 지우지 않는다. -->
+                                                        <DataTrigger Binding="{Binding IsAvailable}" Value="False">
+                                                            <Setter Property="Opacity" Value="0.45" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <Border DockPanel.Dock="Top" Height="1" Margin="6,4,6,0"
+                                Background="{StaticResource Brush.BorderSubtle}" />
+                    </DockPanel>
+
                     <!-- Terminal Deck 목록 헤더와 같은 결: 제목/접기와 새 항목 추가를 한 줄에 둔다. -->
                     <DockPanel DockPanel.Dock="Top" Margin="6,6,6,2">
                         <Button DockPanel.Dock="Right" Style="{StaticResource NavButton}"

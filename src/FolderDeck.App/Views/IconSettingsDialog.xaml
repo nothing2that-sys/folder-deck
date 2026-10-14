@@ -118,6 +118,52 @@
                                Text="한 번의 질의가 돌려줄 결과 개수의 최대값이다. 크게 잡을수록 늦게 뜬다." />
                 </StackPanel>
             </TabItem>
+
+            <!-- 2026-10-14 S2 — 1회용 창(scratch 인자). 값은 바인딩으로만 오가고 이벤트 핸들러가
+                 없다 — XAML 기본값이 생성 도중 이벤트를 쏘는 함정(BatchRenameDialog)이 없는 자리다. -->
+            <TabItem Header="1회용 창">
+                <StackPanel x:Name="ScratchTabContent" Margin="10">
+                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,12" FontSize="11"
+                               Foreground="{StaticResource Brush.TextSecondary}"
+                               Text="1회용 창은 저장되지 않는 탐색기 창이다. 시작 메뉴의 「Folder Deck 1회용」 바로가기나 단축키로 띄운다." />
+
+                    <TextBlock Text="처음 타일 배치" FontSize="11"
+                               Foreground="{StaticResource Brush.TextSecondary}" Margin="0,0,0,4" />
+                    <ComboBox ItemsSource="{Binding Layouts}"
+                              SelectedItem="{Binding SelectedLayout}"
+                              DisplayMemberPath="Label"
+                              HorizontalAlignment="Left" Width="120"
+                              AutomationProperties.Name="1회용 창 처음 타일 배치" />
+                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" FontSize="11"
+                               Foreground="{StaticResource Brush.TextSecondary}"
+                               Text="띄운 뒤에는 창 오른쪽 위 ⋯ 메뉴의 「타일 배치」로 바꿀 수 있다." />
+
+                    <!-- S4 — 단축키. 칸은 글자를 받지 않고 눌린 조합을 잡는다(OnHotkeyKeyDown).
+                         Text 는 OneWay 바인딩이고 XAML 기본값이 없다 — 생성 도중 이벤트가 안 쏜다. -->
+                    <TextBlock Text="단축키" FontSize="11" Margin="0,16,0,4"
+                               Foreground="{StaticResource Brush.TextSecondary}" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBox x:Name="HotkeyBox" Width="160" Padding="4,3" IsReadOnly="True"
+                                 IsReadOnlyCaretVisible="True"
+                                 Text="{Binding HotkeyDisplay, Mode=OneWay}"
+                                 PreviewKeyDown="OnHotkeyKeyDown"
+                                 AutomationProperties.Name="1회용 창 단축키"
+                                 ToolTip="여기를 누르고 Ctrl+Alt(+Shift) 와 영문자·숫자·F1~F12 를 함께 누른다." />
+                        <Button Content="없음" Padding="10,3" Margin="6,0,0,0"
+                                Command="{Binding ClearHotkeyCommand}"
+                                ToolTip="단축키를 쓰지 않는다" />
+                    </StackPanel>
+                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" FontSize="11"
+                               Foreground="{StaticResource Brush.Danger}"
+                               Text="{Binding HotkeyMessage}" />
+                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" FontSize="11"
+                               Foreground="{StaticResource Brush.TextSecondary}"
+                               Text="{Binding ShortcutStatusText}" />
+                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" FontSize="11"
+                               Foreground="{StaticResource Brush.TextSecondary}"
+                               Text="다른 프로그램과 키가 겹치는지는 알아낼 방법이 없다 — 겹치면 먼저 등록된 쪽이 이긴다." />
+                </StackPanel>
+            </TabItem>
         </TabControl>
     </DockPanel>
 </Window>

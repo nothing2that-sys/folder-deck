@@ -21,6 +21,9 @@ public enum ShellMenuAppCommand : uint
 
     /// <summary>내용 비교(기능 후보 ①의 연장, 2026-09-18) — 타일 비교 중 [다름] 표시된 파일에만.</summary>
     CompareContent = 0x16,
+
+    /// <summary>즐겨찾기에 추가(2026-10-14 S3) — 폴더에만.</summary>
+    AddFavorite = 0x17,
 }
 
 /// <summary>메뉴에 넣을 앱 항목 하나 — 보이는 글자와 그 id.</summary>
@@ -96,7 +99,8 @@ public static class ShellMenuPolicy
             : ShellMenuAppCommand.None;
 
     /// <summary>
-    /// 셸 항목 <b>앞에</b> 넣을 앱 항목들 (§4.6 · D34 — 기본 다섯/셋, 내용 비교가 걸리면 하나 더).
+    /// 셸 항목 <b>앞에</b> 넣을 앱 항목들 (§4.6 · D34 — 기본 다섯/셋, 내용 비교가 걸리면 하나 더.
+    /// 2026-10-14 S3 가 폴더에 「즐겨찾기에 추가」를 더해 폴더는 여섯이다).
     /// </summary>
     /// <param name="isDirectory">우클릭한 항목이 폴더인가.</param>
     /// <param name="canCompareContent">
@@ -137,6 +141,7 @@ public static class ShellMenuPolicy
         {
             items.Add(new(ShellMenuAppCommand.SetAnchor, "이 폴더를 앵커로 지정"));
             items.Add(new(ShellMenuAppCommand.RegisterFolder, "새 폴더로 등록"));
+            items.Add(new(ShellMenuAppCommand.AddFavorite, "즐겨찾기에 추가"));
         }
 
         items.Add(new(ShellMenuAppCommand.Trash, "휴지통으로 삭제\tDel"));

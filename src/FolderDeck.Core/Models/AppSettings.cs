@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using FolderDeck.Core.Layout;
+
 namespace FolderDeck.Core.Models;
 
 /// <summary>전역 설정 (§7.2). <c>%APPDATA%\FolderDeck\settings.json</c>.</summary>
@@ -6,10 +9,15 @@ public sealed class AppSettings
     /// <summary>
     /// 1 → 2: <c>tileGap</c> 이 늘었다. 2 → 3: <c>extensionGlyphs</c> 가 늘었다(D59).
     /// 3 → 4: <c>showShellIcons</c>·<c>everythingMaxResults</c> 가 늘었다(D69-c).
+    /// 4 → 5: <c>scratchLayout</c> 이 늘었다(2026-10-14 S2 · 1회용 창 기본 배치). 슬롯이 없는
+    /// 구파일은 기본값(좌우)으로 읽힌다 — 1회용 창 자체가 새 기능이라 바뀌는 기존 화면이 없다.
+    /// 같은 판에서 <c>favoritesCollapsed</c>(S3 · 즐겨찾기 묶음 접힘, 없으면 펼침)와
+    /// <c>scratchHotkey</c>(S4 · 1회용 창 단축키, 없으면 <c>Ctrl+Alt+F</c>)도 늘었다 — 한 회차의
+    /// 추가라 판을 두 번 올리지 않는다.
     /// <b>워크스페이스 스키마는 이것과 무관하다</b> — 간격도 아이콘 매핑도 창마다가 아니라
     /// 앱 전체의 값이다.
     /// </summary>
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     /// <summary>저장소 소유. 저장 시 찍힌다 (<see cref="Workspace.SchemaVersion"/> 과 같은 규약).</summary>
     public int SchemaVersion { get; set; }
@@ -139,4 +147,39 @@ public sealed class AppSettings
         get => _everythingMaxResults;
         set => _everythingMaxResults = EverythingMaxResultsChoices.Contains(value) ? value : DefaultEverythingMaxResults;
     }
+
+    // ── 1회용 창 (2026-10-14 S2) ──────────────────────────────────────────────
+
+    /// <summary>1회용 창(<c>--scratch</c>)을 처음 띄울 때의 타일 배치 기본값.</summary>
+    public const LayoutPreset DefaultScratchLayout = LayoutPreset.SideBySide;
+
+    /// <summary>
+    /// 1회용 창의 처음 배치. 모르는 값은 <see cref="LenientLayoutPresetConverter"/> 가 기본값으로
+    /// 닫는다 — 전역 열거형 변환기는 던져서 설정 파일 전체를 손상으로 만든다.
+    /// </summary>
+    [JsonConverter(typeof(LenientLayoutPresetConverter))]
+    public LayoutPreset ScratchLayout { get; set; } = DefaultScratchLayout;
+
+    private string _scratchHotkey = Models.ScratchHotkey.Default;
+
+    /// <summary>
+    /// 1회용 창 단축키(S4) — <c>Ctrl+Alt+F</c> 꼴, 빈 문자열은 「없음」. <b>이 값이 원본이다</b>: 앱이
+    /// 시작 메뉴 바로가기의 바로 가기 키를 이 값으로 맞춘다(재설치가 기본값으로 되돌려도 다음 시작에
+    /// 고친다). 못 읽는 값은 기본값으로 떨어진다 — <see cref="TileGap"/> 과 같은 자리다.
+    /// </summary>
+    public string ScratchHotkey
+    {
+        get => _scratchHotkey;
+        set => _scratchHotkey = Models.ScratchHotkey.TryNormalize(value, out var normalized)
+            ? normalized
+            : Models.ScratchHotkey.Default;
+    }
+
+    // ── 즐겨찾기 (2026-10-14 S3) ─────────────────────────────────────────────
+
+    /// <summary>
+    /// 왼쪽 「즐겨찾기」 묶음 접힘. 즐겨찾기가 모든 작업 관리의 것이라 접힘도 전역이다 — 작업 관리
+    /// 파일의 <c>leftLayout</c> 에 두면 작업 관리 스키마가 오른다. 없으면 펼침(<c>false</c>).
+    /// </summary>
+    public bool FavoritesCollapsed { get; set; }
 }

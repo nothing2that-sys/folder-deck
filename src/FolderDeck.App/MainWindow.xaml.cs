@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -55,6 +57,10 @@ public partial class MainWindow : Window
         ViewModel = viewModel;
         _picker = picker;
 
+        // ⋯ 메뉴(S1)는 시각 트리 밖이라 DataContext 상속을 믿지 않고 직접 건다 — 상속이 안
+        // 이어지면 세 항목이 null 명령에 묶여 눌러도 아무 일이 없고 그것을 아무도 못 본다.
+        MoreMenu.DataContext = viewModel;
+
         _messageTimer = new DispatcherTimer { Interval = TransientMessageLife };
         _messageTimer.Tick += OnMessageExpired;
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -70,6 +76,84 @@ public partial class MainWindow : Window
         ApplyLeftPanelWidth();
 
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
+
+        StartFavoritesWatcher();
+    }
+
+    // ── 즐겨찾기 파일 감시 (2026-10-14 S3) ───────────────────────────────────
+
+    /// <summary>다른 창이 즐겨찾기를 바꾸면 이 창도 다시 읽는다. 시간 감각(디바운스)은 뷰의 몫이다.</summary>
+    private FileSystemWatcher? _favoritesWatcher;
+
+    private DispatcherTimer? _favoritesReloadTimer;
+
+    /// <summary>
+    /// <c>favorites.json</c> 을 본다. 원자적 쓰기는 임시 파일을 만들고 바꿔치기하므로 한 번의 저장에
+    /// 이벤트가 여럿 온다 — 짧게 모았다가 한 번만 다시 읽는다. 자기 쓰기로 온 알림도 다시 읽기만 하므로
+    /// 무해하다. 감시를 못 세우면(폴더 없음 등) 조용히 넘어간다 — 그래도 이 창의 변경은 즉시 보이고,
+    /// 다른 창의 변경은 다음에 이 창을 열 때 보인다.
+    /// </summary>
+    private void StartFavoritesWatcher()
+    {
+        var file = ViewModel.Favorites.FilePath;
+        var directory = Path.GetDirectoryName(file);
+        if (directory is null || !Directory.Exists(directory))
+        {
+            return;
+        }
+
+        _favoritesReloadTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _favoritesReloadTimer.Tick += OnFavoritesReloadDue;
+
+        try
+        {
+            _favoritesWatcher = new FileSystemWatcher(directory, Path.GetFileName(file))
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+            };
+            _favoritesWatcher.Changed += OnFavoritesFileEvent;
+            _favoritesWatcher.Created += OnFavoritesFileEvent;
+            _favoritesWatcher.Renamed += OnFavoritesFileEvent;
+            _favoritesWatcher.Deleted += OnFavoritesFileEvent;
+            _favoritesWatcher.EnableRaisingEvents = true;
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)
+        {
+            _favoritesWatcher?.Dispose();
+            _favoritesWatcher = null;
+        }
+    }
+
+    /// <summary>감시 스레드에서 온다 — UI 스레드로 넘겨 타이머를 다시 건다.</summary>
+    private void OnFavoritesFileEvent(object sender, FileSystemEventArgs e) =>
+        Dispatcher.BeginInvoke(() =>
+        {
+            _favoritesReloadTimer?.Stop();
+            _favoritesReloadTimer?.Start();
+        });
+
+    private async void OnFavoritesReloadDue(object? sender, EventArgs e)
+    {
+        _favoritesReloadTimer?.Stop();
+        ViewModel.Favorites.Reload();
+        await ViewModel.Favorites.ProbeAsync();
+    }
+
+    private void StopFavoritesWatcher()
+    {
+        if (_favoritesWatcher is { } watcher)
+        {
+            watcher.EnableRaisingEvents = false;
+            watcher.Dispose();
+            _favoritesWatcher = null;
+        }
+
+        if (_favoritesReloadTimer is { } timer)
+        {
+            timer.Stop();
+            timer.Tick -= OnFavoritesReloadDue;
+            _favoritesReloadTimer = null;
+        }
     }
 
     public MainViewModel ViewModel { get; }
@@ -286,6 +370,23 @@ public partial class MainWindow : Window
     private void OnTrayCheckChanged(object sender, RoutedEventArgs e) =>
         ViewModel.NotifyOperationState();
 
+    /// <summary>⋯ 버튼 = 왼쪽 클릭으로 메뉴를 버튼 아래에 연다(S1). 오른쪽 클릭도 같은 메뉴다.</summary>
+    private void OnMoreMenuClick(object sender, RoutedEventArgs e)
+    {
+        MoreMenu.PlacementTarget = MoreMenuButton;
+        MoreMenu.Placement = PlacementMode.Bottom;
+        MoreMenu.IsOpen = true;
+    }
+
+    /// <summary>즐겨찾기 묶음 헤더의 ＋ (2026-10-14 S3) — 폴더를 하나 골라 즐겨찾기에 더한다.</summary>
+    private void OnAddFavoriteClick(object sender, RoutedEventArgs e)
+    {
+        foreach (var path in _picker.PickFolders("즐겨찾기에 추가할 폴더 선택"))
+        {
+            ViewModel.Favorites.AddPath(path);
+        }
+    }
+
     private void OnAddFoldersClick(object sender, RoutedEventArgs e) =>
         ViewModel.AddFolders(_picker.PickFolders("작업 관리에 등록할 폴더 선택"));
 
@@ -457,6 +558,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        StopFavoritesWatcher();
         _messageTimer.Stop();
         _messageTimer.Tick -= OnMessageExpired;
         ViewModel.PropertyChanged -= OnViewModelPropertyChanged;

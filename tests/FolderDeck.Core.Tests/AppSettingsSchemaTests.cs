@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FolderDeck.Core.Layout;
 using FolderDeck.Core.Models;
 using FolderDeck.Core.Storage;
 
@@ -48,10 +49,13 @@ public sealed class AppSettingsSchemaTests : IDisposable
 
     // ── 스키마 ───────────────────────────────────────────────────────────────
 
-    /// <summary>D69-c 가 <c>showShellIcons</c>·<c>everythingMaxResults</c> 를 더하며 4 로 올렸다.</summary>
+    /// <summary>
+    /// D69-c 가 <c>showShellIcons</c>·<c>everythingMaxResults</c> 를 더하며 4 로 올렸고,
+    /// 2026-10-14 S2 가 <c>scratchLayout</c> 을 더하며 5 로 올렸다.
+    /// </summary>
     [Fact]
-    public void CurrentSchemaVersionIsFour() =>
-        Assert.Equal(4, AppSettings.CurrentSchemaVersion);
+    public void CurrentSchemaVersionIsFive() =>
+        Assert.Equal(5, AppSettings.CurrentSchemaVersion);
 
     /// <summary>
     /// 두 스키마는 독립적으로 버전이 오른다 — 워크스페이스는 지금 11(Phase 21 · D126B ·
@@ -157,7 +161,7 @@ public sealed class AppSettingsSchemaTests : IDisposable
     public void AFreshSettingsObjectStartsAtTheOldSpacing() =>
         Assert.Equal(8, new AppSettings().TileGap);
 
-    /// <summary>v1 파일을 저장하면 지금 판(D69-c 기준 4)으로 승격된다 — 슬롯도 파일에 적힌다.</summary>
+    /// <summary>v1 파일을 저장하면 지금 판(2026-10-14 S2 기준 5)으로 승격된다 — 슬롯도 파일에 적힌다.</summary>
     [Fact]
     public void SavingAV1FilePromotesItToTheCurrentVersionAndWritesTheSlot()
     {
@@ -175,7 +179,7 @@ public sealed class AppSettingsSchemaTests : IDisposable
 
         using var document = JsonDocument.Parse(File.ReadAllText(_paths.SettingsFile));
 
-        Assert.Equal(4, document.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(5, document.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.Equal(12, document.RootElement.GetProperty("tileGap").GetInt32());
     }
 
@@ -281,23 +285,74 @@ public sealed class AppSettingsSchemaTests : IDisposable
     }
 
     [Fact]
-    public void SavingStampsSchemaVersionFour()
+    public void SavingStampsSchemaVersionFive()
     {
         Assert.Null(_store.SaveSettings(new AppSettings()));
 
         using var document = JsonDocument.Parse(File.ReadAllText(_paths.SettingsFile));
-        Assert.Equal(4, document.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(5, document.RootElement.GetProperty("schemaVersion").GetInt32());
     }
 
     [Fact]
-    public void ASchemaVersionFiveFileIsRejectedAsUnsupported()
+    public void ASchemaVersionSixFileIsRejectedAsUnsupported()
     {
         WriteSettingsFile("""
             {
-              "schemaVersion": 5
+              "schemaVersion": 6
             }
             """);
 
         Assert.Equal(StorageFailureKind.UnsupportedSchemaVersion, _store.LoadSettings().Failure!.Kind);
+    }
+
+    // ── 1회용 창 기본 배치 (2026-10-14 S2 · v5) ──────────────────────────────
+
+    [Fact]
+    public void AV4FileWithNoScratchLayoutSlotReadsAsSideBySide()
+    {
+        WriteSettingsFile("""
+            {
+              "schemaVersion": 4
+            }
+            """);
+
+        var loaded = _store.LoadSettings();
+
+        Assert.Null(loaded.Failure);
+        Assert.Equal(LayoutPreset.SideBySide, loaded.Value!.ScratchLayout);
+    }
+
+    [Fact]
+    public void TheScratchLayoutRoundTrips()
+    {
+        Assert.Null(_store.SaveSettings(new AppSettings { ScratchLayout = LayoutPreset.Quad }));
+
+        Assert.Contains("\"scratchLayout\": \"quad\"", File.ReadAllText(_paths.SettingsFile));
+        Assert.Equal(LayoutPreset.Quad, _store.LoadSettings().Value!.ScratchLayout);
+    }
+
+    /// <summary>
+    /// 모르는 값 하나가 설정 파일 <b>전체</b>를 손상으로 만들면 안 된다 — 전역 열거형 변환기라면
+    /// 던져서 그렇게 된다. 다른 설정(<c>tileGap</c>)이 그대로 읽히는 것까지 본다.
+    /// </summary>
+    [Theory]
+    [InlineData("\"octagon\"")]
+    [InlineData("7")]
+    [InlineData("null")]
+    public void AnUnknownScratchLayoutFallsBackWithoutCorruptingTheFile(string value)
+    {
+        WriteSettingsFile($$"""
+            {
+              "schemaVersion": 5,
+              "tileGap": 12,
+              "scratchLayout": {{value}}
+            }
+            """);
+
+        var loaded = _store.LoadSettings();
+
+        Assert.Null(loaded.Failure);
+        Assert.Equal(AppSettings.DefaultScratchLayout, loaded.Value!.ScratchLayout);
+        Assert.Equal(12, loaded.Value.TileGap);
     }
 }

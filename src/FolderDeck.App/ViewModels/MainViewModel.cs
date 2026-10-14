@@ -33,6 +33,9 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     private readonly IMacroEditor _macroEditor;
     private readonly IFolderEditor _folderEditor;
     private readonly ISettingsEditor _settingsEditor;
+
+    /// <summary>1회용 창 바로가기의 단축키를 맞추는 통로 (2026-10-14 S4).</summary>
+    private readonly IScratchShortcut _scratchShortcut;
     private readonly ISelfLauncher _selfLauncher;
 
     /// <summary>전역 설정 (§7.2). 워크스페이스가 아니라 <b>앱 전체</b>의 값이 여기 있다.</summary>
@@ -76,9 +79,14 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         ISelfLauncher selfLauncher,
         AppSettings? settings = null,
         bool settingsWritable = true,
-        ISettingsEditor? settingsEditor = null)
+        ISettingsEditor? settingsEditor = null,
+        FavoritesStore? favoritesStore = null,
+        bool isScratch = false,
+        IScratchShortcut? scratchShortcut = null)
     {
         Workspace = workspace;
+        IsScratch = isScratch;
+        _scratchShortcut = scratchShortcut ?? NullScratchShortcut.Instance;
         _store = store;
         _enumerator = enumerator;
         _shell = shell;
@@ -98,6 +106,25 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         tileGap = _settings.TileGap;
 
         Rows = [.. workspace.Folders.Select(f => new FolderRowViewModel(f))];
+
+        // 공유 즐겨찾기 (2026-10-14 S3). 타일보다 먼저 세운다 — 패널에 「즐겨찾기에 추가」 통로를
+        // 물려줘야 한다(CreateTile). 안 넘기면 이 작업 관리 저장소와 같은 루트의 파일을 쓴다 —
+        // 시험은 임시 루트라 실제 APPDATA 를 건드리지 않는다.
+        Favorites = new FavoritesViewModel(
+            favoritesStore ?? new FavoritesStore(store.Paths),
+            _settings.FavoritesCollapsed,
+            Inform,
+            text => Warn(text, transient: true))
+        {
+            CollapsedChanged = collapsed =>
+            {
+                _settings.FavoritesCollapsed = collapsed;
+                if (_settingsWritable)
+                {
+                    _store.SaveSettingsDebounced(_settings);
+                }
+            },
+        };
 
         // v1/v2 → v3: tiles[] 가 없으면 기존 pinned 유도 규칙으로 한 번 만들고, 손으로 고쳐
         // 격자를 벗어난 타일은 다듬는다. 둘 중 하나라도 일어나면 저장해서 v3 로 승격시킨다.
@@ -158,11 +185,16 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     /// 그래서 통지를 걸지 않는다(<see cref="Title"/> 도 그렇다).
     /// </para>
     /// </remarks>
-    public string WindowTitle => string.IsNullOrWhiteSpace(Workspace.Description)
+    public string WindowTitle => IsScratch
+        ? "FolderDeck — 1회용 (저장 안 됨)"
+        : string.IsNullOrWhiteSpace(Workspace.Description)
         ? $"FolderDeck — {Title}"
         : $"FolderDeck — {Title} · {Workspace.Description!.Trim()}";
 
     public ObservableCollection<FolderRowViewModel> Rows { get; }
+
+    /// <summary>모든 작업 관리가 함께 쓰는 즐겨찾기 묶음 (2026-10-14 S3).</summary>
+    public FavoritesViewModel Favorites { get; }
 
     /// <summary>
     /// 순환 칸으로 가는 폴더 행들 — 툴바의 우회로가 읽는 목록 (Phase 8-B 8).
@@ -351,7 +383,8 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     {
         var request = new SettingsEditRequest(
             _settings.ExtensionGlyphs, _settings.ShowShellIcons, _settings.EverythingMaxResults,
-            EverythingProbe.Detect());
+            EverythingProbe.Detect(), _settings.ScratchLayout,
+            _settings.ScratchHotkey, _scratchShortcut.IsInstalled);
 
         if (_settingsEditor.Edit(request) is not { } updated)
         {
@@ -361,6 +394,16 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         _settings.ExtensionGlyphs = new Dictionary<string, string>(updated.ExtensionGlyphs);
         _settings.ShowShellIcons = updated.ShowShellIcons;
         _settings.EverythingMaxResults = updated.EverythingMaxResults;
+        _settings.ScratchLayout = updated.ScratchLayout ?? _settings.ScratchLayout;
+
+        // 단축키(S4) — 설정값이 원본이고 바로가기는 그것을 따른다. 바뀌었을 때만 바로가기를 고친다.
+        // 알림은 맨 끝에 낸다 — RefreshAllAsync 가 짧은 알림을 지우기 때문이다.
+        ScratchShortcutResult? applied = null;
+        if (updated.ScratchHotkey is { } hotkey && hotkey != _settings.ScratchHotkey)
+        {
+            _settings.ScratchHotkey = hotkey;
+            applied = _scratchShortcut.Apply(_settings.ScratchHotkey);
+        }
 
         foreach (var panel in Panels)
         {
@@ -378,6 +421,29 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         }
 
         await RefreshAllAsync().ConfigureAwait(true);
+
+        if (applied is not null)
+        {
+            ReportShortcutApplied(applied);
+        }
+    }
+
+    private void ReportShortcutApplied(ScratchShortcutResult applied)
+    {
+        var shown = _settings.ScratchHotkey.Length == 0 ? "없음" : _settings.ScratchHotkey;
+        switch (applied.Outcome)
+        {
+            case ScratchShortcutOutcome.Written:
+            case ScratchShortcutOutcome.Unchanged:
+                Inform($"1회용 창 단축키: {shown}");
+                break;
+            case ScratchShortcutOutcome.NotInstalled:
+                Warn($"단축키 {shown} 을(를) 저장했지만 설치본 바로가기가 없어 적용하지 못했다.", transient: true);
+                break;
+            default:
+                Warn($"단축키 {shown} 을(를) 저장했지만 바로가기에 쓰지 못했다 — {applied.Error}", transient: true);
+                break;
+        }
     }
 
     // ── 창 위치 (§6.1 · Phase 4 Stage 2) ─────────────────────────────────────
@@ -456,7 +522,8 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
     /// <summary>파일 목록이 살아 있는가 — 편집 모드의 반대.</summary>
     public bool IsViewMode => !IsEditingLayout;
 
-    public string EditToggleText => IsEditingLayout ? "배치 편집 끝내기" : "배치 편집";
+    /// <summary>상단 토글 글자. S1(2026-10-14)에서 버튼 폭을 줄이며 짧게 했다 — 뜻은 툴팁이 말한다.</summary>
+    public string EditToggleText => IsEditingLayout ? "✎ 편집 끝" : "✎ 배치";
 
     /// <summary>고를 수 있는 타일 사이 간격 다섯 — 목록은 <see cref="AppSettings"/> 것이다.</summary>
     public IReadOnlyList<int> TileGapChoices => AppSettings.TileGapChoices;
@@ -2343,8 +2410,203 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
         // 몇 초를 잡아먹어도 나머지 UI 는 이미 떠 있다.
         var probes = Rows.Select(ProbeRowAsync).ToList();
 
-        await Task.WhenAll(loads.Concat(probes)).ConfigureAwait(true);
+        Favorites.Reload();
+        var favoriteProbe = Favorites.ProbeAsync();
+
+        await Task.WhenAll(loads.Concat(probes).Append(favoriteProbe)).ConfigureAwait(true);
         UpdateRowStates();
+    }
+
+    // ── 즐겨찾기 · 대상 타일 (2026-10-14 S3) ─────────────────────────────────
+
+    /// <summary>
+    /// 즐겨찾기 클릭이 닿을 타일 — 마지막으로 사용자가 클릭한 타일. 런타임 전용이라 저장하지 않는다.
+    /// 배치가 바뀌어 그 타일이 사라졌으면 <see cref="EffectiveTargetTile"/> 이 순환1 로 폴백한다.
+    /// </summary>
+    [ObservableProperty]
+    private TileViewModel? targetTile;
+
+    partial void OnTargetTileChanged(TileViewModel? value)
+    {
+        foreach (var tile in Tiles)
+        {
+            tile.IsTarget = ReferenceEquals(tile, value);
+        }
+    }
+
+    /// <summary>지금 즐겨찾기가 닿을 타일. 고른 적이 없거나 사라졌으면 순환1(없으면 가장 낮은 순환 번호).</summary>
+    public TileViewModel? EffectiveTargetTile =>
+        TargetTile is { } target && Tiles.Contains(target) ? target : ResolveRotatingTile(1);
+
+    /// <summary>패널이 클릭됐다(<see cref="FolderPanelViewModel.Activated"/>) — 그 타일을 대상으로 삼는다.</summary>
+    private void ActivatePanel(FolderPanelViewModel panel)
+    {
+        if (Tiles.FirstOrDefault(t => ReferenceEquals(t.Panel, panel)) is { } tile)
+        {
+            TargetTile = tile;
+        }
+    }
+
+    /// <summary>
+    /// 즐겨찾기 클릭 (2026-10-14 S3). 대상 타일에 폴더가 떠 있으면 그 경로로 <b>임시 이동</b>한다 —
+    /// 앵커도 작업 관리 파일도 안 바뀐다(<see cref="FolderPanelViewModel.NavigateToAsync"/> 는 저장하지
+    /// 않는다). 즐겨찾기와 등록 폴더는 분리돼 있다(JH 결정) — 여기서 <see cref="Workspace.Folders"/> 를
+    /// 건드리지 않는다.
+    /// </summary>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    public async Task OpenFavoriteAsync(FavoriteRowViewModel? row)
+    {
+        if (row is null || IsEditingLayout)
+        {
+            return;
+        }
+
+        var path = row.Path;
+        row.IsAvailable = await Task.Run(() => System.IO.Directory.Exists(path)).ConfigureAwait(true);
+        if (!row.IsAvailable)
+        {
+            Warn($"즐겨찾기 폴더를 열 수 없다(없거나 닿지 않는다): {path}", transient: true);
+            return;
+        }
+
+        if (EffectiveTargetTile is not { } tile)
+        {
+            Warn("즐겨찾기를 띄울 타일이 없다. 배치 편집에서 빈 칸을 순환 칸으로 만들어라.", transient: true);
+            return;
+        }
+
+        if (tile.IsSearch)
+        {
+            Inform("검색 타일에는 즐겨찾기를 띄울 수 없다 — 다른 타일을 먼저 클릭하라.");
+            return;
+        }
+
+        if (!ReferenceEquals(tile, ExpandedTile))
+        {
+            ExpandedTile = null;
+        }
+
+        if (tile.Panel.Entry is null)
+        {
+            await OpenFavoriteInEmptyTileAsync(tile, row).ConfigureAwait(true);
+            return;
+        }
+
+        ClearMessage();
+        await tile.Panel.NavigateToAsync(path).ConfigureAwait(true);
+        UpdateRowStates();
+    }
+
+    /// <summary>
+    /// 대상 타일이 비었을 때. 일반 작업 관리에서는 등록 폴더를 만들지 않는다(분리) — 안내만 한다.
+    /// 1회용 창(S4)에서는 그 경로를 <b>메모리에서만</b> 등록하고 그 칸에 띄운다 — 저장소가 1회용
+    /// 래퍼(<see cref="ScratchWorkspaceStore"/>)라 디스크에 남지 않는다.
+    /// </summary>
+    private async Task OpenFavoriteInEmptyTileAsync(TileViewModel tile, FavoriteRowViewModel row)
+    {
+        if (!IsScratch)
+        {
+            Inform($"{tile.KindTag} 칸이 비어 있다 — 등록 폴더를 먼저 띄우거나, 즐겨찾기 우클릭 「등록 폴더로 추가」를 써라.");
+            return;
+        }
+
+        var normalized = FolderPathRules.Normalize(row.Path);
+        if (TryRegisterFolderPath(normalized))
+        {
+            RefreshRotationChoices();
+        }
+
+        var folderRow = Rows.First(r => PathsEqual(r.Entry.Path, normalized));
+        folderRow.Entry.RotationSlot = tile.RotationIndex is > 1 ? tile.RotationIndex : null;
+        folderRow.NotifyRotationSlot();
+        Save();
+
+        await ShowFolderAsync(folderRow).ConfigureAwait(true);
+    }
+
+    // ── 1회용 창 (2026-10-14 S4) ─────────────────────────────────────────────
+
+    /// <summary>1회용 창인가. 이 창의 작업 관리는 디스크에 쓰이지 않는다(저장소가 래퍼다).</summary>
+    public bool IsScratch { get; }
+
+    /// <summary>⋯ 메뉴 「타일 배치」의 넷 — 1회용 창에서만 보인다.</summary>
+    public IReadOnlyList<LayoutPresetChoice> ScratchLayoutChoices { get; } =
+        [.. LayoutPresets.All.Select(p => new LayoutPresetChoice(p, LayoutPresets.Label(p)))];
+
+    /// <summary>
+    /// 1회용 창의 타일을 프리셋으로 다시 만든다. 확인을 묻지 않는다(휘발성 창이다). 떠 있던 폴더는
+    /// <b>읽기 순서대로 새 칸에 옮겨 담고</b>, 칸이 모자라 넘치는 것은 칸에서만 빠진다 — 왼쪽 목록에는
+    /// 남는다.
+    /// </summary>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    public async Task ApplyScratchLayoutAsync(LayoutPresetChoice? choice)
+    {
+        if (!IsScratch || choice is null || IsEditingLayout)
+        {
+            return;
+        }
+
+        var shown = Tiles
+            .OrderBy(t => t.CellY).ThenBy(t => t.CellX)
+            .Select(t => t.Panel.Entry)
+            .OfType<FolderEntry>()
+            .Distinct()
+            .ToList();
+
+        ExpandedTile = null;
+        if (ComparePeerA is not null || ComparePeerB is not null)
+        {
+            ClearCompare();
+        }
+
+        TargetTile = null;
+
+        foreach (var tile in Tiles.ToList())
+        {
+            Workspace.Tiles!.Remove(tile.Spec);
+            Tiles.Remove(tile);
+            tile.Panel.Clear();
+            DetachWatcher(tile);
+        }
+
+        var created = new List<TileViewModel>();
+        foreach (var spec in LayoutPresets.Build(choice.Preset))
+        {
+            var tile = CreateTile(spec);
+            Workspace.Tiles!.Add(spec);
+            Tiles.Add(tile);
+            created.Add(tile);
+        }
+
+        RefreshDerivedLayout();
+        Save();
+
+        for (var i = 0; i < shown.Count && i < created.Count; i++)
+        {
+            var entry = shown[i];
+            entry.RotationSlot = created[i].RotationIndex is > 1 ? created[i].RotationIndex : null;
+            Rows.FirstOrDefault(r => ReferenceEquals(r.Entry, entry))?.NotifyRotationSlot();
+            await created[i].Panel.ShowAsync(entry).ConfigureAwait(true);
+        }
+
+        UpdateRowStates();
+        Inform(shown.Count > created.Count
+            ? $"타일 배치: {choice.Label} — 칸이 모자라 폴더 {shown.Count - created.Count}개는 칸에서 빠졌다(왼쪽 목록에 있다)."
+            : $"타일 배치: {choice.Label}");
+    }
+
+    /// <summary>시작할 때 바로가기 단축키를 못 맞췄으면 한 줄로 알린다(App 이 부른다). 시작을 막지 않는다.</summary>
+    public void ReportShortcutSyncFailure(string error) =>
+        Warn($"1회용 창 단축키를 바로가기에 맞추지 못했다 — {error}", transient: true);
+
+    /// <summary>즐겨찾기 우클릭 「등록 폴더로 추가」 — 사용자가 고를 때만 등록 폴더와 이어진다.</summary>
+    [RelayCommand]
+    public void RegisterFavoriteAsFolder(FavoriteRowViewModel? row)
+    {
+        if (row is not null)
+        {
+            RegisterFolderAtPath(row.Path);
+        }
     }
 
     /// <summary>
@@ -3534,6 +3796,11 @@ public sealed partial class MainViewModel : ObservableObject, IShellDropHost
             // 통로 (§4.6 · D75). 위 둘과 같은 실제 동작 위에 얹힌, 경로만 받는 자리다.
             SetAnchorFolderToPath = SetAnchorFromPath,
             RegisterFolderPath = RegisterFolderAtPath,
+
+            // 「즐겨찾기에 추가」와 대상 타일 추적 (2026-10-14 S3). 패널은 즐겨찾기도, 자기가
+            // 어느 타일인지도 모른다.
+            AddFavoritePath = Favorites.AddPath,
+            Activated = ActivatePanel,
 
             // 「새 폴더 만들기」모달이 닿을 통로 (§4.6 · D75-c). 패널은 IPrompt 를 모른다.
             PromptForNewFolderName = PromptNewFolderName,

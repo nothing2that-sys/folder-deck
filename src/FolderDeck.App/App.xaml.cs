@@ -23,6 +23,9 @@ public partial class App : Application, IWorkspaceHost
     /// <summary>"앞으로" 신호를 받는 파이프 서버 (§3.3).</summary>
     private ActivationListener? _listener;
 
+    /// <summary>시작할 때 1회용 창 단축키를 바로가기에 못 맞췄으면 그 이유(S4). 띄운 창이 한 줄로 알린다.</summary>
+    private string? _shortcutSyncFailure;
+
     /// <summary>떠 있는 선택 창 (§3.1). 워크스페이스를 열 때 이 창을 닫고 갈아끼운다.</summary>
     private LauncherWindow? _launcherWindow;
 
@@ -67,6 +70,19 @@ public partial class App : Application, IWorkspaceHost
         LoadSettings(store);
 
         string? message = options.Error;
+
+        // 1회용 창 단축키를 설치본 바로가기에 맞춘다(2026-10-14 S4). 설정값이 원본이다 — 재설치가
+        // 바로가기를 기본값으로 다시 만들었어도 여기서 고친다. 시작을 막지 않는다: 실패는 띄운 창에
+        // 한 줄로만 알린다. 바로가기가 없으면(개발 빌드) 아무 일도 없다.
+        var shortcutSync = ScratchShortcut.Default.Apply(_settings.ScratchHotkey);
+        _shortcutSyncFailure = shortcutSync.Outcome == ScratchShortcutOutcome.Failed ? shortcutSync.Error : null;
+
+        // ⓪ 1회용 창(S4) — 뮤텍스·파이프를 잡지 않으므로 여러 개가 동시에 뜬다. skipLauncher 와 무관하다.
+        if (options.Scratch)
+        {
+            ShowScratchWindow();
+            return;
+        }
 
         // ① 인자로 워크스페이스를 지정했다 — 선택 창을 거치지 않는다 (§3.1).
         if (options.WorkspaceId is { } requested)
@@ -193,10 +209,32 @@ public partial class App : Application, IWorkspaceHost
         return WorkspaceOpenResult.Opened();
     }
 
-    /// <summary>워크스페이스 창을 실제로 만든다.</summary>
-    private MainWindow ShowWorkspaceWindow(Workspace workspace)
+    /// <summary>
+    /// 1회용 창을 띄운다 (2026-10-14 S4). 작업 관리는 메모리에서만 만든다 — 저장소를 래퍼로 감싸 그
+    /// 작업 관리의 저장을 막는다(<see cref="ScratchWorkspaceStore"/>). <see cref="Open"/> 의
+    /// 뮤텍스·파이프 경로를 타지 않는다: 여러 개를 허용하고(JH), 신호로 앞으로 불러올 이름도 없다.
+    /// </summary>
+    private void ShowScratchWindow()
     {
-        if (_settingsWritable && _settings.LastWorkspaceId != workspace.Id)
+        var workspace = new Workspace
+        {
+            Title = "1회용",
+            Folders = [],
+            Tiles = LayoutPresets.Build(_settings.ScratchLayout),
+        };
+
+        ShowWorkspaceWindow(workspace, new ScratchWorkspaceStore(_store!, workspace.Id), isScratch: true);
+    }
+
+    /// <summary>워크스페이스 창을 실제로 만든다.</summary>
+    /// <param name="storeOverride">1회용 창이면 저장을 막는 래퍼. 아니면 null(앱 저장소).</param>
+    /// <param name="isScratch">
+    /// 1회용 창인가. 그러면 <c>LastWorkspaceId</c> 를 바꾸지 않는다 — 1회용의 id 가 「마지막 작업 관리」로
+    /// 남으면 다음 자동 열기가 없는 파일을 찾는다.
+    /// </param>
+    private MainWindow ShowWorkspaceWindow(Workspace workspace, IWorkspaceStore? storeOverride = null, bool isScratch = false)
+    {
+        if (!isScratch && _settingsWritable && _settings.LastWorkspaceId != workspace.Id)
         {
             _settings.LastWorkspaceId = workspace.Id;
             _store!.SaveSettingsDebounced(_settings);
@@ -204,7 +242,7 @@ public partial class App : Application, IWorkspaceHost
 
         var viewModel = new MainViewModel(
             workspace,
-            _store!,
+            storeOverride ?? _store!,
             new FolderEnumerator(),
             new ShellLauncher(),
             new ClipboardService(),
@@ -215,7 +253,10 @@ public partial class App : Application, IWorkspaceHost
             new SelfLauncher(),
             _settings,
             _settingsWritable,
-            new IconSettingsEditor());
+            new IconSettingsEditor(),
+            new FavoritesStore(_store!.Paths),
+            isScratch,
+            ScratchShortcut.Default);
 
         var window = new MainWindow(viewModel, new FolderPicker());
 
@@ -243,6 +284,11 @@ public partial class App : Application, IWorkspaceHost
                 break;
             default:
                 break;
+        }
+
+        if (_shortcutSyncFailure is { } shortcutFailure)
+        {
+            viewModel.ReportShortcutSyncFailure(shortcutFailure);
         }
 
         return window;

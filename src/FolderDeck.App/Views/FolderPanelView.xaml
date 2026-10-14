@@ -93,6 +93,7 @@
             <Separator />
             <MenuItem Header="이 폴더를 앵커로 지정" Command="{Binding SetAnchorToCurrentCommand}" />
             <MenuItem Header="새 폴더로 등록" Command="{Binding RegisterCurrentFolderCommand}" />
+            <MenuItem Header="즐겨찾기에 추가" Command="{Binding AddCurrentFolderToFavoritesCommand}" />
         </ContextMenu>
 
         <!-- 컬럼 선택 메뉴 (§3.2 · Phase 15 · D79). 컬럼 머리글 우클릭 진입점 — 아래 두

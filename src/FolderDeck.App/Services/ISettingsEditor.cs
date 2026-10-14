@@ -1,3 +1,6 @@
+using FolderDeck.Core.Layout;
+using FolderDeck.Core.Models;
+
 namespace FolderDeck.App.Services;
 
 /// <summary>
@@ -8,13 +11,22 @@ public sealed record SettingsEditRequest(
     IReadOnlyDictionary<string, string> ExtensionGlyphs,
     bool ShowShellIcons,
     int EverythingMaxResults,
-    EverythingStatus EverythingStatus);
+    EverythingStatus EverythingStatus,
+    LayoutPreset ScratchLayout = AppSettings.DefaultScratchLayout,
+    string ScratchHotkey = Core.Models.ScratchHotkey.Default,
+    bool ScratchShortcutInstalled = false);
 
-/// <summary>창이 저장을 눌러 돌려주는 값 한 벌. 취소면 <see cref="ISettingsEditor.Edit"/> 가 <c>null</c> 을 낸다.</summary>
+/// <summary>
+/// 창이 저장을 눌러 돌려주는 값 한 벌. 취소면 <see cref="ISettingsEditor.Edit"/> 가 <c>null</c> 을 낸다.
+/// 2026-10-14 S2 가 더한 값은 <b>null = 바꾸지 않음</b>이다 — 그 전의 시험들이 세 값만으로 만든
+/// 결과가 새 설정을 기본값으로 되돌려 놓지 않게 한다.
+/// </summary>
 public sealed record SettingsEditResult(
     IReadOnlyDictionary<string, string> ExtensionGlyphs,
     bool ShowShellIcons,
-    int EverythingMaxResults);
+    int EverythingMaxResults,
+    LayoutPreset? ScratchLayout = null,
+    string? ScratchHotkey = null);
 
 /// <summary>
 /// 설정 창 (D59 「아이콘」 탭 전용으로 시작해 D69-d 가 이름·계약을 함께 넓혔다). 테스트에서

@@ -69,11 +69,13 @@ internal static class StaWpfTestSupport
                 return;
             }
 
-            var app = new Application();
-            app.Resources.MergedDictionaries.Add(new ResourceDictionary
-            {
-                Source = new Uri("pack://application:,,,/FolderDeck;component/Themes/LightTheme.xaml"),
-            });
+            // 2026-10-14 S1 — 맨 Application + LightTheme 병합에서 실물 App 의 리소스로 넓혔다.
+            // MainWindow.xaml 은 LightTheme 의 Brush.* 말고도 App.xaml 에만 있는 스타일
+            // (NavButton·EditModeButton 등)과 변환기를 쓴다. App.xaml 이 LightTheme 를 병합하므로
+            // 기존 다이얼로그 시험이 보던 리소스는 그대로 다 있다(상위 집합). StartupUri 가 없고
+            // OnStartup 은 Run() 에서만 불리므로 InitializeComponent 는 리소스만 싣는다.
+            var app = new FolderDeck.App.App();
+            app.InitializeComponent();
         }
     }
 }

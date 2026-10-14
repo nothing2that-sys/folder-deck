@@ -35,3 +35,6 @@ Source: "..\artifacts\publish\win-x64\*"; DestDir: "{app}"; Flags: recursesubdir
 
 [Icons]
 Name: "{group}\Folder Deck"; Filename: "{app}\FolderDeck.exe"
+; 1회용 창(2026-10-14 S4). HotKey 는 처음 설치의 기본값일 뿐이다 — 앱 설정의 단축키가 원본이고,
+; 앱이 시작할 때 이 바로가기의 키를 설정값으로 다시 맞춘다(재설치가 기본값으로 되돌려도 고친다).
+Name: "{group}\Folder Deck 1회용"; Filename: "{app}\FolderDeck.exe"; Parameters: "--scratch"; HotKey: ctrl+alt+f
